@@ -18,27 +18,26 @@
 
 * 항상 **소스 시작 주석 블록 구조 유지**
 * 구현 규칙 / 네이밍 규칙 **수정 금지**
-* ArduinoJson **v7.x.x만 사용**
-* ArduinoJson v6 이하 사용 금지
-
+* 
 ---
 
 # 2. ArduinoJson 사용 규칙
-
-허용 타입
+* ArduinoJson **v7.x.x만 사용**
+* ArduinoJson v6 이하 사용 금지
+* 허용 타입
 
 ```
 JsonDocument
 ```
 
-금지 타입
+* 금지 타입
 
 ```
 DynamicJsonDocument
 StaticJsonDocument
 ```
 
-금지 API
+* 금지 API
 
 ```
 createNestedArray
