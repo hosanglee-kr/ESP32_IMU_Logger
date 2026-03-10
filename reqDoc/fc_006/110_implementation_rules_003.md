@@ -160,8 +160,6 @@ CFG10_CFG_Load_001.cpp
 CFG10_CFG_Save_001.cpp
 
 LOG10_LOG_001.h
-LOG10_LOG_Chunk_001.cpp
-LOG10_LOG_Write_001.cpp
 ```
 
 설명
@@ -351,34 +349,6 @@ bool CFG10_loadConfig(const char* p_i_path, CFG10_CONFIG_t* p_o_cfg)
 
 ---
 
-함수 인자 (legacy 규칙 참고)
-
-```
-p_
-```
-
-로컬 변수
-
-```
-v_
-```
-
-출력 파라미터
-
-```
-p_out_
-```
-
-예
-
-```cpp
-bool CFG10_loadConfig(const char* p_path, CFG10_CONFIG_t* p_out_cfg)
-{
-    bool v_ok = false;
-}
-```
-
----
 
 # 14. bool 변수 규칙
 
@@ -437,8 +407,10 @@ int32_t
 예
 
 ```
-CFG10_ConfigManager.h
-CFG10_ConfigManager.cpp
+CFG10_CFG_001.h
+CFG10_CFG_Core_001.cpp
+CFG10_CFG_Load_001.cpp
+CFG10_CFG_Save_001.cpp
 ```
 
 설명
@@ -508,7 +480,7 @@ SystemEventQueue
 직접 접근 금지
 
 ```
-config.json
+config_001.json
 ```
 
 반드시
