@@ -1,8 +1,6 @@
+# 110_implementation_rules_004.md
 
-
-# 002_implementation_rules_003.md
-
-# IMU Logger 프로젝트 최종 구현 / 명명 규칙
+# IMU Logger 프로젝트 최종 구현 / 명명 규칙 (보완판)
 
 본 문서는 프로젝트 전반에 적용되는 **코딩 규칙 / 네이밍 규칙 / JSON 규칙 / 모듈 규칙 / 아키텍처 규칙**의 최종 표준을 정의한다.
 
@@ -22,6 +20,7 @@
 * 구현 규칙 / 네이밍 규칙 **수정 금지**
 * ArduinoJson **v7.x.x만 사용**
 * ArduinoJson v6 이하 사용 금지
+* 외부 라이브러리 추가 시 **라이선스 / 메모리 영향 / 유지보수성** 사전 검토
 
 ---
 
@@ -29,20 +28,20 @@
 
 허용 타입
 
-```
+```cpp
 JsonDocument
 ```
 
 금지 타입
 
-```
+```cpp
 DynamicJsonDocument
 StaticJsonDocument
 ```
 
 금지 API
 
-```
+```cpp
 createNestedArray
 createNestedObject
 containsKey
@@ -72,21 +71,31 @@ JsonObject v_ap = v_wifi["ap"].to<JsonObject>();
 JsonArray v_items = v_doc["items"].to<JsonArray>();
 ```
 
+### 역직렬화 오류 처리
+
+```cpp
+DeserializationError v_err = deserializeJson(v_doc, p_i_payload);
+if (v_err)
+{
+    return false;
+}
+```
+
 ---
 
 # 3. 초기화 규칙
 
 기본 구조 초기화
 
-```
+```cpp
 memset + strlcpy
 ```
 
 예
 
 ```cpp
-memset(&v_cfg,0,sizeof(v_cfg));
-strlcpy(v_cfg.name,"default",sizeof(v_cfg.name));
+memset(&v_cfg, 0, sizeof(v_cfg));
+strlcpy(v_cfg.name, "default", sizeof(v_cfg.name));
 ```
 
 memset 사용 제한
@@ -99,6 +108,7 @@ memset 사용 제한
 권장
 
 * 구조체 초기화 전용 init 함수 제공
+* 초기화 함수는 기본값 정책(샘플링 주기, 버퍼 크기)을 문서화
 
 ---
 
@@ -110,6 +120,7 @@ memset 사용 제한
 * 구조체 멤버명 가능하면 JSON key와 동일
 * 다른 경우 반드시 주석에 JSON key 명시
 * JSON 숫자 필드는 항상 명시적 타입으로 변환
+* 필수 키 누락 시 기본값 대입 또는 즉시 오류 반환 정책을 함수 주석에 명시
 
 예
 
@@ -124,13 +135,13 @@ uint16_t rate = v_doc["rate"].as<uint16_t>();
 
 모듈명 형식
 
-```
+```text
 영문3자리 + 숫자2자리
 ```
 
 예
 
-```
+```text
 CFG10
 LOG10
 STR10
@@ -142,6 +153,7 @@ UIF10
 
 * 앞 3자리 = 모듈 약어
 * 숫자 2자리 = 모듈 계열 식별
+* 신규 모듈 추가 시 기존 약어와 충돌 금지
 
 ---
 
@@ -149,13 +161,13 @@ UIF10
 
 형식
 
-```
+```text
 모듈명_기능_버전
 ```
 
 예
 
-```
+```text
 CFG10_CFG_001.h
 CFG10_CFG_Core_001.cpp
 CFG10_CFG_Load_001.cpp
@@ -169,6 +181,7 @@ LOG10_LOG_001.h
 * 모듈명 = 기능 영역
 * 기능 = 세부 기능
 * 버전 = 파일 버전
+* 버전 증가 시 변경 이력(무엇이 바뀌었는지) 커밋 메시지에 명확히 기록
 
 ---
 
@@ -176,19 +189,24 @@ LOG10_LOG_001.h
 
 형식
 
-```
+```text
 모듈명_이름_t
 ```
 
 예
 
-```
+```text
 CFG10_CONFIG_t
 CFG10_RUNTIME_t
 LOG10_CHUNK_t
 LOG10_MARKER_t
 STR10_FILEINFO_t
 ```
+
+보완
+
+* typedef struct 이름과 실제 사용 타입 이름은 동일 의도를 유지
+* 약어 남용 금지(의미가 불명확한 1~2글자 명칭 지양)
 
 ---
 
@@ -209,6 +227,7 @@ typedef enum
 * enum 상수 prefix = `EN_모듈명_`
 * enum 타입명 = `모듈명_이름_t`
 * 모든 enum 값은 명시적으로 지정
+* 외부 저장(파일/통신)에 사용되는 enum은 값 변경 금지
 
 ---
 
@@ -219,9 +238,13 @@ typedef struct
 {
     uint16_t sample_rate_hz;
     uint8_t enable;
-
-} ST_CFG10_CONFIG_t;
+} CFG10_CONFIG_t;
 ```
+
+규칙
+
+* 구조체 필드는 하드웨어/저장 포맷 호환을 위해 고정폭 타입 우선 사용
+* 직렬화 대상 구조체는 필드 순서 변경 시 호환성 영향 검토 필수
 
 ---
 
@@ -229,7 +252,7 @@ typedef struct
 
 형식
 
-```
+```cpp
 namespace 모듈명
 ```
 
@@ -246,6 +269,7 @@ namespace CFG10
 
 * namespace 내부 상수는 prefix 생략
 * 외부 API에는 namespace prefix 사용
+* `using namespace` 전역 사용 금지
 
 ---
 
@@ -253,25 +277,25 @@ namespace CFG10
 
 전역 상수
 
-```
+```text
 G_모듈명_
 ```
 
 전역 변수
 
-```
+```text
 g_모듈명_
 ```
 
 전역 함수
 
-```
+```text
 모듈명_
 ```
 
 예
 
-```
+```text
 G_CFG10_MAX_CONFIG
 
 g_CFG10_runtimeConfig
@@ -285,13 +309,13 @@ CFG10_loadConfig()
 
 클래스 형식
 
-```
+```text
 CL_모듈명_이름
 ```
 
 예
 
-```
+```text
 CL_CFG10_ConfigManager
 CL_LOG10_Logger
 CL_STR10_FileManager
@@ -299,15 +323,20 @@ CL_STR10_FileManager
 
 private 멤버
 
-```
+```text
 _변수명
 ```
 
 static 멤버
 
-```
+```text
 변수명_s
 ```
+
+보완
+
+* 클래스는 단일 책임 원칙(SRP) 준수
+* public API는 최소화하고, 내부 구현 상세는 private/protected로 캡슐화
 
 ---
 
@@ -315,7 +344,7 @@ static 멤버
 
 함수 인자 prefix
 
-```
+```text
 p_i_   : 입력 parameter
 p_o_   : 출력 parameter
 p_io_  : 입력/출력 parameter
@@ -323,7 +352,7 @@ p_io_  : 입력/출력 parameter
 
 로컬 변수
 
-```
+```text
 v_
 ```
 
@@ -340,6 +369,7 @@ bool CFG10_loadConfig(const char* p_i_path, CFG10_CONFIG_t* p_o_cfg)
     }
 
     // guard clause
+    return v_ok;
 }
 ```
 
@@ -348,15 +378,15 @@ bool CFG10_loadConfig(const char* p_i_path, CFG10_CONFIG_t* p_o_cfg)
 * 모든 외부 입력 포인터는 **null check 우선 수행**
 * 함수 시작 시 **guard clause 권장**
 * pointer / reference는 반드시 유효성 검증
+* 함수 길이 80~120라인 초과 시 기능 분리 검토
 
 ---
-
 
 # 14. bool 변수 규칙
 
 prefix
 
-```
+```text
 is_
 has_
 can_
@@ -365,7 +395,7 @@ need_
 
 예
 
-```
+```text
 is_ready
 has_error
 can_save
@@ -378,14 +408,14 @@ need_flush
 
 금지
 
-```
+```text
 int
 long
 ```
 
 권장
 
-```
+```text
 uint8_t
 uint16_t
 uint32_t
@@ -395,6 +425,7 @@ int32_t
 설명
 
 * 하드웨어 / 파일 포맷 / 통신 구조체는 고정폭 타입 사용
+* 부호 여부가 중요한 필드는 타입 선택 이유를 주석으로 보강
 
 ---
 
@@ -402,13 +433,13 @@ int32_t
 
 원칙
 
-```
+```text
 클래스 1개 = 파일 1개
 ```
 
 예
 
-```
+```text
 CFG10_CFG_001.h
 CFG10_CFG_Core_001.cpp
 CFG10_CFG_Load_001.cpp
@@ -418,6 +449,8 @@ CFG10_CFG_Save_001.cpp
 설명
 
 * 하나의 파일에는 하나의 주요 클래스만 둔다
+* 헤더는 선언, 소스는 구현을 분리
+* include 순서: 표준 라이브러리 → 서드파티 → 프로젝트 헤더
 
 ---
 
@@ -425,7 +458,7 @@ CFG10_CFG_Save_001.cpp
 
 금지
 
-```
+```text
 hot path malloc/free
 new/delete 금지
 String 사용 금지 (hot path)
@@ -433,7 +466,7 @@ String 사용 금지 (hot path)
 
 권장
 
-```
+```text
 RingBuffer
 BufferPool
 ```
@@ -441,6 +474,8 @@ BufferPool
 설명
 
 * 고속 로깅 경로에서는 동적 할당 금지
+* ISR/실시간 경로에서는 lock 경합 최소화
+* 대용량 버퍼는 정적/사전할당 방식 우선
 
 ---
 
@@ -448,16 +483,21 @@ BufferPool
 
 반환 방식
 
-```
+```text
 bool
 error enum
 ```
 
 fatal 오류 전달
 
-```
+```text
 SystemEventQueue
 ```
+
+보완
+
+* 오류 로그는 모듈 prefix + 오류코드 + 핵심 문맥(함수명/라인/키 값) 포함
+* 복구 가능한 오류와 치명 오류를 구분하여 처리
 
 ---
 
@@ -465,175 +505,46 @@ SystemEventQueue
 
 로그 prefix
 
-```
+```text
 [모듈명]
 ```
 
 예
 
-```
+```text
 [CFG10] load config
 [LOG10] write chunk
 [STR10] open file
 ```
 
----
+보완
 
-# 20. Config 접근 규칙
-
-직접 접근 금지
-
-```
-config_*.json
-```
-
-반드시
-
-```
-ConfigManager
-```
+* loop에서 과도한 로그 출력 금지(샘플링 또는 rate limit 적용)
+* 배포 빌드에서 디버그 로그 레벨 제어 가능해야 함
 
 ---
 
-# 21. ISR 규칙
+# 20. 동시성/태스크 규칙
 
-ISR에서 금지
-
-```
-malloc
-SD write
-SPI long transaction
-JSON parsing
-state transition
-ISR에서 로그 출력 금지
-```
-
-ISR 허용
-
-```
-flag set
-task notify
-queue push
-```
+* 태스크 간 공유 데이터는 소유권(Owner) 모듈을 명확히 정의
+* 큐 메시지 구조체는 고정 크기 사용을 우선 검토
+* mutex 사용 시 잠금 범위를 최소화하고 중첩 잠금 금지
+* ISR에서 블로킹 API 호출 금지
 
 ---
 
-# 22. 아키텍처 핵심 규칙
+# 21. 코드 리뷰 체크리스트
 
-```
-raw sample → ring buffer
-control event → queue
-write ownership → SdWriteTask
-state transition → SystemTask
-config access → ConfigManager
-```
+* 네이밍 규칙 위반 여부 확인
+* JSON 파싱 실패/누락 키 처리 여부 확인
+* hot path 동적 메모리 사용 여부 확인
+* 경계값(0, 최대값, 비정상 입력) 처리 여부 확인
+* 로그 레벨/출력량이 운영 환경에 적절한지 확인
 
 ---
 
-# 23. 매크로 사용 규칙
+# 22. 문서/변경 이력 규칙
 
-매크로 최소화
-
-원칙
-
-```
-constexpr 우선
-```
-
-허용
-
-```
-헤더 가드
-전처리 조건
-특수 목적 매크로
-```
-
-금지
-
-```
-단순 상수 매크로
-```
-
-예
-
-```cpp
-constexpr uint32_t kMaxBufferSize = 4096;
-```
-
----
-
-# 24. 최종 원칙
-
-```
-1. hot path dynamic allocation 금지
-2. single ownership resource
-3. JSON 구조 = 코드 구조
-4. 상태 전이 단일 모듈
-5. 로그 파이프라인 분리
-```
-
----
-
----
-
-# 25. Thread Safety 규칙
-
-FreeRTOS 환경에서 다중 Task가 동일 자원을 접근할 수 있으므로  
-공유 자원 접근 시 반드시 thread safety 규칙을 따른다.
-
-기본 원칙
-
-* shared resource 접근 시 **mutex 사용**
-
-예
-- SD card
-- ConfigManager
-- Logger 상태
-- FileManager
-- Shared buffer
-
-권장 정책
-
-- 동일 자원에 대한 **single ownership 설계 우선 적용**
-- 여러 Task가 접근해야 하는 경우 **mutex 보호 필수**
-- mutex 보호 범위는 **최소화**
-- 긴 작업은 mutex 내부에서 수행하지 않는다
-
-예
-```cpp
-xSemaphoreTake(g_LOG10_sdMutex, portMAX_DELAY);
-
-// shared resource 접근
-
-xSemaphoreGive(g_LOG10_sdMutex);
-```
-
-금지
-- mutex 없이 shared resource 접근
-- ISR에서 mutex 사용
-- nested mutex 남용
-
-권장 아키텍처
-- SD write ownership → SdWriteTask
-- state transition ownership → SystemTask
-- config access ownership → ConfigManager
-
-가능한 경우 mutex보다 single owner task 구조를 우선 적용한다.
-
-
----
-
-# 26. 리소스 소유권 규칙 (Single Owner Principle)
-
-시스템 안정성과 동시성 문제 방지를 위해 모든 주요 리소스는 **단일 소유권(Single Owner)** 원칙을 따른다.
-
-기본 원칙
-- 하나의 리소스는 **반드시 하나의 모듈 또는 Task만 직접 제어**한다.
-- 다른 모듈은 해당 리소스에 직접 접근하지 않고 **이벤트 / API / Queue를 통해 간접 접근**한다.
-
-적용 대상
-- 다음 리소스는 반드시 **Single Owner**를 가진다.
-
-
-
-
+* 규칙 문서를 변경할 때는 파일 버전 증가(예: `_003` → `_004`) 적용
+* 변경 사유와 영향 범위를 커밋 메시지/PR 본문에 명시
+* 하위 호환성에 영향이 있는 규칙 변경은 예시 코드 포함
