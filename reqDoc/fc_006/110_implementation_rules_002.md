@@ -1,46 +1,4 @@
-
-
- * [구현 규칙]
- * ESPAsyncWebServer 사용
-    -  https://github.com/ESP32Async/ESPAsyncWebServer
- *  - 항상 소스 시작 주석 부분 체계 유지 및 내용 업데이트
- *  - 소스 시작 주석 부분 구현규칙, 코드네이밍규칙 내용 그대로 유지, 수정금지
- *  - ArduinoJson v7.x.x 사용 (v6 이하 사용 금지)
- *    - https://arduinojson.org/v7/how-to/upgrade-from-v6/
- *  - JsonDocument 단일 타입만 사용
- *  - createNestedArray/Object/containsKey 사용 금지
- *  - memset + strlcpy 기반 안전 초기화
- *  - 주석/필드명은 JSON 구조와 동일하게 유지
- *  - typedef enum 적극 사용
- *  - 변수명은 가능한 해석 가능하게
- * ------------------------------------------------------
- * [코드 네이밍 규칙]
- *   - 모듈명  : 영문약어[2자리] + 2자리숫자(10으로 시작)
- *   - namespace 명        : 모듈약어_ 접두사
- *   - namespace 내 상수    : 모둘약어 접두시 미사용
- *   - 전역 상수,매크로      : G_모듈약어_ 접두사
- *   - 전역 변수             : g_모듈약어_ 접두사
- *   - 전역 함수             : 모듈약어_ 접두사
- *   - type                  : T_모듈약어_ 접두사
- *   - typedef               : _t  접미사
- *   - enum 상수             : EN_모듈약어_ 접두사
- *   - 구조체                : ST_모듈약어_ 접두사
- *   - 클래스명              : CL_모듈약어_ 접두사 , 버전 제거
- *   - 클래스 private 멤버   : _ 접두사
- *   - 클래스 멤버(함수/변수) : 모듈약어 접두사 미사용
- *   - 클래스 정적 멤버      : s_ 접두사
- *   - 함수 로컬 변수        : v_ 접두사
- *   - 함수 인자             : p_ 접두사
- *   
- 
-
-
-
-
-
-//////#####
-
-# 002_implementation_rules_002.md
+# 110_implementation_rules_002.md
 
 # IMU Logger 프로젝트 최종 구현 / 명명 규칙
 
@@ -60,27 +18,25 @@
 
 * 항상 **소스 시작 주석 블록 구조 유지**
 * 구현 규칙 / 네이밍 규칙 **수정 금지**
-* ArduinoJson **v7.x.x만 사용**
-* ArduinoJson v6 이하 사용 금지
-
 ---
 
 # 2. ArduinoJson 사용 규칙
-
-허용 타입
+* ArduinoJson **v7.x.x만 사용**
+* ArduinoJson v6 이하 사용 금지
+* 허용 타입
 
 ```
 JsonDocument
 ```
 
-금지 타입
+* 금지 타입
 
 ```
 DynamicJsonDocument
 StaticJsonDocument
 ```
 
-금지 API
+* 금지 API
 
 ```
 createNestedArray
@@ -260,7 +216,7 @@ typedef struct
     uint16_t sample_rate_hz;
     uint8_t enable;
 
-} CFG10_CONFIG_t;
+} ST_CFG10_CONFIG_t;
 ```
 
 ---
@@ -433,7 +389,7 @@ int32_t
 원칙
 
 ```
-클래스 1개 = 파일 1개
+클래스별 파일 분리를 원칙으로 하며, 동일 클래스의 .h/.cpp 또는 단일 헤더 파일은 동일 모듈약어를 사용한다.
 ```
 
 예
@@ -564,3 +520,18 @@ config access → ConfigManager
 4. 상태 전이 단일 모듈
 5. 로그 파이프라인 분리
 ```
+
+아래내용도 반영해줘
+
+- 매크로 최소화
+  단순 상수는 constexpr 우선
+  매크로는 전처리 조건/헤더가드/특수 목적에 한정
+
+-  포인터/참조 null 처리
+모든 외부 입력 포인터는 null check 우선
+함수 초반 guard clause 권장
+
+- 함수 인자
+  out parameter는 p_o_ 접두사
+  in parameter : p_i_ 접두사
+  in/out parameter : p_io_ 접두사
