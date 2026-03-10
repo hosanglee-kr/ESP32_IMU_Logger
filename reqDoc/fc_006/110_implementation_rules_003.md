@@ -109,11 +109,13 @@ memset 사용 제한
 * JSON key = 스키마 문서와 동일
 * 구조체 멤버명 가능하면 JSON key와 동일
 * 다른 경우 반드시 주석에 JSON key 명시
+* JSON 숫자 필드는 항상 명시적 타입으로 변환
 
 예
 
 ```cpp
 uint16_t sample_rate_hz; // sample_rate_hz
+uint16_t rate = v_doc["rate"].as<uint16_t>();
 ```
 
 ---
@@ -198,8 +200,7 @@ STR10_FILEINFO_t
 typedef enum
 {
     EN_CFG10_STATE_IDLE = 0,
-    EN_CFG10_STATE_RUN
-
+    EN_CFG10_STATE_RUN  = 1
 } CFG10_STATE_t;
 ```
 
@@ -207,6 +208,7 @@ typedef enum
 
 * enum 상수 prefix = `EN_모듈명_`
 * enum 타입명 = `모듈명_이름_t`
+* 모든 enum 값은 명시적으로 지정
 
 ---
 
@@ -228,13 +230,13 @@ typedef struct
 형식
 
 ```
-namespace 모듈명_
+namespace 모듈명
 ```
 
 예
 
 ```cpp
-namespace CFG10_
+namespace CFG10
 {
     constexpr uint32_t kDefaultTimeout = 1000;
 }
@@ -243,7 +245,7 @@ namespace CFG10_
 규칙
 
 * namespace 내부 상수는 prefix 생략
-* 외부 노출 심볼은 prefix 사용
+* 외부 API에는 namespace prefix 사용
 
 ---
 
@@ -425,6 +427,8 @@ CFG10_CFG_Save_001.cpp
 
 ```
 hot path malloc/free
+new/delete 금지
+String 사용 금지 (hot path)
 ```
 
 권장
@@ -480,7 +484,7 @@ SystemEventQueue
 직접 접근 금지
 
 ```
-config_001.json
+config_*.json
 ```
 
 반드시
@@ -501,6 +505,7 @@ SD write
 SPI long transaction
 JSON parsing
 state transition
+ISR에서 로그 출력 금지
 ```
 
 ISR 허용
@@ -566,3 +571,52 @@ constexpr uint32_t kMaxBufferSize = 4096;
 4. 상태 전이 단일 모듈
 5. 로그 파이프라인 분리
 ```
+
+---
+
+---
+
+# 25. Thread Safety 규칙
+
+FreeRTOS 환경에서 다중 Task가 동일 자원을 접근할 수 있으므로  
+공유 자원 접근 시 반드시 thread safety 규칙을 따른다.
+
+## 기본 원칙
+
+shared resource 접근 시 **mutex 사용**
+
+예
+
+- SD card
+- ConfigManager
+- Logger 상태
+- FileManager
+- Shared buffer
+
+## 권장 정책
+
+- 동일 자원에 대한 **single ownership 설계 우선 적용**
+- 여러 Task가 접근해야 하는 경우 **mutex 보호 필수**
+- mutex 보호 범위는 **최소화**
+- 긴 작업은 mutex 내부에서 수행하지 않는다
+
+## 예
+
+```cpp
+xSemaphoreTake(g_LOG10_sdMutex, portMAX_DELAY);
+
+// shared resource 접근
+
+xSemaphoreGive(g_LOG10_sdMutex);
+```
+
+## 금지
+- mutex 없이 shared resource 접근
+- ISR에서 mutex 사용
+- nested mutex 남용
+## 권장 아키텍처
+- SD write ownership → SdWriteTask
+- state transition ownership → SystemTask
+- config access ownership → ConfigManager
+- 
+가능한 경우 mutex보다 single owner task 구조를 우선 적용한다.
