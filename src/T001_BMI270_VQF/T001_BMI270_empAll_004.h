@@ -214,9 +214,18 @@ private:
             // 큐에 데이터가 쌓여있으면 SD 카드 지연과 상관없이 계속 처리
             if (xQueueReceive(self->_sdQueue, &entry, portMAX_DELAY)) {
                 file.printf("%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%u\n",
-                    entry.timestamp, entry.acc[0], entry.acc[1], entry.acc[2],
-                    entry.gyro[0], entry.gyro[1], entry.gyro[2],
-                    entry.rpy[0], entry.rpy[1], entry.rpy[2], entry.stepCount);
+                      entry.timestamp
+                    , entry.acc[0]
+                    , entry.acc[1]
+                    , entry.acc[2]
+                    , entry.gyro[0]
+                    , entry.gyro[1]
+                    , entry.gyro[2]
+                    , entry.rpy[0]
+                    , entry.rpy[1]
+                    , entry.rpy[2]
+                    , entry.stepCount
+                );
             }
         }
     }
