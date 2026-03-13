@@ -40,6 +40,12 @@ public:
     // [상수 정의] 하드웨어 관련 핀 및 고정 파라미터
     static constexpr int PIN_CS = 10;
     static constexpr int PIN_INT1 = 9;
+    
+    static constexpr int PIN_SDMMC_CLK = 39;
+    static constexpr int PIN_SDMMC_CMD = 38;
+    static constexpr int PIN_SDMMC_D0  = 40;
+    
+    
     static constexpr float DEFAULT_SAMPLE_RATE = 200.0f;
     static constexpr uint16_t FIFO_WATERMARK = 20; // 읽어올 샘플 단위
     static constexpr float DEG_TO_RAD_CONST = 0.01745329251f;
@@ -171,6 +177,13 @@ private:
         BMI270Handler* self = (BMI270Handler*)pv;
         FullSensorPayload entry;
         
+        // 1. 핀 설정 (CLK, CMD, D0, D1, D2, D3 순서)
+        // 1-bit 모드에서는 D1, D2, D3에 -1을 넣거나 생략 가능합니다.
+        if (!SD_MMC.setPins(PIN_SDMMC_CLK, PIN_SDMMC_CMD, PIN_SDMMC_D0)) {
+            Serial.println("Pin configuration failed!");
+            vTaskDelete(NULL);
+        }
+    
         if (!SD_MMC.begin("/sdcard", true)) {
             Serial.println("SD Card Mount Failed");
             vTaskDelete(NULL);
@@ -210,3 +223,32 @@ private:
 };
 
 
+
+
+
+
+static void sdTask(void* pv) {
+    BMI270Handler* self = (BMI270Handler*)pv;
+    FullSensorPayload entry;
+
+    // [상수 정의] 실제 연결하신 핀 번호로 수정하세요
+    static constexpr int SD_MMC_CLK = 39;
+    static constexpr int SD_MMC_CMD = 38;
+    static constexpr int SD_MMC_D0  = 40;
+
+    // 1. 핀 설정 (CLK, CMD, D0, D1, D2, D3 순서)
+    // 1-bit 모드에서는 D1, D2, D3에 -1을 넣거나 생략 가능합니다.
+    if (!SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0)) {
+        Serial.println("Pin configuration failed!");
+        vTaskDelete(NULL);
+    }
+
+    // 2. SD_MMC 시작 (mount point, 1-bit mode 여부)
+    // 두 번째 인자가 true이면 1-bit 모드로 동작합니다.
+    if (!SD_MMC.begin("/sdcard", true)) {
+        Serial.println("SD_MMC Mount Failed");
+        vTaskDelete(NULL);
+    }
+    
+    // ... (이후 파일 쓰기 로직)
+}
