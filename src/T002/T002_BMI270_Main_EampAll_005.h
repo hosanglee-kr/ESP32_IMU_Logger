@@ -29,10 +29,10 @@ void B10_init() {
 }
 
 void B10_run() {
-    FullSensorPayload liveData;
+    FullSensorPayload v_liveData;
 
     // 비동기 큐에서 최신 데이터 하나를 꺼내 확인 (UI/모니터링용)
-    if (imuSystem.getLatestData(&liveData)) {
+    if (imuSystem.getLatestData(&v_liveData)) {
         // 필요한 경우 시리얼 플로터 출력
         // Serial.printf("P:%.2f, R:%.2f, Y:%.2f\n", liveData.rpy[1], liveData.rpy[0], liveData.rpy[2]);
     }
