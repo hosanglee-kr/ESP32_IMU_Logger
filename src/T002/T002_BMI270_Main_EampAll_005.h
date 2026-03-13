@@ -3,7 +3,7 @@
 // T002_BMI270_Main_EampAll_005.h
 
 
-#include "T002_BMI270_Handler_006.h"
+#include "T002_BMI270_Handler_007.h"
 
 // 객체 생성
 BMI270Handler imuSystem;
