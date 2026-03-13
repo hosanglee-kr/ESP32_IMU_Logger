@@ -18,7 +18,7 @@
 #include "SensorFusion.h" // 업로드해주신 VQF 헤더
 
 // [수정] 클래스 외부, 파일 상단에 위치시켜 메모리 참조 오류 방지
-static volatile bool g_bmi270_fifo_ready = false;
+volatile bool g_bmi270_fifo_ready = false;
 
 
 struct FullSensorPayload {
