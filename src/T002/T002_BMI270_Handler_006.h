@@ -18,11 +18,11 @@
 #include "SensorFusion.h" // 업로드해주신 VQF 헤더
 
 
-// [해결책 1] 클래스 외부, 전역 파일 스코프에 변수와 ISR 배치
+// 클래스 외부, 전역 파일 스코프에 변수와 ISR 배치
 // DRAM_ATTR을 명시적으로 붙여 리터럴 관련 오류를 원천 차단합니다.
 DRAM_ATTR volatile bool g_bmi270_fifo_ready = false;
 
-// [해결책 2] 전역 함수로 ISR 정의 (IRAM_ATTR 필수)
+// 전역 함수로 ISR 정의 (IRAM_ATTR 필수)
 void IRAM_ATTR bmi270_global_isr() {
     g_bmi270_fifo_ready = true;
 }
@@ -90,13 +90,6 @@ private:
     QueueHandle_t _dataQueue, _sdQueue;
     TaskHandle_t _sensorTaskHandle, _sdTaskHandle;
 
-    // 클래스 내부에서는 선언만!
-    //static volatile bool _fifoFlag;
-
-    // static void IRAM_ATTR isrStatic() {
-    //     g_bmi270_fifo_ready = true;
-    // }
-
     void configureSensor() {
         BMI270_FIFOConfig fifoConfig;
         fifoConfig.flags = BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN | BMI2_FIFO_HEADER_EN;
@@ -118,7 +111,7 @@ private:
         _imu.setGyroODR(BMI2_GYR_ODR_200HZ);
 
 		_imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
-        //_imu.mapInterruptToPin(BMI2_FIFO_WATERMARK_INT, BMI2_INT1);
+
     }
 
     static void sensorTask(void* pv) {
@@ -182,68 +175,6 @@ private:
     }
 }; // 클래스 정의 끝 (중괄호와 세미콜론 필수)
 
-// 클래스 외부에서 정적 멤버 변수 초기화
-//volatile bool BMI270Handler::_fifoFlag = false;
 
 #endif
 
-
-
-
-
-
-
-
-
-
-
-
-#ifndef BMI270_INTEGRATED_HANDLER_H
-#define BMI270_INTEGRATED_HANDLER_H
-
-#include <Arduino.h>
-// ... (기타 인클루드 동일)
-
-// [해결책 1] 클래스 외부, 전역 파일 스코프에 변수와 ISR 배치
-// DRAM_ATTR을 명시적으로 붙여 리터럴 관련 오류를 원천 차단합니다.
-DRAM_ATTR volatile bool g_bmi270_fifo_ready = false;
-
-// [해결책 2] 전역 함수로 ISR 정의 (IRAM_ATTR 필수)
-void IRAM_ATTR bmi270_global_isr() {
-    g_bmi270_fifo_ready = true;
-}
-
-// ... (구조체 선언 동일)
-
-class BMI270Handler {
-public:
-    BMI270Handler() : _vqf(nullptr) {}
-
-    bool begin(int cs, int int1, BMI270_Options opts) {
-        _opts = opts;
-        _int1Pin = int1;
-
-        if (_imu.beginSPI(cs) != BMI2_OK) return false;
-        configureSensor();
-
-        // ... (VQF 및 큐 생성 로직 동일)
-
-        xTaskCreatePinnedToCore(sensorTask, "IMU_Task", 8192, this, 10, &_sensorTaskHandle, 1);
-        if (_opts.useSD) {
-            xTaskCreatePinnedToCore(sdTask, "SD_Task", 8192, this, 1, &_sdTaskHandle, 0);
-        }
-
-        // [수정] 클래스 멤버 함수 대신 전역 함수 주소를 전달
-        pinMode(_int1Pin, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(_int1Pin), bmi270_global_isr, RISING);
-        
-        return true;
-    }
-
-private:
-    // 기존의 static void IRAM_ATTR isrStatic() { ... } 부분은 삭제합니다.
-    
-    // ... (나머지 클래스 멤버 함수들 동일)
-};
-
-#endif
