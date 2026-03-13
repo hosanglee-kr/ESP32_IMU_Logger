@@ -1,4 +1,7 @@
-/**
+
+ #pragma once
+ 
+ /**
  * @file T002_BMI270_Handler_005.h
  * @brief BMI270 Full Features Integration + VQF + SDMMC 1-bit Logger
  * * [시스템 설계 개요]
@@ -8,8 +11,6 @@
  * 4. SDMMC: 1-bit 모드 사용으로 SPI 대비 고속 데이터 처리
  */
 
- #ifndef BMI270_INTEGRATED_HANDLER_H
-#define BMI270_INTEGRATED_HANDLER_H
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -176,5 +177,4 @@ private:
 }; // 클래스 정의 끝 (중괄호와 세미콜론 필수)
 
 
-#endif
 

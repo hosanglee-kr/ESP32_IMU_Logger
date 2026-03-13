@@ -1,8 +1,7 @@
+#pragma once
 
 // T002_BMI270_Main_EampAll_005.h
 
-#ifndef B10_BMI270_MAIN_H
-#define B10_BMI270_MAIN_H
 
 #include "T002_BMI270_Handler_006.h"
 
@@ -39,27 +38,4 @@ void B10_run() {
     }
 }
 
-#endif
 
-
-
-
-// // main.cpp
-
-// #include <Arduino.h>
-// #include "T002_BMI270_Main_EampAll_005.h"
-
-// void setup() {
-//     Serial.begin(115200);
-
-//     // BMI270 통합 시스템 초기화 (독립 h파일 내부 함수 호출)
-//     B10_init();
-// }
-
-// void loop() {
-//     // 시스템 실행 (비차단 방식)
-//     B10_run();
-
-//     // 메인 루프 지연은 시스템 전체 성능(FreeRTOS Task)에 영향을 주지 않음
-//     delay(5);
-// }
