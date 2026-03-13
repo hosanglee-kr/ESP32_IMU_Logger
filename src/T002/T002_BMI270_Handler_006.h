@@ -74,7 +74,7 @@ public:
         }
 
         pinMode(_int1Pin, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(_int1Pin), isrStatic, RISING);
+        attachInterrupt(digitalPinToInterrupt(_int1Pin), bmi270_global_isr, RISING);
         return true;
     }
 
