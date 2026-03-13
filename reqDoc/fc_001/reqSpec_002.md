@@ -1,13 +1,3 @@
-# PlatformIO CI/CD template
-
-[![Test](https://github.com/256dpi/arduino-mqtt/actions/workflows/test.yml/badge.svg)](https://github.com/hosanglee-kr/PlatformIO_Template_V001/actions/workflows/test.yml)
-[![GitHub release](https://img.shields.io/github/release/256dpi/arduino-mqtt.svg)](https://github.com/hosanglee-kr/PlatformIO_Template_V001/releases)
-
-- NiYien Senseflow A1
-- NiYien Tool
-- Gyroflow
-
-
 # IMU Logger (ESP32-S3 + BMI270) H/W · S/W 기능 요구사항 명세서
 
 ## 1. 문서 목적
@@ -928,6 +918,3 @@ LED는 상태를 “한눈에” 이해시키는 것이 목표입니다.
 * 온도 기반 bias compensation
 * PC용 bin→gyroflow 변환 도구
 * 공장 보정/서비스 메뉴
-
-
-
