@@ -35,11 +35,22 @@ struct FullSensorPayload {
     uint32_t stepCount;
 };
 
+struct BMI270_Options {
+    bool useVQF = true;
+    bool useSD = true;
+    bool useStepCounter = true;
+    bool useGestures = true;
+    bool useAnyMotion = true;
+    float sampleRate = 200.0f;
+    uint16_t fifoThreshold = 100;
+};
+
+
 class BMI270Handler {
 public:
     // [상수 정의] 하드웨어 관련 핀 및 고정 파라미터
-    static constexpr int PIN_CS = 10;
-    static constexpr int PIN_INT1 = 9;
+    static constexpr int PIN_BMI270_CS = 10;
+    static constexpr int PIN_BMI270_INT1 = 9;
     
     static constexpr int PIN_SDMMC_CLK = 39;
     static constexpr int PIN_SDMMC_CMD = 38;
@@ -53,7 +64,7 @@ public:
     BMI270Handler() : _vqf(nullptr) {}
 
     bool begin() {
-        if (_imu.beginSPI(PIN_CS) != BMI2_OK) return false;
+        if (_imu.beginSPI(PIN_BMI270_CS) != BMI2_OK) return false;
         
         configureSensor();
 
@@ -69,8 +80,8 @@ public:
         xTaskCreatePinnedToCore(sdTask, "SD_Task", 8192, this, 1, &_sdTaskHandle, 0);
 
         // 인터럽트 핀 설정 및 부착
-        pinMode(PIN_INT1, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(PIN_INT1), bmi270_global_isr, RISING);
+        pinMode(PIN_BMI270_INT1, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(PIN_BMI270_INT1), bmi270_global_isr, RISING);
         
         return true;
     }
