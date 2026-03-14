@@ -90,23 +90,28 @@ private:
             computeEuler(d);
         }
 
-        // [신규] 제스처 및 동작 상태 읽기
-        // [에러 수정 1] getWristGesture는 uint8_t* 인자를 필요로 함
+        // 3. Wrist Gesture 읽기 (제공된 헤더 사양: 인자 필요)
         if (_opts.useGestures) {
-            uint8_t gest;
-            if (_imu.getWristGesture(&gest) == BMI2_OK) d.gesture = gest;
+            uint8_t gest = 0;
+            if (_imu.getWristGesture(&gest) == BMI2_OK) {
+                d.gesture = gest;
+            }
         }
 
-        // [에러 수정 2] getMotionStatus 대신 인터럽트 상태 확인
+        // 4. Any-motion 상태 확인 (Feature Data 방식)
         if (_opts.useAnyMotion) {
-            uint16_t intStatus = 0;
-            _imu.getInterruptStatus(&intStatus);
-            d.motion = (intStatus & BMI2_ANY_MOT_INT_STATUS_MASK) != 0;
+            bmi2_feat_sensor_data featData;
+            featData.type = BMI2_ANY_MOTION; // Feature type 지정
+            if (_imu.getFeatureData(&featData) == BMI2_OK) {
+                // ANY_MOTION 데이터 구조체의 감지 여부 필드 확인
+                d.motion = (featData.sens_data.any_no_mot.out_conf != 0);
+            }
         }
 
-        if (_opts.useStepCounter) _imu.getStepCount(&d.stepCount);
-
-
+        // 5. Step Count 읽기 (포인터 인자 방식)
+        if (_opts.useStepCounter) {
+            _imu.getStepCount(&d.stepCount);
+        }
     }
 
     static void sensorTask(void* pv) {
@@ -154,6 +159,3 @@ private:
     }
 };
 
-
-
-        
