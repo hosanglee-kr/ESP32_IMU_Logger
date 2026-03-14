@@ -3,6 +3,7 @@
  * @brief 동적 전력 관리를 포함한 메인 실행부
  */
 #include <Arduino.h>
+#include "T03_Config_005.h"
 #include "T03_SDMMC_005.h"
 #include "T03_BM217_005.h"
 
