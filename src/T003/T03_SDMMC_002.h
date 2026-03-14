@@ -6,20 +6,31 @@
 
 class SDMMCHandler {
 public:
+    SDMMCHandler() : _queue(NULL) {}
+
     bool begin() {
         if (!SD_MMC.begin(Config::SD_MOUNT, true)) return false;
         _queue = xQueueCreate(Config::SD_QUEUE_LEN, 64);
         return (_queue != NULL);
     }
 
-    // [신규] JSON 설정 로드 (ArduinoJson 7.4.x)
+    // [복구] 메인에서 호출하는 로그 파일 초기 생성 함수
+    bool createLogFile(const char* path, const char* header) {
+        File file = SD_MMC.open(path, FILE_WRITE);
+        if (file) {
+            file.println(header);
+            file.close();
+            _currentPath = String(path);
+            return true;
+        }
+        return false;
+    }
+
     void loadConfig(BMI270_Options& opts) {
         File file = SD_MMC.open(Config::CONFIG_PATH);
         if (!file) return;
-
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, file);
-        if (!error) {
+        if (deserializeJson(doc, file) == DeserializationError::Ok) {
             opts.useVQF = doc["useVQF"] | opts.useVQF;
             opts.useSD = doc["useSD"] | opts.useSD;
             opts.autoCalibrate = doc["autoCalibrate"] | opts.autoCalibrate;
@@ -28,7 +39,6 @@ public:
         file.close();
     }
 
-    // [신규] 파일 인덱싱 (log_001.csv, log_002.csv...)
     String getNextFileName(const char* prefix) {
         int index = 1;
         char filename[32];
@@ -37,8 +47,7 @@ public:
             if (!SD_MMC.exists(filename)) break;
             index++;
         }
-        _currentPath = String(filename);
-        return _currentPath;
+        return String(filename);
     }
 
     void startLogging(void (*worker)(void*), void* arg) {

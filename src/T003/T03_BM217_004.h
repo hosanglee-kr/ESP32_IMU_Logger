@@ -91,9 +91,22 @@ private:
         }
 
         // [신규] 제스처 및 동작 상태 읽기
-        if (_opts.useGestures) d.gesture = _imu.getWristGesture();
-        if (_opts.useAnyMotion) d.motion = _imu.getMotionStatus();
+        // [에러 수정 1] getWristGesture는 uint8_t* 인자를 필요로 함
+        if (_opts.useGestures) {
+            uint8_t gest;
+            if (_imu.getWristGesture(&gest) == BMI2_OK) d.gesture = gest;
+        }
+
+        // [에러 수정 2] getMotionStatus 대신 인터럽트 상태 확인
+        if (_opts.useAnyMotion) {
+            uint16_t intStatus = 0;
+            _imu.getInterruptStatus(&intStatus);
+            d.motion = (intStatus & BMI2_ANY_MOT_INT_STATUS_MASK) != 0;
+        }
+
         if (_opts.useStepCounter) _imu.getStepCount(&d.stepCount);
+
+
     }
 
     static void sensorTask(void* pv) {
@@ -140,3 +153,7 @@ private:
         d.rpy[2] = atan2(2.0f*(qw*qz + qx*qy), 1.0f-2.0f*(qy*qy + qz*qz)) * 57.29578f;
     }
 };
+
+
+
+        
