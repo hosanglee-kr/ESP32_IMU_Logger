@@ -38,7 +38,12 @@ public:
 
         // 1. VQF 초기화 및 튜닝 (자이로 바이어스 추적 속도 설정)
         if (_opts.useVQF) {
-            _vqf = new VQF(1.0f / Config::SAMPLE_RATE_ACTIVE, Config::VQF_TAU_ACC, Config::VQF_TAU_MAG);
+            // VQF는 생성자에서 dt(초)를 받습니다.
+            _vqf = new VQF(1.0f / Config::SAMPLE_RATE_ACTIVE); 
+            // 파라미터 튜닝이 필요한 경우 별도 설정
+            _vqf->setTauAcc(Config::VQF_TAU_ACC);
+
+            // _vqf = new VQF(1.0f / Config::SAMPLE_RATE_ACTIVE, Config::VQF_TAU_ACC, Config::VQF_TAU_MAG);
         }
 
         // 2. FIFO 및 인터럽트 설정
@@ -63,7 +68,8 @@ public:
         _imu.setFIFOConfig(fcfg);
 
         // FIFO 워터마크 인터럽트를 INT1 핀에 매핑
-        _imu.mapInterruptToPin(BMI2_FIFO_WTM_INT, BMI2_INT1);
+        _imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
+        // _imu.mapInterruptToPin(BMI2_FIFO_WTM_INT, BMI2_INT1);
     }
 
     void updateProcess(FullSensorPayload& d) {
@@ -78,8 +84,13 @@ public:
 
         // VQF 융합 연산 (자이로 바이어스는 내부에서 자동 추적됨)
         if (_opts.useVQF && _vqf) {
-            _vqf->update(d.gyro, d.acc);
-            _vqf->getQuaternion(d.quat);
+            // 6축 센서 데이터를 사용하여 필터 업데이트
+            _vqf->update6AX(d.gyro, d.acc); 
+            // 6축 모드(Gyr+Acc) 기반 쿼터니언 결과 가져오기
+            _vqf->getQuat6AX(d.quat); 
+
+            // _vqf->update(d.gyro, d.acc);
+            // _vqf->getQuaternion(d.quat);
             computeEuler(d);
         }
 

@@ -81,7 +81,7 @@ void debugTask(void* pv) {
     }
 }
 
-void B10() {
+void B10_init() {
     
     // 1. SD 및 설정 로드
     if (sd.begin()) {
