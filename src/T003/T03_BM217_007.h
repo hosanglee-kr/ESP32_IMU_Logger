@@ -14,7 +14,7 @@
 #pragma once
 #include <Arduino.h>
 #include <SparkFun_BMI270_Arduino_Library.h>
-// #include "VQF.h"
+#include "SensorFusion.h"
 #include "T03_Config_007.h"
 #include "T03_SDMMC_007.h"
 
