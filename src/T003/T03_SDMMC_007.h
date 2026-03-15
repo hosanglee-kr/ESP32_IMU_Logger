@@ -1,23 +1,20 @@
-
 /*
  * ------------------------------------------------------
- * 소스명 : T03_SDMMC_006.h
+ * 소스명 : T03_SDMMC_007.h
  * 모듈약어 : T03 (SDMMC)
- * 모듈명 : SD_MMC File System & Power Control Module
+ * 모듈명 : SD_MMC Interface & JSON Config Manager
  * ------------------------------------------------------
  * 기능 요약
- * - SD_MMC 버스 초기화 및 인터페이스 제어
- * - 저전력 진입 시 파일 안전 종료 및 버스 마운트 해제 (Power Cut)
- * - JSON 기반 시스템 설정 파일(config.json) 로드 및 파싱
- * - 중복 없는 파일 인덱싱 기반 로그 생성 (File Rotation)
- * - 실시간 센서 데이터 기록을 위한 경로 관리
+ * - SD_MMC 버스 제어 및 저전력 모드 대응 (Mount/Unmount)
+ * - ArduinoJson V7.4.x를 이용한 설정 파일 입출력
+ * - 파일 인덱싱을 통한 데이터 로테이션 구현
  * ------------------------------------------------------
  */
-
 #pragma once
 #include <Arduino.h>
 #include <SD_MMC.h>
 #include <ArduinoJson.h>
+#include "T03_Config_007.h"
 
 class SDMMCHandler {
 public:
@@ -25,33 +22,28 @@ public:
         return SD_MMC.begin(Config::SD_MOUNT, true);
     }
 
-    // [절전] SD 카드 마운트 해제 (전류 소모 차단)
-        void end() {
+    void end() {
         SD_MMC.end();
     }
 
-    // [추가] JSON 설정 파일 로드 함수 (ArduinoJson 7.4.x 대응)
     void loadConfig(BMI270_Options& opts) {
         File file = SD_MMC.open(Config::CONFIG_PATH);
         if (!file) return;
-
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, file);
-        if (error == DeserializationError::Ok) {
+        if (deserializeJson(doc, file) == DeserializationError::Ok) {
             opts.useVQF = doc["useVQF"] | opts.useVQF;
             opts.useSD = doc["useSD"] | opts.useSD;
             opts.dynamicPowerSave = doc["dynamicPowerSave"] | opts.dynamicPowerSave;
+            opts.recordOnlySignificant = doc["recordOnlySignificant"] | opts.recordOnlySignificant;
             if (doc["logPrefix"]) strlcpy(opts.logPrefix, doc["logPrefix"], sizeof(opts.logPrefix));
         }
         file.close();
     }
 
-
-    // [최적화] 인덱싱된 로그 파일 생성
     bool createLogFile(const char* prefix, const char* header) {
         int index = 1;
         char filename[32];
-        while (index < 1000) { // 기존 파일 검색하여 새 인덱스 부여
+        while (index < 1000) {
             snprintf(filename, sizeof(filename), "/%s_%03d.csv", prefix, index);
             if (!SD_MMC.exists(filename)) break;
             index++;
@@ -71,5 +63,4 @@ public:
 private:
     String _currentPath;
 };
-
 
