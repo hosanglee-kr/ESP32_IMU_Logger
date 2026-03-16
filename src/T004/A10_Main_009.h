@@ -88,27 +88,6 @@ void A10_loggingTask(void* pv) {
 }
 
 
-/*
-void A10_loggingTask(void* pv) {
-    ST_FullSensorPayload_t data;
-    while (1) {
-        if (xQueueReceive(g_A10_Que_SD, &data, portMAX_DELAY)) {
-            if (g_A10_ImuOptions.useSD) {
-                File file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
-                if (file) {
-                    file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
-                        data.timestamp, data.acc[0], data.acc[1], data.acc[2],
-                        data.gyro[0], data.gyro[1], data.gyro[2],
-                        data.quat[0], data.quat[1], data.quat[2], data.quat[3],
-                        data.euler[0], data.euler[1], data.euler[2],
-                        data.stepCount, data.motion);
-                    file.close();
-                }
-            }
-        }
-    }
-}
-*/
 
 // [Task 3] 디버그 출력 태스크 (우선순위 낮음)
 void A10_debugTask(void* pv) {
