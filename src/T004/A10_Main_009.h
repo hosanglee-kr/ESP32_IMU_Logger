@@ -65,8 +65,10 @@ void A10_loggingTask(void* pv) {
     for (;;) {
         if (xQueueReceive(g_A10_Que_SD, &v_sensor_data, portMAX_DELAY)) {
             if (g_A10_ImuOptions.useSD && v_file) {
-                v_file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
-                    v_sensor_data.timestamp	, v_sensor_data.acc[0]	, v_sensor_data.acc[1]	, v_sensor_data.acc[2],
+                v_file.printf("%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
+                    v_sensor_data.timestamp	, 
+                    v_sensor_data.rawAcc[0]	, v_sensor_data.rawAcc[1]	, v_sensor_data.rawAcc[2],
+                    v_sensor_data.linAcc[0]	, v_sensor_data.linAcc[1]	, v_sensor_data.linAcc[2],
                     v_sensor_data.gyro[0]	, v_sensor_data.gyro[1]	, v_sensor_data.gyro[2]	,
                     v_sensor_data.quat[0]	, v_sensor_data.quat[1]	, v_sensor_data.quat[2]	, v_sensor_data.quat[3],
                     v_sensor_data.euler[0]	, v_sensor_data.euler[1], v_sensor_data.euler[2],
@@ -110,7 +112,9 @@ void A10_init() {
     // 1. SD 및 설정 로드
     if (g_A10_SdMMC.begin()) {
         g_A10_SdMMC.loadConfig(g_A10_ImuOptions);
-        if (g_A10_ImuOptions.useSD) g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig");
+        if (g_A10_ImuOptions.useSD){
+            g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig");
+        }
     }
 
     // 2. 센서 초기화

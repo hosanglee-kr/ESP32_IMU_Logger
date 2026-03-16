@@ -23,8 +23,9 @@ namespace C10_Config {
     static constexpr const char* 	CONFIG_PATH 		= "/config.json";
 
     // [Sensor] FIFO 및 샘플링 설정
-    static constexpr uint16_t 		FIFO_WTM 			= 200; // FIFO 데이터 임계값 (바이트 단위)
+    static constexpr uint16_t 		FIFO_WTM 			= 200;    // FIFO 데이터 임계값 (바이트 단위)
     static constexpr float 			SAMPLE_RATE_ACTIVE 	= 200.0f; // 200Hz
+    static constexpr uint16_t       FIFO_WTM_COUNT      = 15;     // 15개 샘플마다 처리 (C10_Config 연동 가능)
 
     // [VQF Tuning]
     static constexpr float 			VQF_TAU_ACC 		= 3.0f;  // 가속도계 보정 시정수 (초)
