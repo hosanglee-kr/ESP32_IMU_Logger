@@ -5,6 +5,7 @@
  * 모듈명 : Multi-Tasking Sensor Fusion & Logging System
  * ------------------------------------------------------
  * 기능 요약
+ * - main.cpp 에서 include 및 A10_init, a10_run호출함
  * - A10_sensorTask: 200Hz 데이터 획득 및 VQF 처리 (최고 우선순위)
  * - A10_loggingTask: Queue로부터 데이터를 받아 SD 카드 비동기 기록
  * - A10_debugTask: 시스템 상태 및 센서 데이터 시리얼 출력
@@ -49,6 +50,36 @@ void A10_sensorTask(void* pv) {
 }
 
 // [Task 2] SD 로깅 태스크 (Core 0 - I/O 지연 처리용)
+// [Task 2] SD 로깅 태스크 (성능 최적화 버전)
+void A10_loggingTask(void* pv) {
+    ST_FullSensorPayload_t data;
+    int flushCounter = 0;
+    
+    // 파일 핸들을 루프 밖에서 관리하여 성능 향상
+    File file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
+    
+    for (;;) {
+        if (xQueueReceive(g_A10_Que_SD, &data, portMAX_DELAY)) {
+            if (g_A10_ImuOptions.useSD && file) {
+                file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
+                    data.timestamp, data.acc[0], data.acc[1], data.acc[2],
+                    data.gyro[0], data.gyro[1], data.gyro[2],
+                    data.quat[0], data.quat[1], data.quat[2], data.quat[3],
+                    data.euler[0], data.euler[1], data.euler[2],
+                    data.stepCount, data.motion);
+
+                // 20개 레코드마다 실제 SD 쓰기 수행 (지연 최소화)
+                if (++flushCounter >= 20) {
+                    file.flush();
+                    flushCounter = 0;
+                }
+            }
+        }
+    }
+}
+
+
+/*
 void A10_loggingTask(void* pv) {
     ST_FullSensorPayload_t data;
     while (1) {
@@ -68,6 +99,7 @@ void A10_loggingTask(void* pv) {
         }
     }
 }
+*/
 
 // [Task 3] 디버그 출력 태스크 (우선순위 낮음)
 void A10_debugTask(void* pv) {

@@ -1,7 +1,7 @@
 /*
  * ------------------------------------------------------
- * 소스명 : T03_BM217_008.h
- * 모듈약어 : T03 (BMI270)
+ * 소스명 : SB10_BM217_008.h
+ * 모듈약어 : SB10 (BMI270)
  * 모듈명 : Advanced Motion Engine with VQF & FIFO Interrupt
  * ------------------------------------------------------
  * 기능 요약
@@ -10,6 +10,18 @@
  * - Any/Significant/No Motion 3단계 전력 관리 로직
  * - ESP32-S3 Light Sleep 및 하드웨어 인터럽트 복구 제어
  * ------------------------------------------------------
+  * ------------------------------------------------------
+ * [VQF Tuning Guide] - C10_Config_008.h 내 수정 시 참고
+ * ------------------------------------------------------
+ * 1. VQF_TAU_ACC (기본 3.0s): 가속도계 보정 속도
+ * - 낮을수록(1.0s) : 기울기 변화에 빠르게 반응하지만 진동에 취약함.
+ * - 높을수록(5.0s) : 동작이 부드럽고 진동에 강하지만 정적 기울기 복귀가 느림.
+ * 2. FIFO_WTM (200 bytes): 
+ * - 한 샘플(Acc+Gyr+Header)이 약 13byte이므로, 약 15개 데이터마다 인터럽트 발생.
+ * - 200Hz 기준 약 75ms마다 CPU가 깨어나 처리함 (전력 효율 최적점).
+ * ------------------------------------------------------
+
+
  */
 
 #pragma once
@@ -100,7 +112,38 @@ public:
         d.motion = _isSignificantMoving;
         _imu.getStepCount(&d.stepCount);
     }
+    
+    // [SB10_BM217_008.h] 내 enterIdleMode 수정 (태스크 보호 로직)
+    void enterIdleMode() {
+        Serial.println(">>> System: Suspend Tasks & Entering Sleep");
+        
+        // 1. 센서/디버그 태스크 일시 정지 (스택 및 데이터 보호)
+        if (g_A10_Que_Sensor) vTaskSuspend(g_A10_Que_Sensor);
+        
+        if (_opts.useSD) {
+            // flush가 보장되도록 잠시 대기 후 종료
+            vTaskDelay(pdMS_TO_TICKS(50));
+            _sd->end();
+        }
+    
+        _imu.setAccelPowerMode(BMI2_POWER_OPT_MODE);
+        _imu.enableAdvancedPowerSave();
+    
+        // 2. Wakeup 설정 및 슬립 진입
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)C10_Config::BMI_INT1, 1);
+        esp_light_sleep_start();
+    
+        // 3. 복구 시퀀스
+        resumeFromIdle();
+        
+        // 4. 태스크 재개
+        if (g_A10_Que_Sensor) vTaskResume(g_A10_Que_Sensor);
+        Serial.println("<<< System: Tasks Resumed");
+    }
 
+
+
+    /*
     void enterIdleMode() {
         Serial.println(">>> Sleep Mode: SD End & Light Sleep Start");
         if (_opts.useSD) _sd->end();
@@ -113,6 +156,7 @@ public:
 
         resumeFromIdle();
     }
+    */
 
     void checkMotionStatus() {
         uint16_t status = 0;
