@@ -47,27 +47,6 @@ void A10_sensorTask(void* pv) {
 
 
 
-// void A10_sensorTask(void* pv) {
-//     ST_FullSensorPayload_t payload;
-//     TickType_t lastWakeTime = xTaskGetTickCount();
-
-//     for (;;) {
-//         // 인터럽트 혹은 주기적 타이밍 대기 (200Hz)
-//         g_A10_Imu.updateProcess(payload);
-
-//         // 동작 상태 감지 (정지 시 슬립 진입 로직 포함)
-//         if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
-
-//         // 데이터 전송 조건 확인 (Significant Motion 시에만 큐 전송)
-//         if (g_A10_Imu.shouldRecord()) {
-//             xQueueSend(g_A10_Que_SD, &payload, 0);
-//         }
-//         xQueueSend(g_A10_Que_Debug, &payload, 0);
-
-//         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(5));
-//     }
-// }
-
 // [Task 2] SD 로깅 태스크 (Core 0 - I/O 지연 처리용)
 // [Task 2] SD 로깅 태스크 (성능 최적화 버전)
 void A10_loggingTask(void* pv) {
@@ -78,9 +57,10 @@ void A10_loggingTask(void* pv) {
     File v_file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
 
 	if (!v_file) {
-        Serial.println("!!! SD: Failed to open log file for appending");
-    }
-
+		Serial.println("!!! SD: Failed to open log file - Task Terminated");
+		vTaskDelete(NULL); // 태스크를 안전하게 종료하여 시스템 크래시 방지
+		return;
+	}
 
     for (;;) {
         if (xQueueReceive(g_A10_Que_SD, &v_sensor_data, portMAX_DELAY)) {
@@ -122,6 +102,11 @@ void A10_debugTask(void* pv) {
 
 void A10_init() {
 
+	// 0. 인터럽트 발생 전 세마포어 핸들 정의 및 생성
+    if (g_SB10_Sem_FIFO == NULL) {
+        g_SB10_Sem_FIFO = xSemaphoreCreateBinary();
+    }
+
     // 1. SD 및 설정 로드
     if (g_A10_SdMMC.begin()) {
         g_A10_SdMMC.loadConfig(g_A10_ImuOptions);
@@ -136,9 +121,9 @@ void A10_init() {
     g_A10_Que_Debug = xQueueCreate(C10_Config::QUEUE_LEN_DEBUG, sizeof(ST_FullSensorPayload_t));
 
     // 4. RTOS 태스크 할당 (멀티코어 활용)
-    xTaskCreatePinnedToCore(A10_sensorTask, "A10_sensorTask", C10_Config::TASK_STACK_SIZE, NULL, 3, &g_A10_TaskHandle_Sensor, 1);
-    xTaskCreatePinnedToCore(A10_loggingTask, "A10_loggingTask", C10_Config::TASK_STACK_SIZE, NULL, 1, NULL, 0);
-    xTaskCreatePinnedToCore(A10_debugTask, "A10_debugTask", 2048, NULL, 0, NULL, 0);
+    xTaskCreatePinnedToCore(A10_sensorTask	, "A10_sensorTask"	, C10_Config::TASK_STACK_SIZE	, NULL, 3, &g_A10_TaskHandle_Sensor	, 1);
+    xTaskCreatePinnedToCore(A10_loggingTask	, "A10_loggingTask"	, C10_Config::TASK_STACK_SIZE	, NULL, 1, NULL						, 0);
+    xTaskCreatePinnedToCore(A10_debugTask	, "A10_debugTask"	, 2048							, NULL, 0, NULL						, 0);
 }
 
 void A10_run() {
