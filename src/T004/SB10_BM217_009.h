@@ -39,7 +39,12 @@
 // 데이터 페이로드 정의
 struct ST_FullSensorPayload_t {
     uint32_t 	timestamp;
-    float 		acc[3], gyro[3], quat[4], euler[3];
+
+	float 		acc[3];
+	float 		gyro[3];
+	float 		quat[4];
+	float 		euler[3];
+
     uint32_t 	stepCount;
     bool 		motion;
 };
