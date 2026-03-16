@@ -85,7 +85,7 @@ public:
         // VQF 융합 연산 (자이로 바이어스는 내부에서 자동 추적됨)
         if (_opts.useVQF && _vqf) {
             xyz_t gyr = {d.gyro[0], d.gyro[1], d.gyro[2]}, acc = {d.acc[0], d.acc[1], d.acc[2]};
-            Quaternion q = _vqf->updateOrientation(gyr, acc, 1.0f / Config::SAMPLE_RATE);
+            Quaternion q = _vqf->updateOrientation(gyr, acc, 1.0f / Config::SAMPLE_RATE_ACTIVE);
             d.quat[0] = q.w; d.quat[1] = q.x; d.quat[2] = q.y; d.quat[3] = q.z;
             computeEuler(d);
             
