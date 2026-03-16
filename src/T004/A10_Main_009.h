@@ -16,7 +16,7 @@
 #include <Arduino.h>
 #include "C10_Config_009.h"
 #include "SD10_SDMMC_009.h"
-#include "SB10_BM217_009.h"
+#include "SB10_BM217_010.h"
 
 // 공유 자원 및 핸들러
 CL_SD10_SDMMC_Handler 	g_A10_SdMMC;
