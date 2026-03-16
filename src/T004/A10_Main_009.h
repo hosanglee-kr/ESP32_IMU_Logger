@@ -1,6 +1,6 @@
 /*
  * ------------------------------------------------------
- * 소스명 : A10_Main_008.h
+ * 소스명 : A10_Main_009.h
  * 모듈약어 : A10 (Main)
  * 모듈명 : Multi-Tasking Sensor Fusion & Logging System
  * ------------------------------------------------------
@@ -15,7 +15,7 @@
 #include <Arduino.h>
 #include "C10_Config_008.h"
 #include "SD10_SDMMC_008.h"
-#include "SB10_BM217_008.h"
+#include "SB10_BM217_009.h"
 
 // 공유 자원 및 핸들러
 CL_SD10_SDMMC_Handler 	g_A10_SdMMC;
@@ -25,65 +25,83 @@ ST_BMI270_Options_t 	g_A10_ImuOptions;
 // RTOS 핸들러
 QueueHandle_t 			g_A10_Que_SD;
 QueueHandle_t 			g_A10_Que_Debug;
-TaskHandle_t 			g_A10_Que_Sensor;
+TaskHandle_t 			g_A10_TaskHandle_Sensor;
+
+SemaphoreHandle_t 		g_SB10_Sem_FIFO = NULL; // 실제 선언
 
 // [Task 1] 센서 처리 태스크 (Core 1)
 void A10_sensorTask(void* pv) {
-    ST_FullSensorPayload_t payload;
-    TickType_t lastWakeTime = xTaskGetTickCount();
-
+    ST_FullSensorPayload_t v_payload;
     for (;;) {
-        // 인터럽트 혹은 주기적 타이밍 대기 (200Hz)
-        g_A10_Imu.updateProcess(payload);
+        // 하드웨어 인터럽트(세마포어)가 올 때까지 무한 대기 (CPU 점유율 0%)
+        if (xSemaphoreTake(g_SB10_Sem_FIFO, portMAX_DELAY) == pdTRUE) {
+            g_A10_Imu.updateProcess(v_payload);
 
-        // 동작 상태 감지 (정지 시 슬립 진입 로직 포함)
-        if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
-
-        // 데이터 전송 조건 확인 (Significant Motion 시에만 큐 전송)
-        if (g_A10_Imu.shouldRecord()) {
-            xQueueSend(g_A10_Que_SD, &payload, 0);
+            if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
+            if (g_A10_Imu.shouldRecord()) xQueueSend(g_A10_Que_SD, &v_payload, 0);
+            xQueueSend(g_A10_Que_Debug, &v_payload, 0);
         }
-        xQueueSend(g_A10_Que_Debug, &payload, 0);
-
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(5));
     }
 }
+
+
+
+// void A10_sensorTask(void* pv) {
+//     ST_FullSensorPayload_t payload;
+//     TickType_t lastWakeTime = xTaskGetTickCount();
+
+//     for (;;) {
+//         // 인터럽트 혹은 주기적 타이밍 대기 (200Hz)
+//         g_A10_Imu.updateProcess(payload);
+
+//         // 동작 상태 감지 (정지 시 슬립 진입 로직 포함)
+//         if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
+
+//         // 데이터 전송 조건 확인 (Significant Motion 시에만 큐 전송)
+//         if (g_A10_Imu.shouldRecord()) {
+//             xQueueSend(g_A10_Que_SD, &payload, 0);
+//         }
+//         xQueueSend(g_A10_Que_Debug, &payload, 0);
+
+//         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(5));
+//     }
+// }
 
 // [Task 2] SD 로깅 태스크 (Core 0 - I/O 지연 처리용)
 // [Task 2] SD 로깅 태스크 (성능 최적화 버전)
 void A10_loggingTask(void* pv) {
-    ST_FullSensorPayload_t data;
-    int flushCounter = 0;
+    ST_FullSensorPayload_t v_sensor_data;
+    int v_flushCounter = 0;
 
     // 파일 핸들을 루프 밖에서 한 번만 오픈하여 성능 향상
-    File file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
+    File v_file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
 
-	if (!file) {
+	if (!v_file) {
         Serial.println("!!! SD: Failed to open log file for appending");
     }
 
 
     for (;;) {
-        if (xQueueReceive(g_A10_Que_SD, &data, portMAX_DELAY)) {
-            if (g_A10_ImuOptions.useSD && file) {
-                file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
-                    data.timestamp, data.acc[0], data.acc[1], data.acc[2],
-                    data.gyro[0], data.gyro[1], data.gyro[2],
-                    data.quat[0], data.quat[1], data.quat[2], data.quat[3],
-                    data.euler[0], data.euler[1], data.euler[2],
-                    data.stepCount, data.motion);
+        if (xQueueReceive(g_A10_Que_SD, &v_sensor_data, portMAX_DELAY)) {
+            if (g_A10_ImuOptions.useSD && v_file) {
+                v_file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
+                    v_sensor_data.timestamp	, v_sensor_data.acc[0]	, v_sensor_data.acc[1]	, v_sensor_data.acc[2],
+                    v_sensor_data.gyro[0]	, v_sensor_data.gyro[1]	, v_sensor_data.gyro[2]	,
+                    v_sensor_data.quat[0]	, v_sensor_data.quat[1]	, v_sensor_data.quat[2]	, v_sensor_data.quat[3],
+                    v_sensor_data.euler[0]	, v_sensor_data.euler[1], v_sensor_data.euler[2],
+                    v_sensor_data.stepCount	, v_sensor_data.motion);
 
                 // 20개 레코드마다 실제 SD 쓰기 수행 (지연 최소화)
-                if (++flushCounter >= 20) {
-                    file.flush();
-                    flushCounter = 0;
+                if (++v_flushCounter >= 20) {
+                    v_file.flush();
+                    v_flushCounter = 0;
                 }
             }
         }
     }
 
 	// 태스크 종료 시(정상적으론 미발생) 파일 닫기
-    if (file) file.close();
+    if (v_file) v_file.close();
 
 }
 
@@ -91,11 +109,11 @@ void A10_loggingTask(void* pv) {
 
 // [Task 3] 디버그 출력 태스크 (우선순위 낮음)
 void A10_debugTask(void* pv) {
-    ST_FullSensorPayload_t d;
+    ST_FullSensorPayload_t v_sensor_data;
     while (1) {
-        if (xQueueReceive(g_A10_Que_Debug, &d, portMAX_DELAY)) {
-            Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%d\n",
-                          d.euler[0], d.euler[1], d.euler[2], d.motion);
+        if (xQueueReceive(g_A10_Que_Debug, &v_sensor_data, portMAX_DELAY)) {
+            Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%v_sensor_data\n",
+                          v_sensor_data.euler[0], v_sensor_data.euler[1], v_sensor_data.euler[2], v_sensor_data.motion);
         }
         vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz 출력
     }
@@ -117,7 +135,7 @@ void A10_init() {
     g_A10_Que_Debug = xQueueCreate(C10_Config::QUEUE_LEN_DEBUG, sizeof(ST_FullSensorPayload_t));
 
     // 4. RTOS 태스크 할당 (멀티코어 활용)
-    xTaskCreatePinnedToCore(A10_sensorTask, "A10_sensorTask", C10_Config::TASK_STACK_SIZE, NULL, 3, &g_A10_Que_Sensor, 1);
+    xTaskCreatePinnedToCore(A10_sensorTask, "A10_sensorTask", C10_Config::TASK_STACK_SIZE, NULL, 3, &g_A10_TaskHandle_Sensor, 1);
     xTaskCreatePinnedToCore(A10_loggingTask, "A10_loggingTask", C10_Config::TASK_STACK_SIZE, NULL, 1, NULL, 0);
     xTaskCreatePinnedToCore(A10_debugTask, "A10_debugTask", 2048, NULL, 0, NULL, 0);
 }

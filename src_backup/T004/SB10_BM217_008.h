@@ -144,22 +144,6 @@ public:
     }
 
 
-
-    /*
-    void enterIdleMode() {
-        Serial.println(">>> Sleep Mode: SD End & Light Sleep Start");
-        if (_opts.useSD) _sd->end();
-
-        _imu.setAccelPowerMode(BMI2_POWER_OPT_MODE); // 가속도계만 저전력 가동
-        _imu.enableAdvancedPowerSave();
-
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)C10_Config::BMI_INT1, 1);
-        esp_light_sleep_start();
-
-        resumeFromIdle();
-    }
-    */
-
     void checkMotionStatus() {
         uint16_t status = 0;
         _imu.getInterruptStatus(&status);

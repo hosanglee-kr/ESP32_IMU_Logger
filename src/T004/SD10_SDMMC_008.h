@@ -16,7 +16,7 @@
 #include <ArduinoJson.h>
 #include "C10_Config_008.h"
 
-extern TaskHandle_t 			g_A10_Que_Sensor;
+extern TaskHandle_t 			g_A10_TaskHandle_Sensor;
 
 class CL_SD10_SDMMC_Handler {
 public:
@@ -28,33 +28,33 @@ public:
         SD_MMC.end();
     }
 
-    void loadConfig(ST_BMI270_Options_t& opts) {
-        File file = SD_MMC.open(C10_Config::CONFIG_PATH);
-        if (!file) return;
-        JsonDocument doc;
-        if (deserializeJson(doc, file) == DeserializationError::Ok) {
-            opts.useVQF = doc["useVQF"] | opts.useVQF;
-            opts.useSD = doc["useSD"] | opts.useSD;
-            opts.dynamicPowerSave = doc["dynamicPowerSave"] | opts.dynamicPowerSave;
-            opts.recordOnlySignificant = doc["recordOnlySignificant"] | opts.recordOnlySignificant;
-            if (doc["logPrefix"]) strlcpy(opts.logPrefix, doc["logPrefix"], sizeof(opts.logPrefix));
+    void loadConfig(ST_BMI270_Options_t& p_opts) {
+        File v_file = SD_MMC.open(C10_Config::CONFIG_PATH);
+        if (!v_file) return;
+        JsonDocument v_jsonDoc;
+        if (deserializeJson(v_jsonDoc, v_file) == DeserializationError::Ok) {
+            p_opts.useVQF 					= v_jsonDoc["useVQF"] | p_opts.useVQF;
+            p_opts.useSD 					= v_jsonDoc["useSD"] | p_opts.useSD;
+            p_opts.dynamicPowerSave 		= v_jsonDoc["dynamicPowerSave"] | p_opts.dynamicPowerSave;
+            p_opts.recordOnlySignificant 	= v_jsonDoc["recordOnlySignificant"] | p_opts.recordOnlySignificant;
+            if (v_jsonDoc["logPrefix"]) strlcpy(p_opts.logPrefix, v_jsonDoc["logPrefix"], sizeof(p_opts.logPrefix));
         }
-        file.close();
+        v_file.close();
     }
 
-    bool createLogFile(const char* prefix, const char* header) {
-        int index = 1;
-        char filename[32];
-        while (index < 1000) {
-            snprintf(filename, sizeof(filename), "/%s_%03d.csv", prefix, index);
-            if (!SD_MMC.exists(filename)) break;
-            index++;
+    bool createLogFile(const char* p_prefix, const char* p_header) {
+        int v_index = 1;
+        char v_filename[32];
+        while (v_index < 1000) {
+            snprintf(v_filename, sizeof(v_filename), "/%s_%03d.csv", p_prefix, v_index);
+            if (!SD_MMC.exists(v_filename)) break;
+            v_index++;
         }
-        _currentPath = String(filename);
-        File file = SD_MMC.open(_currentPath, FILE_WRITE);
-        if (file) {
-            file.println(header);
-            file.close();
+        _currentPath = String(v_filename);
+        File v_file = SD_MMC.open(_currentPath, FILE_WRITE);
+        if (v_file) {
+            v_file.println(p_header);
+            v_file.close();
             return true;
         }
         return false;
