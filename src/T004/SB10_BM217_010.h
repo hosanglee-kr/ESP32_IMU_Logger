@@ -122,7 +122,7 @@ public:
     
     void updateProcess(ST_FullSensorPayload_t& p_sensor_data) {
         // [개선] FIFO 인터럽트가 발생했으므로 워터마크만큼 데이터를 한 번에 가져옴
-        uint16_t samplesRead = FIFO_WTM_COUNT;
+        uint16_t samplesRead = C10_Config::FIFO_WTM_COUNT;
         int8_t rslt = _imu.getFIFOData(_fifoBuffer, &samplesRead);
     
         if (rslt != BMI2_OK || samplesRead == 0) return;
@@ -143,7 +143,7 @@ public:
                 xyz_t v_acc_v = {ax, ay, az};
     
                 // 필터 업데이트 (누적된 모든 샘플 반영)
-                Quaternion v_q = _vqf->update_orientation(v_gyr_v, v_acc_v, v_dt);
+                Quaternion v_q = _vqf->updateOrientation(v_gyr_v, v_acc_v, v_dt);
     
                 // 마지막 샘플 결과를 최종 페이로드에 저장 (사용자에게 보고될 최종 자세)
                 if (i == samplesRead - 1) {
@@ -242,7 +242,7 @@ public:
     
         // 2. 가속도 센서만 저전력 모드로 (Any-Motion 모니터링용)
         // 자이로는 전력 소모가 매우 크므로 중단(Suspend)
-        _imu.setGyroPowerMode(BMI2_SUSPEND_POWER_MODE);
+        _imu.setGyroPowerMode(BMI2_POWER_OPT_MODE, BMI2_POWER_OPT_MODE);
         _imu.setAccelPowerMode(BMI2_LOW_POWER_MODE);
     
         if (g_A10_TaskHandle_Sensor != NULL) vTaskSuspend(g_A10_TaskHandle_Sensor);
