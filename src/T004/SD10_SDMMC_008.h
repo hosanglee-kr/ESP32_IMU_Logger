@@ -16,6 +16,8 @@
 #include <ArduinoJson.h>
 #include "C10_Config_008.h"
 
+extern TaskHandle_t 			g_A10_Que_Sensor;
+
 class CL_SD10_SDMMC_Handler {
 public:
     bool begin() {
