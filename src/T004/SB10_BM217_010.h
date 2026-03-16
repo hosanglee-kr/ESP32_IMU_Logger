@@ -243,7 +243,7 @@ public:
         // 2. 가속도 센서만 저전력 모드로 (Any-Motion 모니터링용)
         // 자이로는 전력 소모가 매우 크므로 중단(Suspend)
         _imu.setGyroPowerMode(BMI2_POWER_OPT_MODE, BMI2_POWER_OPT_MODE);
-        _imu.setAccelPowerMode(BMI2_LOW_POWER_MODE);
+        _imu.setAccelPowerMode(BMI2_POWER_OPT_MODE);
     
         if (g_A10_TaskHandle_Sensor != NULL) vTaskSuspend(g_A10_TaskHandle_Sensor);
     
