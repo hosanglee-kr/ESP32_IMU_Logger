@@ -1,6 +1,6 @@
 /*
  * ------------------------------------------------------
- * 소스명 : SD10_SDMMC_007.h
+ * 소스명 : SD10_SDMMC_009.h
  * 모듈약어 : SD10 (SDMMC)
  * 모듈명 : SD_MMC Interface & JSON Config Manager
  * ------------------------------------------------------
@@ -14,7 +14,7 @@
 #include <Arduino.h>
 #include <SD_MMC.h>
 #include <ArduinoJson.h>
-#include "C10_Config_008.h"
+#include "C10_Config_009.h"
 
 extern TaskHandle_t 			g_A10_TaskHandle_Sensor;
 

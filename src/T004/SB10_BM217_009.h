@@ -29,8 +29,8 @@
 #include <freertos/semphr.h>
 #include <SparkFun_BMI270_Arduino_Library.h>
 #include "SensorFusion.h"
-#include "C10_Config_008.h"
-#include "SD10_SDMMC_008.h"
+#include "C10_Config_009.h"
+#include "SD10_SDMMC_009.h"
 
 // 데이터 페이로드 정의
 struct ST_FullSensorPayload_t {

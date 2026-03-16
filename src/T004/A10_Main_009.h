@@ -12,10 +12,10 @@
  * - 전력 관리: 모션 상태에 따른 태스크 제어 및 슬립 진입
  * ------------------------------------------------------
  */
- 
+
 #include <Arduino.h>
-#include "C10_Config_008.h"
-#include "SD10_SDMMC_008.h"
+#include "C10_Config_009.h"
+#include "SD10_SDMMC_009.h"
 #include "SB10_BM217_009.h"
 
 // 공유 자원 및 핸들러
