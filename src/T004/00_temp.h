@@ -1,74 +1,55 @@
-// ... 상단 include 생략 ...
-#include "SD10_SDMMC_008.h"
+작성해주신 v009 최신본에서 오타 수정 및 안정성 강화를 위해 수정이 필요한 3가지 포인트의 전/후 비교입니다.
+1. [A10_Main_009.h] 디버그 출력 오타 수정
+변수명이 포맷 스트링(%) 안에 잘못 포함되어 있어 시리얼 출력이 비정상적으로 나올 수 있는 부분을 수정합니다.
+수정 전:
+Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%v_sensor_data\n",
+              v_sensor_data.euler[0], v_sensor_data.euler[1], v_sensor_data.euler[2], v_sensor_data.motion);
 
-// [추가] 외부 태스크 핸들 선언 (순환 참조 에러 해결)
-extern TaskHandle_t g_A10_Que_Sensor; 
+수정 후:
+// %v_sensor_data를 %d로 수정하여 실제 motion(bool) 값이 출력되도록 변경
+Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%d\n",
+              v_sensor_data.euler[0], v_sensor_data.euler[1], v_sensor_data.euler[2], (int)v_sensor_data.motion);
 
-// 데이터 페이로드 정의
-struct ST_FullSensorPayload_t {
-// ... 이하 동일 ...
-
-    // [수정된 enterIdleMode]
-    void enterIdleMode() {
-        Serial.println(">>> Sleep Mode: Suspend Tasks & Light Sleep Start");
-        
-        // 태스크 일시 정지 (외부 핸들 참조)
-        if (g_A10_Que_Sensor != NULL) vTaskSuspend(g_A10_Que_Sensor);
-
-        if (_opts.useSD) {
-            vTaskDelay(pdMS_TO_TICKS(50)); // 로깅 태스크가 flush할 시간을 줌
-            _sd->end();
-        }
-
-        _imu.setAccelPowerMode(BMI2_POWER_OPT_MODE);
-        _imu.enableAdvancedPowerSave();
-
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)C10_Config::BMI_INT1, 1);
-        esp_light_sleep_start();
-
-        resumeFromIdle();
-
-        // 태스크 재개
-        if (g_A10_Que_Sensor != NULL) vTaskResume(g_A10_Que_Sensor);
-        Serial.println("<<< Wakeup: Tasks Resumed");
-    }
-// ... 이하 동일 ...
-
-
-
-
-// [Task 2] SD 로깅 태스크 (성능 최적화 및 안정성 강화)
-void A10_loggingTask(void* pv) {
-    ST_FullSensorPayload_t data;
-    int flushCounter = 0;
-    
-    // 파일 핸들을 루프 밖에서 한 번만 오픈
-    File file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
-    
-    if (!file) {
-        Serial.println("!!! SD: Failed to open log file for appending");
-    }
-
-    for (;;) {
-        if (xQueueReceive(g_A10_Que_SD, &data, portMAX_DELAY)) {
-            if (g_A10_ImuOptions.useSD && file) {
-                file.printf("%lu,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
-                    data.timestamp, data.acc[0], data.acc[1], data.acc[2],
-                    data.gyro[0], data.gyro[1], data.gyro[2],
-                    data.quat[0], data.quat[1], data.quat[2], data.quat[3],
-                    data.euler[0], data.euler[1], data.euler[2],
-                    data.stepCount, data.motion);
-
-                // 20개 레코드(약 100ms)마다 실제 데이터 물리 저장
-                if (++flushCounter >= 20) {
-                    file.flush();
-                    flushCounter = 0;
-                }
-            }
-        }
-    }
-    // 태스크 종료 시(정상적으론 미발생) 파일 닫기
-    if (file) file.close();
+2. [A10_Main_009.h] SD 로깅 태스크 안정화
+파일 오픈 실패 시 빈 포인터(v_file)에 접근하여 시스템이 멈추는 것을 방지합니다.
+수정 전:
+File v_file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
+if (!v_file) {
+    Serial.println("!!! SD: Failed to open log file for appending");
 }
+// 이후 v_file 체크 없이 진행될 위험 있음
+
+수정 후:
+File v_file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
+if (!v_file) {
+    Serial.println("!!! SD: Failed to open log file - Task Terminated");
+    vTaskDelete(NULL); // 태스크를 안전하게 종료하여 시스템 크래시 방지
+    return;
+}
+
+3. [A10_Main_009.h] 세마포어 생성 시점 (A10_init)
+센서가 시작되어 인터럽트가 발생하기 전에 세마포어가 반드시 준비되어 있어야 합니다.
+수정 전:
+// 2. 센서 초기화
+g_A10_Imu.begin(g_A10_ImuOptions, &g_A10_SdMMC);
+// ... 이후 큐 생성 등 ...
+
+수정 후:
+void A10_init() {
+    // [추가] 인터럽트 발생 전 세마포어 핸들 정의 및 생성
+    if (g_SB10_Sem_FIFO == NULL) {
+        g_SB10_Sem_FIFO = xSemaphoreCreateBinary();
+    }
+
+    // 1. SD 및 설정 로드
+    // ... 기존 코드 유지 ...
+
+    // 2. 센서 초기화 (이제 내부에서 인터럽트가 발생해도 세마포어가 준비됨)
+    g_A10_Imu.begin(g_A10_ImuOptions, &g_A10_SdMMC);
+    // ... 이하 동일 ...
+
+💡 시스템 동작 원리 (세마포어 동기화)
+위 그림처럼 BMI270 하드웨어가 데이터를 준비하면 ISR이 세마포어를 던지고(Give), 대기 중이던 SensorTask가 즉시 깨어나(Take) 처리하는 구조입니다. 이 수정사항들을 반영하면 타이밍 오차 없는 완벽한 200Hz 데이터 수집이 가능해집니다.
+수정된 부분들을 파일에 적용해 보시겠어요? 컴파일 후 데이터 로깅 결과가 어떻게 나오는지 궁금합니다.
 
 

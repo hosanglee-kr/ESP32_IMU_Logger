@@ -113,7 +113,7 @@ void A10_debugTask(void* pv) {
     ST_FullSensorPayload_t v_sensor_data;
     while (1) {
         if (xQueueReceive(g_A10_Que_Debug, &v_sensor_data, portMAX_DELAY)) {
-            Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%v_sensor_data\n",
+            Serial.printf("[T03] Roll:%.1f Pitch:%.1f Yaw:%.1f Mot:%d\n",
                           v_sensor_data.euler[0], v_sensor_data.euler[1], v_sensor_data.euler[2], v_sensor_data.motion);
         }
         vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz 출력
