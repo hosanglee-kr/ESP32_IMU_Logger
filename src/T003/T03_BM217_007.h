@@ -6,11 +6,12 @@
  * ------------------------------------------------------
  * 기능 요약
  * - FIFO 워터마크 인터럽트를 이용한 센서 데이터 수집
- * - VQF 필터 기반 쿼터니언 산출 및 자이로 바이어스 동적 추적
- * - Any/Significant/No Motion 3단계 동작 분석 로직
- * - ESP32-S3 Light Sleep 진입 및 복구 시퀀스 제어
+ * - VQF 필터 기반 6축 데이터 융합 (자이로 바이어스 동적 보정)
+ * - Any/Significant/No Motion 3단계 전력 관리 로직
+ * - ESP32-S3 Light Sleep 및 하드웨어 인터럽트 복구 제어
  * ------------------------------------------------------
  */
+ 
 #pragma once
 #include <Arduino.h>
 #include <SparkFun_BMI270_Arduino_Library.h>
@@ -38,12 +39,21 @@ public:
 
         // 1. VQF 초기화 및 튜닝 (자이로 바이어스 추적 속도 설정)
         if (_opts.useVQF) {
+            // [수정 후]
+            // VQF 생성자는 (float gyro_dt, float acc_dt, float mag_dt) 형식을 권장
+            _vqf = new VQF(1.0f/Config::SAMPLE_RATE_ACTIVE, 1.0f/Config::SAMPLE_RATE_ACTIVE, 1.0f/Config::SAMPLE_RATE_ACTIVE);
+            // parameter0은 tauAcc에 대응함
+            _vqf->set_free_parameters(Config::VQF_TAU_ACC, 0.0f); 
+
+
+            /*
             // VQF는 생성자에서 dt(초)를 받습니다.
             _vqf = new VQF(1.0f / Config::SAMPLE_RATE_ACTIVE); 
             // 파라미터 튜닝이 필요한 경우 별도 설정
             _vqf->setTauAcc(Config::VQF_TAU_ACC);
 
             // _vqf = new VQF(1.0f / Config::SAMPLE_RATE_ACTIVE, Config::VQF_TAU_ACC, Config::VQF_TAU_MAG);
+            */
         }
 
         // 2. FIFO 및 인터럽트 설정
@@ -68,7 +78,10 @@ public:
         _imu.setFIFOConfig(fcfg);
 
         // FIFO 워터마크 인터럽트를 INT1 핀에 매핑
-        _imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
+        _imu.mapInterruptToPin(BMI2_FIFO_WTM_INT, BMI2_INT1);
+
+
+        // _imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
         // _imu.mapInterruptToPin(BMI2_FIFO_WTM_INT, BMI2_INT1);
     }
 
@@ -84,9 +97,17 @@ public:
 
         // VQF 융합 연산 (자이로 바이어스는 내부에서 자동 추적됨)
         if (_opts.useVQF && _vqf) {
+            // [수정 후]
+            xyz_t gyr = {d.gyro[0], d.gyro[1], d.gyro[2]};
+            xyz_t acc = {d.acc[0], d.acc[1], d.acc[2]};
+            // VQF 클래스의 상속받은 가상 함수 호출
+            Quaternion q = _vqf->update_orientation(gyr, acc, 1.0f / Config::SAMPLE_RATE_ACTIVE);
+            
+
+            /*
             xyz_t gyr = {d.gyro[0], d.gyro[1], d.gyro[2]}, acc = {d.acc[0], d.acc[1], d.acc[2]};
             Quaternion q = _vqf->updateOrientation(gyr, acc, 1.0f / Config::SAMPLE_RATE_ACTIVE);
-            
+            */
             d.quat[0] = q.w; d.quat[1] = q.x; d.quat[2] = q.y; d.quat[3] = q.z;
             computeEuler(d);
             
@@ -170,3 +191,4 @@ private:
         _imu.mapInterruptToPin(BMI2_NO_MOTION_INT, BMI2_INT1);
     }
 };
+
