@@ -7,9 +7,15 @@
 	#include "T002/T002_BMI270_Main_EampAll_005.h"
 #endif
 
-#define T03
+// #define T03
 #ifdef T03
 	#include "T003/T03_Main_007.h"
+#endif
+
+
+#define T04
+#ifdef T04
+	#include "T004/A10_Main_008.h"
 #endif
 
 
@@ -28,6 +34,10 @@ void setup() {
 		B10_init();
 	#endif
 
+	#ifdef T04
+		A10_init();
+	#endif
+
 }
 
 void loop() {
@@ -35,9 +45,13 @@ void loop() {
 		B10_run();
 		delay(5);
 	#endif
-	
+
 	#ifdef T03
 		B10_run();
+	#endif
+
+	#ifdef T04
+		A10_run();
 	#endif
 
 

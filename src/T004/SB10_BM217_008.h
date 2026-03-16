@@ -1,6 +1,6 @@
 /*
  * ------------------------------------------------------
- * 소스명 : T03_BM217_007.h
+ * 소스명 : T03_BM217_008.h
  * 모듈약어 : T03 (BMI270)
  * 모듈명 : Advanced Motion Engine with VQF & FIFO Interrupt
  * ------------------------------------------------------
@@ -16,11 +16,11 @@
 #include <Arduino.h>
 #include <SparkFun_BMI270_Arduino_Library.h>
 #include "SensorFusion.h"
-#include "T03_Config_007.h"
-#include "T03_SDMMC_007.h"
+#include "C10_Config_008.h"
+#include "SD10_SDMMC_008.h"
 
 // 데이터 페이로드 정의
-struct FullSensorPayload {
+struct ST_FullSensorPayload_t {
     uint32_t timestamp;
     float acc[3], gyro[3], quat[4], euler[3];
     uint32_t stepCount;
@@ -28,24 +28,24 @@ struct FullSensorPayload {
 };
 
 // 인터럽트 플래그 (RAM 상주)
-DRAM_ATTR volatile bool g_sensor_data_ready = false;
-void IRAM_ATTR bmi270_fifo_isr() { g_sensor_data_ready = true; }
+DRAM_ATTR volatile bool g_SB10_sensor_data_ready = false;
+void IRAM_ATTR SB10_bmi270_fifo_isr() { g_SB10_sensor_data_ready = true; }
 
-class BMI270Handler {
+class CL_SB10_BMI270_Handler {
 public:
-    bool begin(BMI270_Options opts, SDMMCHandler* sd) {
+    bool begin(ST_BMI270_Options_t opts, CL_SD10_SDMMC_Handler* sd) {
         _opts = opts; _sd = sd;
-        if (_imu.beginSPI(Config::BMI_CS) != BMI2_OK) return false;
+        if (_imu.beginSPI(C10_Config::BMI_CS) != BMI2_OK) return false;
 
         // 1. VQF 초기화 및 튜닝 (자이로 바이어스 추적 속도 설정)
         if (_opts.useVQF) {
-			float v_dt = 1.0f / Config::SAMPLE_RATE_ACTIVE;
+			float v_dt = 1.0f / C10_Config::SAMPLE_RATE_ACTIVE;
 
 			// 생성자는 헤더의 VQF(float gyro_delta_t, float acc_delta_t, float mag_delta_t)와 일치
 			_vqf = new VQF(v_dt, v_dt, v_dt);
 
 			// SensorFusionFilterBase 클래스의 가상 함수 이름 사용
-			_vqf->setFreeParameters(Config::VQF_TAU_ACC, 0.0f);
+			_vqf->setFreeParameters(C10_Config::VQF_TAU_ACC, 0.0f);
 
         }
 
@@ -53,8 +53,8 @@ public:
         configureIMU();
         setupMotionInterrupts();
 
-        pinMode(Config::BMI_INT1, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(Config::BMI_INT1), bmi270_fifo_isr, RISING);
+        pinMode(C10_Config::BMI_INT1, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(C10_Config::BMI_INT1), SB10_bmi270_fifo_isr, RISING);
 
         return true;
     }
@@ -67,14 +67,14 @@ public:
 
         BMI270_FIFOConfig fcfg;
         fcfg.flags = BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN | BMI2_FIFO_HEADER_EN;
-        fcfg.watermark = Config::FIFO_WTM;
+        fcfg.watermark = C10_Config::FIFO_WTM;
         _imu.setFIFOConfig(fcfg);
 
         // FIFO 워터마크 인터럽트를 INT1 핀에 매핑, 라이브러리 호환 상수 사용 (FIFO WaterMark)
     	_imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
     }
 
-    void updateProcess(FullSensorPayload& d) {
+    void updateProcess(ST_FullSensorPayload_t& d) {
         _imu.getSensorData(); // 실제 환경에선 FIFO Read로 대체 가능
         d.timestamp = millis();
 
@@ -90,7 +90,7 @@ public:
 			xyz_t acc_v = {d.acc[0], d.acc[1], d.acc[2]};
 
 			// [수정 완료] 헤더 파일 39라인의 가상 함수 이름 사용
-			Quaternion q = _vqf->updateOrientation(gyr_v, acc_v, 1.0f / Config::SAMPLE_RATE_ACTIVE);
+			Quaternion q = _vqf->updateOrientation(gyr_v, acc_v, 1.0f / C10_Config::SAMPLE_RATE_ACTIVE);
 
 			d.quat[0] = q.w; d.quat[1] = q.x; d.quat[2] = q.y; d.quat[3] = q.z;
 			computeEuler(d);
@@ -108,7 +108,7 @@ public:
         _imu.setAccelPowerMode(BMI2_POWER_OPT_MODE); // 가속도계만 저전력 가동
         _imu.enableAdvancedPowerSave();
 
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)Config::BMI_INT1, 1);
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)C10_Config::BMI_INT1, 1);
         esp_light_sleep_start();
 
         resumeFromIdle();
@@ -131,12 +131,12 @@ public:
 
 private:
     BMI270 _imu;
-    BMI270_Options _opts;
-    SDMMCHandler* _sd;
+    ST_BMI270_Options_t _opts;
+    CL_SD10_SDMMC_Handler* _sd;
     VQF* _vqf = nullptr;
     bool _isSignificantMoving = false;
 
-    void computeEuler(FullSensorPayload& d) {
+    void computeEuler(ST_FullSensorPayload_t& d) {
         float q0 = d.quat[0], q1 = d.quat[1], q2 = d.quat[2], q3 = d.quat[3];
         d.euler[0] = atan2(2.0f * (q0 * q1 + q2 * q3), 1.0f - 2.0f * (q1 * q1 + q2 * q2)) * 57.29578f;
         d.euler[1] = asin(2.0f * (q0 * q2 - q3 * q1)) * 57.29578f;
