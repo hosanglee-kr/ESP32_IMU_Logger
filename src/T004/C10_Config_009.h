@@ -17,34 +17,34 @@
 
 namespace C10_Config {
     // [Hardware] 핀맵 정의
-    static constexpr int BMI_CS    = 10;
-    static constexpr int BMI_INT1  = 9;
-    static constexpr const char* SD_MOUNT = "/sdcard";
-    static constexpr const char* CONFIG_PATH = "/config.json";
+    static constexpr uint8_t 		BMI_CS    			= 10;
+    static constexpr uint8_t		BMI_INT1  			= 9;
+    static constexpr const char* 	SD_MOUNT 			= "/sdcard";
+    static constexpr const char* 	CONFIG_PATH 		= "/config.json";
 
     // [Sensor] FIFO 및 샘플링 설정
-    static constexpr uint16_t FIFO_WTM = 200; // FIFO 데이터 임계값 (바이트 단위)
-    static constexpr float SAMPLE_RATE_ACTIVE = 200.0f; // 200Hz
+    static constexpr uint16_t 		FIFO_WTM 			= 200; // FIFO 데이터 임계값 (바이트 단위)
+    static constexpr float 			SAMPLE_RATE_ACTIVE 	= 200.0f; // 200Hz
 
     // [VQF Tuning]
-    static constexpr float VQF_TAU_ACC = 3.0f;  // 가속도계 보정 시정수 (초)
-    static constexpr float VQF_TAU_MAG = 0.0f;  // 지자기 미사용 시 0
+    static constexpr float 			VQF_TAU_ACC 		= 3.0f;  // 가속도계 보정 시정수 (초)
+    static constexpr float 			VQF_TAU_MAG 		= 0.0f;  // 지자기 미사용 시 0
 
     // [RTOS] Queue & Task 설정
-    static constexpr int QUEUE_LEN_SD    = 50;  // SD 기록 대기 큐 크기
-    static constexpr int QUEUE_LEN_DEBUG = 30;  // 시리얼 출력 대기 큐 크기
-    static constexpr int TASK_STACK_SIZE = 4096;
+    static constexpr uint16_t 		QUEUE_LEN_SD    	= 50;  // SD 기록 대기 큐 크기
+    static constexpr uint16_t 		QUEUE_LEN_DEBUG 	= 30;  // 시리얼 출력 대기 큐 크기
+    static constexpr uint32_t 		TASK_STACK_SIZE 	= 4096;
 
     // [Motion] 전력 관리 파라미터
-    static constexpr uint16_t NO_MOTION_DURATION = 500; // 10초 (500 * 20ms)
-    static constexpr uint16_t NO_MOTION_THRESHOLD = 80; // 40mg
+    static constexpr uint16_t 		NO_MOTION_DURATION 	= 500; // 10초 (500 * 20ms)
+    static constexpr uint16_t 		NO_MOTION_THRESHOLD = 80; // 40mg
 }
 
 struct ST_BMI270_Options_t {
-    bool useVQF = true;
-    bool useSD = true;
-    bool autoCalibrate = true;
-    bool dynamicPowerSave = true;
-    bool recordOnlySignificant = true;
-    char logPrefix[16] = "T03";
+    bool useVQF 				= true;
+    bool useSD 					= true;
+    bool autoCalibrate 			= true;
+    bool dynamicPowerSave 		= true;
+    bool recordOnlySignificant 	= true;
+    char logPrefix[16] 			= "T03";
 };
