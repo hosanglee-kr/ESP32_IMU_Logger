@@ -58,69 +58,16 @@ void A10_sensorTask(void* pv) {
     }
 }
 
-/*
-// [Task 1] 센서 처리 태스크 (Core 1)
-void A10_sensorTask(void* pv) {
-    ST_FullSensorPayload_t v_payload;
-    for (;;) {
-        // 하드웨어 인터럽트(세마포어)가 올 때까지 무한 대기 (CPU 점유율 0%)
-        if (xSemaphoreTake(g_SB10_Sem_FIFO, portMAX_DELAY) == pdTRUE) {
-            g_A10_Imu.updateProcess(v_payload);
-
-            if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
-            if (g_A10_Imu.shouldRecord()) xQueueSend(g_A10_Que_SD, &v_payload, 0);
-            xQueueSend(g_A10_Que_Debug, &v_payload, 0);
-        }
-    }
-}
-*/
-
-
 
 // [Task 2] SD 로깅 태스크 (Core 0 - I/O 지연 처리용)
 // [Task 2] SD 로깅 태스크 (성능 최적화 버전)
 void A10_loggingTask(void* pv) {
-    ST_FullSensorPayload_t v_sensor_data;
-    int v_flushCounter = 0;
-
-    // 파일 핸들을 루프 밖에서 한 번만 오픈하여 성능 향상
-    File v_file = SD_MMC.open(g_A10_SdMMC.getPath(), FILE_APPEND);
-
-	if (!v_file) {
-		Serial.println("!!! SD: Failed to open log file - Task Terminated");
-		vTaskDelete(NULL); // 태스크를 안전하게 종료하여 시스템 크래시 방지
-		return;
-	}
-	
-
+    
     // SD10_SDMMC_011.h에 구현된 processWrite 기능을 활용하도록 호출 구조 단순화
     for (;;) {
          // 내부적으로 세마포어를 기다리며 가득 찬 버퍼(4KB)를 SD에 기록
         g_A10_SdMMC.processWrite(); 
-        /*
-        if (xQueueReceive(g_A10_Que_SD, &v_sensor_data, portMAX_DELAY)) {
-            if (g_A10_ImuOptions.useSD && v_file) {
-                v_file.printf("%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%lu,%d\n",
-                    v_sensor_data.timestamp	, 
-                    v_sensor_data.rawAcc[0]	, v_sensor_data.rawAcc[1]	, v_sensor_data.rawAcc[2],
-                    v_sensor_data.linAcc[0]	, v_sensor_data.linAcc[1]	, v_sensor_data.linAcc[2],
-                    v_sensor_data.gyro[0]	, v_sensor_data.gyro[1]	, v_sensor_data.gyro[2]	,
-                    v_sensor_data.quat[0]	, v_sensor_data.quat[1]	, v_sensor_data.quat[2]	, v_sensor_data.quat[3],
-                    v_sensor_data.euler[0]	, v_sensor_data.euler[1], v_sensor_data.euler[2],
-                    v_sensor_data.stepCount	, v_sensor_data.motion);
-
-                // 20개 레코드마다 실제 SD 쓰기 수행 (지연 최소화)
-                if (++v_flushCounter >= 20) {
-                    v_file.flush();
-                    v_flushCounter = 0;
-                }
-            }
-        }
-        */
     }
-
-	// 태스크 종료 시(정상적으론 미발생) 파일 닫기
-    if (v_file) v_file.close();
 
 }
 
@@ -150,7 +97,8 @@ void A10_init() {
     if (g_A10_SdMMC.begin()) {
         g_A10_SdMMC.loadConfig(g_A10_ImuOptions);
         if (g_A10_ImuOptions.useSD){
-            g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig");
+            g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig"); 
+            // g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig");
         }
     }
 

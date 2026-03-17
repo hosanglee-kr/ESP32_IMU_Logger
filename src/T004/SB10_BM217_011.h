@@ -65,6 +65,8 @@ struct ST_FullSensorPayload_t {
 };
 
 // 외부에서 정의된 세마포어 핸들 참조
+extern TaskHandle_t 			g_A10_TaskHandle_Sensor;
+
 extern SemaphoreHandle_t g_SB10_Sem_FIFO;
 
 void IRAM_ATTR SB10_bmi270_fifo_isr() {
