@@ -1,6 +1,6 @@
 /*
  * ------------------------------------------------------
- * 소스명 : A10_Main_010.h
+ * 소스명 : A10_Main_011.h
  * 모듈약어 : A10 (Main)
  * 모듈명 : Multi-Tasking Sensor Fusion & Logging System
  * ------------------------------------------------------
@@ -23,9 +23,9 @@
  */
 
 #include <Arduino.h>
-#include "C10_Config_009.h"
-#include "SD10_SDMMC_010.h"
-#include "SB10_BM217_011.h"
+#include "C10_Config_012.h"
+#include "SD10_SDMMC_012.h"
+#include "SB10_BM217_012.h"
 
 // 공유 자원 및 핸들러
 CL_SD10_SDMMC_Handler 	g_A10_SdMMC;
@@ -33,7 +33,6 @@ CL_SB10_BMI270_Handler 	g_A10_Imu;
 ST_BMI270_Options_t 	g_A10_ImuOptions;
 
 // RTOS 핸들러
-// 삭제 예정 QueueHandle_t 			g_A10_Que_SD;
 QueueHandle_t 			g_A10_Que_Debug;
 TaskHandle_t 			g_A10_TaskHandle_Sensor;
 
@@ -49,9 +48,6 @@ void A10_sensorTask(void* pv) {
             // 2. 모션 감지 및 전력 관리
             if (g_A10_ImuOptions.dynamicPowerSave) g_A10_Imu.checkMotionStatus();
 
-            // 3. [변경] SD 로깅: 큐가 아닌 SB10 내부에서 sd->logToBuffer() 호출됨
-            // SB10_BM217_011.h 내부 updateProcess 하단에서 이미 logToBuffer를 처리함
-            
             // 4. 모니터링용 큐 전송 (디버그는 데이터가 누락되어도 무방하므로 큐 유지)
             xQueueSend(g_A10_Que_Debug, &v_payload, 0);
         }
@@ -59,14 +55,12 @@ void A10_sensorTask(void* pv) {
 }
 
 
-// [Task 2] SD 로깅 태스크 (Core 0 - I/O 지연 처리용)
 // [Task 2] SD 로깅 태스크 (성능 최적화 버전)
 void A10_loggingTask(void* pv) {
-    
-    // SD10_SDMMC_011.h에 구현된 processWrite 기능을 활용하도록 호출 구조 단순화
+
     for (;;) {
          // 내부적으로 세마포어를 기다리며 가득 찬 버퍼(4KB)를 SD에 기록
-        g_A10_SdMMC.processWrite(); 
+        g_A10_SdMMC.processWrite();
     }
 
 }
@@ -97,8 +91,7 @@ void A10_init() {
     if (g_A10_SdMMC.begin()) {
         g_A10_SdMMC.loadConfig(g_A10_ImuOptions);
         if (g_A10_ImuOptions.useSD){
-            g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig"); 
-            // g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Lx,Ly,Lz,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,Steps,Sig");
+            g_A10_SdMMC.createLogFile(g_A10_ImuOptions.logPrefix, "Time,Ax,Ay,Az,Gx,Gy,Gz,QW,QX,QY,QZ,Roll,Pitch,Yaw,StepCnt,Motion");
         }
     }
 
@@ -106,20 +99,18 @@ void A10_init() {
     g_A10_Imu.begin(g_A10_ImuOptions, &g_A10_SdMMC);
 
     // 3. RTOS Queue 생성
-    g_A10_Que_SD = xQueueCreate(C10_Config::QUEUE_LEN_SD, sizeof(ST_FullSensorPayload_t));
     g_A10_Que_Debug = xQueueCreate(C10_Config::QUEUE_LEN_DEBUG, sizeof(ST_FullSensorPayload_t));
 
     // 4. RTO=S 태스크 할당 (멀티코어 활용)
-        // RTOS 태스크 할당
     // SensorTask (Core 1, Priority 3): 가장 높은 우선순위로 데이터 유실 방지
     xTaskCreatePinnedToCore(A10_sensorTask, "SensorTask", 4096, NULL, 3, &g_A10_TaskHandle_Sensor, 1);
-    
+
     // LoggingTask (Core 0, Priority 2): 쓰기 작업은 Core 0에서 전담
     xTaskCreatePinnedToCore(A10_loggingTask, "LoggingTask", 4096, NULL, 2, NULL, 0);
-    
+
     // DebugTask (Core 0, Priority 1): 여유 시간에만 실행
     xTaskCreatePinnedToCore(A10_debugTask, "DebugTask", 2048, NULL, 1, NULL, 0);
-    
+
 }
 
 void A10_run() {
