@@ -118,10 +118,6 @@ public:
         configureIMU();       // BMI270 레지스터 재설정
     }
 
-
-
-
-
     void checkMotionStatus() {
         uint16_t v_status = 0;
         _imu.getInterruptStatus(&v_status);
@@ -129,12 +125,15 @@ public:
         if (v_status & BMI270_NO_MOT_STATUS_MASK) { 
             _isSignificantMoving = false; 
             
-            enterIdleMode() 로직 호출 가능 (v012 참조)
+            enterIdleMode(); // 로직 호출 가능 (v012 참조)
         }
     }
 
 private:
-    BMI270 _imu; ST_BMI270_Options_t _opts; CL_SD10_SDMMC_Handler* _sd; VQF* _vqf = nullptr;
+    BMI270 _imu; 
+    ST_BMI270_Options_t _opts; 
+    CL_SD10_SDMMC_Handler* _sd; 
+    VQF* _vqf = nullptr;
     bool _isSignificantMoving = false;
     BMI270_SensorData _fifoBuffer[C10_Config::FIFO_WTM_COUNT];
 
