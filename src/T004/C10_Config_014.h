@@ -28,22 +28,50 @@
 #pragma once
 #include <Arduino.h>
 
+#define ESP32_S3_ZERO
+// #define ESP32_S3_DEVK
+
+
 namespace C10_Config {
-    // [Hardware] BMI270 SPI 핀 (ESP32-S3 Standard)
-    static constexpr uint8_t     BMI_CS              = 10;
-    static constexpr uint8_t     BMI_SCK             = 12;
-    static constexpr uint8_t     BMI_MISO            = 13;
-    static constexpr uint8_t     BMI_MOSI            = 11;
-    static constexpr uint8_t     BMI_INT1            = 9;
     
+    #ifdef ESP32_S3_ZERO
+        // [ESP32-S3-Zero 전용 핀 매핑]
+        static constexpr uint8_t     BMI_CS              = 10;
+        static constexpr uint8_t     BMI_SCK             = 12; // SPI Clock
+        static constexpr uint8_t     BMI_MISO            = 13; // Master In
+        static constexpr uint8_t     BMI_MOSI            = 11; // Master Out
+        static constexpr uint8_t     BMI_INT1            = 9;  // GP9 (Interrupt)
+    
+        // [Hardware] SD_MMC 1-bit (보드 좌측 배치)
+        // 주의: SD_MMC 1-bit 모드에서 CMD(GP1)와 D0(GP3)에는 가급적 **외부 풀업 저항(10kΩ)** 필요
+        // 전원 공급: S3-Zero는 전원 레귤레이터 용량이 작으므로, SD 카드 쓰기 시 순간 전류 부족이 발생할 수 있습니다. 3.3V 라인에 100uF 이상의 캐패시터를 추가하는 것을 권장합
+        // S3-Zero는 하드웨어 전용 핀이 없으므로 슬롯 1의 시그널을 아래 핀으로 리맵합니다.
+        static constexpr uint8_t     SD_MMC_CLK          = 2;  // GP2
+        static constexpr uint8_t     SD_MMC_CMD          = 1;  // GP1
+        static constexpr uint8_t     SD_MMC_D0           = 3;  // GP3
+        
+        // RGB LED (WS2812) - S3-Zero 내장 LED
+        static constexpr uint8_t     RGB_LED_PIN         = 21; // 내장 LED 사용 시
+        
+    #endif
+    
+    #ifdef ESP32_S3_DEVK
+        // [Hardware] BMI270 SPI 핀 (ESP32-S3 Standard)
+        static constexpr uint8_t     BMI_CS              = 10;
+        static constexpr uint8_t     BMI_SCK             = 12;
+        static constexpr uint8_t     BMI_MISO            = 13;
+        static constexpr uint8_t     BMI_MOSI            = 11;
+        static constexpr uint8_t     BMI_INT1            = 9;
+        
+        // [Hardware] SD_MMC 1-bit 모드 핀 (ESP32-S3 Default Slot 1)
+        static constexpr uint8_t     SD_MMC_CLK          = 39;
+        static constexpr uint8_t     SD_MMC_CMD          = 38;
+        static constexpr uint8_t     SD_MMC_D0           = 40;
+    #endif
+
     // SPI 통신 속도 (연산량과 전력 소모의 균형)
     static constexpr uint32_t    BMI_SPI_FREQ        = 8000000;  // 8MHz
 
-    // [Hardware] SD_MMC 1-bit 모드 핀 (ESP32-S3 Default Slot 1)
-    static constexpr uint8_t     SD_MMC_CLK          = 39;
-    static constexpr uint8_t     SD_MMC_CMD          = 38;
-    static constexpr uint8_t     SD_MMC_D0           = 40;
-    
     // SD_MMC 통신 속도 (1-bit 모드 안정성 위주)
     static constexpr uint32_t    SD_MMC_FREQ         = 20000000; // 20MHz
 
