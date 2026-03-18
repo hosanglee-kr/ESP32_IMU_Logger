@@ -1,5 +1,8 @@
-/**
- * @file T002_BMI270_Handler_005.h
+
+ #pragma once
+ 
+ /**
+ * @file T002_Handler_006.h
  * @brief BMI270 Full Features Integration + VQF + SDMMC 1-bit Logger
  * * [시스템 설계 개요]
  * 1. Task 분리: Core 1(센서 읽기/필터), Core 0(SDMMC 쓰기) - 쓰기 지연 차단
@@ -8,8 +11,6 @@
  * 4. SDMMC: 1-bit 모드 사용으로 SPI 대비 고속 데이터 처리
  */
 
- #ifndef BMI270_INTEGRATED_HANDLER_H
-#define BMI270_INTEGRATED_HANDLER_H
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -173,8 +174,7 @@ private:
         d.rpy[1] = asin(2.0f * (qw * qy - qz * qx)) * 57.29578f;
         d.rpy[2] = atan2(2.0f * (qw * qz + qx * qy), 1.0f - 2.0f * (qy * qy + qz * qz)) * 57.29578f;
     }
-}; // 클래스 정의 끝 (중괄호와 세미콜론 필수)
+}; 
 
 
-#endif
 

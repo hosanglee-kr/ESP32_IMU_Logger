@@ -2,10 +2,23 @@
 
 
 
-#define T001
-#ifdef T001
+// #define T002
+#ifdef T002
 	#include "T002/T002_BMI270_Main_EampAll_005.h"
 #endif
+
+// #define T03
+#ifdef T03
+	#include "T003/T03_Main_007.h"
+#endif
+
+
+#define T04
+#ifdef T04
+	#include "T004/A10_Main_012.h"
+#endif
+
+
 
 void setup() {
 	// delay(5000);
@@ -13,16 +26,33 @@ void setup() {
 	Serial.begin(115200);
 	Serial.print("setup: ");
 
-	#ifdef T001
+	#ifdef T002
 		B10_init();
+	#endif
+
+	#ifdef T03
+		B10_init();
+	#endif
+
+	#ifdef T04
+		A10_init();
 	#endif
 
 }
 
 void loop() {
-	#ifdef T001
+	#ifdef T002
 		B10_run();
 		delay(5);
 	#endif
+
+	#ifdef T03
+		B10_run();
+	#endif
+
+	#ifdef T04
+		A10_run();
+	#endif
+
 
 }
