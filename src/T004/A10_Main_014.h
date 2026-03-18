@@ -63,13 +63,18 @@ void A10_init() {
     g_A10_Imu.begin(g_A10_ImuOptions, &g_A10_SdMMC);
     g_A10_Que_Debug = xQueueCreate(C10_Config::QUEUE_LEN_DEBUG, sizeof(ST_FullSensorPayload_t));
 
-    xTaskCreatePinnedToCore(A10_sensorTask, "SensorTask", 4096, NULL, 3, NULL, 1);
-    xTaskCreatePinnedToCore(A10_loggingTask, "LoggingTask", 4096, NULL, 2, NULL, 0);
-    xTaskCreatePinnedToCore(A10_debugTask, "DebugTask", 2048, NULL, 1, NULL, 0);
+    // SensorTask는 연산 집약적이므로 Core 1 할당, 우선순위 5(최고)
+    xTaskCreatePinnedToCore(A10_sensorTask, "SensorTask", 5120, NULL, 5, NULL, 1);
+    
+    // LoggingTask는 I/O 대기가 많으므로 Core 0 할당, 우선순위 3
+    xTaskCreatePinnedToCore(A10_loggingTask, "LoggingTask", 5120, NULL, 3, NULL, 0);
+    
+    // DebugTask는 시스템 부하 시 자동 밀림, 우선순위 1
+    xTaskCreatePinnedToCore(A10_debugTask, "DebugTask", 2560, NULL, 1, NULL, 0);
+
+
 }
 
 void A10_run() { 
     vTaskDelete(NULL);
 }
-
-

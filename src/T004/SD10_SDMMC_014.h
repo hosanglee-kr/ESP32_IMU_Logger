@@ -13,7 +13,13 @@
  * - [SD10] 비결정적인 SD 쓰기 시간을 관리하고 센서 데이터 손실을 방지
  * - 파일 시스템의 마운트/해제 및 실제 물리적 I/O를 전담함
  * ------------------------------------------------------
- */
+// [SD10 Tuning Guide]
+// - SD10_BUF_SIZE: 반드시 512의 배수여야 함. 크면 쓰기 횟수가 줄어 전력 절감.
+// - processWrite 내의 flush() 주기를 늘리면(예: 10초) 쓰기 스파이크가 줄어듦.
+*/
+
+
+
 
 #pragma once
 #include <Arduino.h>
@@ -22,7 +28,9 @@
 #include "FS.h"
 #include "C10_Config_014.h"
 
-#define SD10_BUF_SIZE   8192  // 8KB (SD_MMC DMA 최적화)
+#define SD10_BUF_SIZE   8192  // 8KB (SD_MMC DMA 최적화), 반드시 512의 배수여야 함
+
+#define SD10_FLASH_INTERVAL   10000  // 10초
 
 struct ST_SD10_LogBuffer {
     char data[SD10_BUF_SIZE];
@@ -96,7 +104,8 @@ public:
         memcpy(&_buffers[_curIdx].data[_buffers[_curIdx].pos], p_str, v_len);
         _buffers[_curIdx].pos += v_len;
     }
-
+    
+    /*
     void processWrite() {
         if (xSemaphoreTake(_sem_sd_write, portMAX_DELAY) == pdTRUE) {
             if (_logFile) {
@@ -109,6 +118,24 @@ public:
             }
         }
     }
+    */
+    
+    void processWrite() {
+        if (xSemaphoreTake(_sem_sd_write, portMAX_DELAY) == pdTRUE) {
+            if (_logFile) {
+                // [최적화] Write 전용 DMA 버퍼 활용 유도
+                size_t written = _logFile.write((const uint8_t*)_buffers[_lastWriteIdx].data, _lastWriteLen);
+                
+                // [전력] 잦은 SD 내부 컨트롤러 작동 방지를 위해 flush 주기를 연장
+                static uint32_t v_lastSync = 0;
+                if (millis() - v_lastSync > SD10_FLASH_INTERVAL) { // 10초로 연장하여 전력 최적화
+                    _logFile.flush();
+                    v_lastSync = millis();
+                }
+            }
+        }
+    }
+
 
     void end() {
         if (_logFile) _logFile.close();

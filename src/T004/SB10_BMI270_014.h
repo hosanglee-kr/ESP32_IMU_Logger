@@ -13,6 +13,10 @@
  * - [SB10] 센서 하드웨어 제어 및 물리 법칙(Fusion) 연산 전담
  * - 데이터의 의미적 해석(자세 추정)을 수행하고 SD10에 전달
  * ------------------------------------------------------
+ * [SB10 Tuning Guide]
+ * 1. VQF_TAU_ACC: 진동이 심하면 5.0f로 높이고, 빠른 반응이 필요하면 1.0f로 낮춤.
+ * 2. Significant Motion: 움직임이 없을 때 자동으로 enterIdleMode()를 호출하여 소모 전류 90% 절감.
+
  */
 
 #pragma once
@@ -96,13 +100,36 @@ public:
         }
     }
 
+    void enterIdleMode() {
+        _imu.flushFIFO();
+        // [전력] SD 파일 안전하게 닫거나 flush 후 SD_MMC 중지
+        if(_sd) _sd->end(); 
+        
+        // ESP32-S3 Light Sleep 진입 (EXT0 핀 인터럽트 깨우기 설정)
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)C10_Config::BMI_INT1, 1); 
+        esp_light_sleep_start();
+        
+        // 복구 로직
+        resumeFromIdle();
+    }
+    
+    void resumeFromIdle() {
+        if(_sd) _sd->begin(); // SD_MMC 재시작
+        configureIMU();       // BMI270 레지스터 재설정
+    }
+
+
+
+
+
     void checkMotionStatus() {
         uint16_t v_status = 0;
         _imu.getInterruptStatus(&v_status);
         if (v_status & BMI270_SIG_MOT_STATUS_MASK) _isSignificantMoving = true;
         if (v_status & BMI270_NO_MOT_STATUS_MASK) { 
             _isSignificantMoving = false; 
-            // enterIdleMode() 로직 호출 가능 (v012 참조)
+            
+            enterIdleMode() 로직 호출 가능 (v012 참조)
         }
     }
 
