@@ -4,9 +4,9 @@
 
 #include "T20_Mfcc_005.h"
 
-CL_T20_Mfcc g_mfcc;
+inline CL_T20_Mfcc g_mfcc;
 
-void T20_init()
+inline void T20_init()
 {
     
     ST_T20_Config_t cfg = T20_makeDefaultConfig();
@@ -33,7 +33,7 @@ void T20_init()
     g_mfcc.printConfig(Serial);
 }
 
-void T20_run()
+inline void T20_run()
 {
     static uint32_t t0 = 0;
     if (millis() - t0 >= 1000) {

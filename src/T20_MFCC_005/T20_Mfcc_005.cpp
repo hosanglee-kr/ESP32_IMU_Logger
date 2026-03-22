@@ -130,6 +130,7 @@ void IRAM_ATTR T20_onBmiDrdyISR(void);
 void T20_sensorTask(void* p_arg);
 void T20_processTask(void* p_arg);
 
+static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p);
 static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p);
 static bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p);
 static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p);
@@ -192,6 +193,11 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
     if (_impl->cfg.feature.mfcc_coeffs != G_T20_MFCC_COEFFS) {
         return false;
     }
+    
+    if (_impl->cfg.feature.delta_window > (G_T20_MFCC_HISTORY / 2)) {
+        return false;
+    }
+
     if (_impl->cfg.output.sequence_frames == 0 ||
         _impl->cfg.output.sequence_frames > G_T20_MAX_SEQUENCE_FRAMES) {
         return false;
@@ -217,20 +223,25 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
     pinMode(G_T20_PIN_BMI_CS, OUTPUT);
     digitalWrite(G_T20_PIN_BMI_CS, HIGH);
     pinMode(G_T20_PIN_BMI_INT1, INPUT);
-
+    
     if (!T20_initDSP(_impl)) {
+        T20_cleanupBeginFailure(_impl);
         return false;
     }
+    
 
     if (!T20_initBMI270_SPI(_impl)) {
+        T20_cleanupBeginFailure(_impl);
         return false;
     }
 
     if (!T20_configBMI270_1600Hz_DRDY(_impl)) {
+        T20_cleanupBeginFailure(_impl);
         return false;
     }
 
     if (!T20_configureFilter(_impl)) {
+        T20_cleanupBeginFailure(_impl);
         return false;
     }
 
@@ -269,6 +280,14 @@ bool CL_T20_Mfcc::start(void)
     );
 
     if (v1 != pdPASS || v2 != pdPASS) {
+        if (_impl->sensor_task_handle != nullptr) {
+            vTaskDelete(_impl->sensor_task_handle);
+            _impl->sensor_task_handle = nullptr;
+        }
+        if (_impl->process_task_handle != nullptr) {
+            vTaskDelete(_impl->process_task_handle);
+            _impl->process_task_handle = nullptr;
+        }
         return false;
     }
 
@@ -301,6 +320,10 @@ bool CL_T20_Mfcc::setConfig(const ST_T20_Config_t* p_cfg)
         p_cfg->output.sequence_frames > G_T20_MAX_SEQUENCE_FRAMES) {
         return false;
     }
+    
+    if (p_cfg->feature.delta_window > (G_T20_MFCC_HISTORY / 2)) {
+        return false;
+    }
 
     if (xSemaphoreTake(_impl->mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         return false;
@@ -319,8 +342,14 @@ void CL_T20_Mfcc::getConfig(ST_T20_Config_t* p_cfg_out) const
     if (p_cfg_out == nullptr) {
         return;
     }
+    
+    if (xSemaphoreTake(_impl->mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return;
+    }
 
     *p_cfg_out = _impl->cfg;
+    
+    xSemaphoreGive(_impl->mutex);
 }
 
 bool CL_T20_Mfcc::getLatestFeatureVector(ST_T20_FeatureVector_t* p_out) const
@@ -374,12 +403,17 @@ bool CL_T20_Mfcc::isSequenceReady(void) const
 
 bool CL_T20_Mfcc::getLatestSequenceFlat(float* p_out_seq, uint16_t p_len) const
 {
-    uint16_t v_need = _impl->cfg.output.sequence_frames * G_T20_FEATURE_DIM_TOTAL;
-    if (p_out_seq == nullptr || p_len < v_need) {
+    if (p_out_seq == nullptr) {
         return false;
     }
 
     if (xSemaphoreTake(_impl->mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return false;
+    }
+
+    uint16_t v_need = _impl->cfg.output.sequence_frames * G_T20_FEATURE_DIM_TOTAL;
+    if (p_len < v_need) {
+        xSemaphoreGive(_impl->mutex);
         return false;
     }
 
@@ -392,6 +426,7 @@ bool CL_T20_Mfcc::getLatestSequenceFlat(float* p_out_seq, uint16_t p_len) const
     return v_ok;
 }
 
+
 bool CL_T20_Mfcc::getLatestSequenceFrameMajor(float* p_out_seq, uint16_t p_len) const
 {
     return getLatestSequenceFlat(p_out_seq, p_len);
@@ -399,6 +434,11 @@ bool CL_T20_Mfcc::getLatestSequenceFrameMajor(float* p_out_seq, uint16_t p_len) 
 
 void CL_T20_Mfcc::printConfig(Stream& p_out) const
 {
+    if (xSemaphoreTake(_impl->mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        p_out.println(F("mutex timeout"));
+        return;
+    }
+
     p_out.println(F("----------- T20_Mfcc Config -----------"));
     p_out.printf("SampleRate      : %.1f\n", _impl->cfg.feature.sample_rate_hz);
     p_out.printf("FFT Size        : %u\n",   _impl->cfg.feature.fft_size);
@@ -412,15 +452,25 @@ void CL_T20_Mfcc::printConfig(Stream& p_out) const
     p_out.printf("Spectral Sub    : %s\n",   _impl->cfg.preprocess.noise.enable_spectral_subtract ? "ON" : "OFF");
     p_out.printf("Filter Enable   : %s\n",   _impl->cfg.preprocess.filter.enable ? "ON" : "OFF");
     p_out.println(F("--------------------------------------------"));
+    
+    xSemaphoreGive(_impl->mutex);
 }
 
 void CL_T20_Mfcc::printLatest(Stream& p_out) const
 {
-    ST_T20_FeatureVector_t v_feat;
-    if (!getLatestFeatureVector(&v_feat)) {
+    if (xSemaphoreTake(_impl->mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        p_out.println(F("mutex timeout"));
+        return;
+    }
+
+    if (!_impl->latest_vector_valid) {
+        xSemaphoreGive(_impl->mutex);
         p_out.println(F("No latest feature available."));
         return;
     }
+
+    ST_T20_FeatureVector_t v_feat = _impl->latest_feature;
+    xSemaphoreGive(_impl->mutex);
 
     p_out.print(F("MFCC      : "));
     for (int i = 0; i < 13; ++i) p_out.printf("%.4f ", v_feat.mfcc[i]);
@@ -434,6 +484,7 @@ void CL_T20_Mfcc::printLatest(Stream& p_out) const
     for (int i = 0; i < 13; ++i) p_out.printf("%.4f ", v_feat.delta2[i]);
     p_out.println();
 }
+
 
 // ============================================================================
 // [ISR / Task]
@@ -470,6 +521,13 @@ void T20_sensorTask(void* p_arg)
             continue;
         }
         p->drdy_flag = false;
+        
+        uint16_t v_interrupt_status = 0;
+        p->imu.getInterruptStatus(&v_interrupt_status);
+        
+        if ((v_interrupt_status & BMI2_ACC_DRDY_INT_MASK) == 0) {
+            continue;
+        }
 
         if (p->imu.getSensorData() != BMI2_OK) {
             continue;
@@ -490,7 +548,10 @@ void T20_sensorTask(void* p_arg)
             ST_T20_FrameMessage_t v_msg;
             v_msg.frame_index = v_buf;
 
-            xQueueSend(p->frame_queue, &v_msg, 0);
+            if (xQueueSend(p->frame_queue, &v_msg, 0) != pdTRUE) {
+                // 필요 시 drop count 증가 또는 로그
+            }
+            // xQueueSend(p->frame_queue, &v_msg, 0);
 
             p->active_fill_buffer = (uint8_t)((v_buf + 1U) % 2U);
             p->active_sample_index = 0;
@@ -537,9 +598,27 @@ void T20_processTask(void* p_arg)
     }
 }
 
+
+
+
 // ============================================================================
 // [초기화]
 // ============================================================================
+
+static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p)
+{
+    if (p->frame_queue != nullptr) {
+        vQueueDelete(p->frame_queue);
+        p->frame_queue = nullptr;
+    }
+
+    if (p->mutex != nullptr) {
+        vSemaphoreDelete(p->mutex);
+        p->mutex = nullptr;
+    }
+}
+
+
 
 static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p)
 {
