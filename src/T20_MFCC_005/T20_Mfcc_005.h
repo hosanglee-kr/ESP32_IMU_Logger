@@ -96,6 +96,5 @@ private:
     friend void T20_processTask(void* p_arg);
 };
 
-};
 
 
