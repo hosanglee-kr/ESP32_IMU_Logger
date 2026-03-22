@@ -124,46 +124,46 @@ struct CL_T20_Mfcc::ST_Impl
 // [파일 내부 전방 선언]
 // ============================================================================
 
-static CL_T20_Mfcc* s_t20_instance_004 = nullptr;
+static CL_T20_Mfcc* s_t20_instance = nullptr;
 
-static void IRAM_ATTR T20_onBmiDrdyISR_004(void);
-static void T20_sensorTask_004(void* p_arg);
-static void T20_processTask_004(void* p_arg);
+static void IRAM_ATTR T20_onBmiDrdyISR(void);
+static void T20_sensorTask(void* p_arg);
+static void T20_processTask(void* p_arg);
 
-static bool T20_initDSP_004(CL_T20_Mfcc::ST_Impl* p);
-static bool T20_initBMI270_SPI_004(CL_T20_Mfcc::ST_Impl* p);
-static bool T20_configBMI270_1600Hz_DRDY_004(CL_T20_Mfcc::ST_Impl* p);
-static bool T20_configureFilter_004(CL_T20_Mfcc::ST_Impl* p);
-static void T20_buildHammingWindow_004(CL_T20_Mfcc::ST_Impl* p);
-static void T20_buildMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p);
+static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p);
+static bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p);
+static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p);
+static bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p);
+static void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p);
+static void T20_buildMelFilterbank(CL_T20_Mfcc::ST_Impl* p);
 
-static float T20_hzToMel_004(float p_hz);
-static float T20_melToHz_004(float p_mel);
+static float T20_hzToMel(float p_hz);
+static float T20_melToHz(float p_mel);
 
-static float T20_selectAxisSample_004(CL_T20_Mfcc::ST_Impl* p);
-static void T20_applyDCRemove_004(float* p_data, uint16_t p_len);
-static void T20_applyPreEmphasis_004(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha);
-static void T20_applyNoiseGate_004(float* p_data, uint16_t p_len, float p_threshold_abs);
-static void T20_applyBiquadFilter_004(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len);
-static void T20_applyWindow_004(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len);
+static float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p);
+static void T20_applyDCRemove(float* p_data, uint16_t p_len);
+static void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha);
+static void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs);
+static void T20_applyBiquadFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len);
+static void T20_applyWindow(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len);
 
-static void T20_computePowerSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power);
-static void T20_learnNoiseSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p_power);
-static void T20_applySpectralSubtraction_004(CL_T20_Mfcc::ST_Impl* p, float* p_power);
-static void T20_applyMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out);
-static void T20_computeDCT2_004(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len);
-static void T20_computeMFCC_004(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out);
+static void T20_computePowerSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power);
+static void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power);
+static void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power);
+static void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out);
+static void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len);
+static void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out);
 
-static void T20_pushMfccHistory_004(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc);
-static void T20_computeDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out);
-static void T20_computeDeltaDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out);
-static void T20_buildVector39_004(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec);
+static void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc);
+static void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out);
+static void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out);
+static void T20_buildVector39(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec);
 
-static void T20_seqInit_004(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames);
-static void T20_seqPush_004(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec);
-static bool T20_seqIsReady_004(const ST_T20_FeatureRingBuffer_t* p_rb);
-static void T20_seqExportFlatten_004(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_flat);
-static void T20_updateOutput_004(CL_T20_Mfcc::ST_Impl* p);
+static void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames);
+static void T20_seqPush(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec);
+static bool T20_seqIsReady(const ST_T20_FeatureRingBuffer_t* p_rb);
+static void T20_seqExportFlatten(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_flat);
+static void T20_updateOutput(CL_T20_Mfcc::ST_Impl* p);
 
 // ============================================================================
 // [공개 API]
@@ -172,7 +172,7 @@ static void T20_updateOutput_004(CL_T20_Mfcc::ST_Impl* p);
 CL_T20_Mfcc::CL_T20_Mfcc()
 : _impl(new ST_Impl())
 {
-    s_t20_instance_004 = this;
+    s_t20_instance = this;
 }
 
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
@@ -218,25 +218,25 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
     digitalWrite(G_T20_PIN_BMI_CS, HIGH);
     pinMode(G_T20_PIN_BMI_INT1, INPUT);
 
-    if (!T20_initDSP_004(_impl)) {
+    if (!T20_initDSP(_impl)) {
         return false;
     }
 
-    if (!T20_initBMI270_SPI_004(_impl)) {
+    if (!T20_initBMI270_SPI(_impl)) {
         return false;
     }
 
-    if (!T20_configBMI270_1600Hz_DRDY_004(_impl)) {
+    if (!T20_configBMI270_1600Hz_DRDY(_impl)) {
         return false;
     }
 
-    if (!T20_configureFilter_004(_impl)) {
+    if (!T20_configureFilter(_impl)) {
         return false;
     }
 
-    T20_seqInit_004(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
+    T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
 
-    attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR_004, RISING);
+    attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR, RISING);
 
     _impl->initialized = true;
     return true;
@@ -249,8 +249,8 @@ bool CL_T20_Mfcc::start(void)
     }
 
     BaseType_t v1 = xTaskCreatePinnedToCore(
-        T20_sensorTask_004,
-        "T20_Sensor_004",
+        T20_sensorTask,
+        "T20_Sensor",
         G_T20_SENSOR_TASK_STACK,
         _impl,
         G_T20_SENSOR_TASK_PRIO,
@@ -259,8 +259,8 @@ bool CL_T20_Mfcc::start(void)
     );
 
     BaseType_t v2 = xTaskCreatePinnedToCore(
-        T20_processTask_004,
-        "T20_Process_004",
+        T20_processTask,
+        "T20_Process",
         G_T20_PROCESS_TASK_STACK,
         _impl,
         G_T20_PROCESS_TASK_PRIO,
@@ -307,8 +307,8 @@ bool CL_T20_Mfcc::setConfig(const ST_T20_Config_t* p_cfg)
     }
 
     _impl->cfg = *p_cfg;
-    bool v_ok = T20_configureFilter_004(_impl);
-    T20_seqInit_004(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
+    bool v_ok = T20_configureFilter(_impl);
+    T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
 
     xSemaphoreGive(_impl->mutex);
     return v_ok;
@@ -367,7 +367,7 @@ bool CL_T20_Mfcc::isSequenceReady(void) const
         return false;
     }
 
-    bool v_ready = T20_seqIsReady_004(&_impl->seq_rb);
+    bool v_ready = T20_seqIsReady(&_impl->seq_rb);
     xSemaphoreGive(_impl->mutex);
     return v_ready;
 }
@@ -399,7 +399,7 @@ bool CL_T20_Mfcc::getLatestSequenceFrameMajor(float* p_out_seq, uint16_t p_len) 
 
 void CL_T20_Mfcc::printConfig(Stream& p_out) const
 {
-    p_out.println(F("----------- T20_Mfcc_004 Config -----------"));
+    p_out.println(F("----------- T20_Mfcc Config -----------"));
     p_out.printf("SampleRate      : %.1f\n", _impl->cfg.feature.sample_rate_hz);
     p_out.printf("FFT Size        : %u\n",   _impl->cfg.feature.fft_size);
     p_out.printf("Mel Filters     : %u\n",   _impl->cfg.feature.mel_filters);
@@ -439,13 +439,13 @@ void CL_T20_Mfcc::printLatest(Stream& p_out) const
 // [ISR / Task]
 // ============================================================================
 
-static void IRAM_ATTR T20_onBmiDrdyISR_004(void)
+static void IRAM_ATTR T20_onBmiDrdyISR(void)
 {
-    if (s_t20_instance_004 == nullptr) {
+    if (s_t20_instance == nullptr) {
         return;
     }
 
-    CL_T20_Mfcc::ST_Impl* p = s_t20_instance_004->_impl;
+    CL_T20_Mfcc::ST_Impl* p = s_t20_instance->_impl;
     BaseType_t v_hp_task_woken = pdFALSE;
 
     p->drdy_flag = true;
@@ -459,7 +459,7 @@ static void IRAM_ATTR T20_onBmiDrdyISR_004(void)
     }
 }
 
-static void T20_sensorTask_004(void* p_arg)
+static void T20_sensorTask(void* p_arg)
 {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
 
@@ -475,7 +475,7 @@ static void T20_sensorTask_004(void* p_arg)
             continue;
         }
 
-        float v_sample = T20_selectAxisSample_004(p);
+        float v_sample = T20_selectAxisSample(p);
 
         uint8_t v_buf = p->active_fill_buffer;
         uint16_t v_idx = p->active_sample_index;
@@ -498,7 +498,7 @@ static void T20_sensorTask_004(void* p_arg)
     }
 }
 
-static void T20_processTask_004(void* p_arg)
+static void T20_processTask(void* p_arg)
 {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     ST_T20_FrameMessage_t v_msg;
@@ -518,19 +518,19 @@ static void T20_processTask_004(void* p_arg)
         float v_delta[13] = {0};
         float v_delta2[13] = {0};
 
-        T20_computeMFCC_004(p, p->work_frame, v_mfcc);
-        T20_pushMfccHistory_004(p, v_mfcc);
-        T20_computeDeltaFromHistory_004(p, v_delta);
-        T20_computeDeltaDeltaFromHistory_004(p, v_delta2);
+        T20_computeMFCC(p, p->work_frame, v_mfcc);
+        T20_pushMfccHistory(p, v_mfcc);
+        T20_computeDeltaFromHistory(p, v_delta);
+        T20_computeDeltaDeltaFromHistory(p, v_delta2);
 
         if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             memcpy(p->latest_feature.mfcc,   v_mfcc,   sizeof(v_mfcc));
             memcpy(p->latest_feature.delta,  v_delta,  sizeof(v_delta));
             memcpy(p->latest_feature.delta2, v_delta2, sizeof(v_delta2));
-            T20_buildVector39_004(v_mfcc, v_delta, v_delta2, p->latest_feature.vector39);
+            T20_buildVector39(v_mfcc, v_delta, v_delta2, p->latest_feature.vector39);
             p->latest_vector_valid = true;
 
-            T20_updateOutput_004(p);
+            T20_updateOutput(p);
 
             xSemaphoreGive(p->mutex);
         }
@@ -541,25 +541,25 @@ static void T20_processTask_004(void* p_arg)
 // [초기화]
 // ============================================================================
 
-static bool T20_initDSP_004(CL_T20_Mfcc::ST_Impl* p)
+static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p)
 {
     esp_err_t v_res = dsps_fft2r_init_fc32(NULL, G_T20_FFT_SIZE);
     if (v_res != ESP_OK) {
         return false;
     }
 
-    T20_buildHammingWindow_004(p);
-    T20_buildMelFilterbank_004(p);
+    T20_buildHammingWindow(p);
+    T20_buildMelFilterbank(p);
     return true;
 }
 
-static bool T20_initBMI270_SPI_004(CL_T20_Mfcc::ST_Impl* p)
+static bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p)
 {
     int8_t v_rslt = p->imu.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
     return (v_rslt == BMI2_OK);
 }
 
-static bool T20_configBMI270_1600Hz_DRDY_004(CL_T20_Mfcc::ST_Impl* p)
+static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
 {
     int8_t v_rslt = BMI2_OK;
 
@@ -625,7 +625,7 @@ static bool T20_configBMI270_1600Hz_DRDY_004(CL_T20_Mfcc::ST_Impl* p)
     return true;
 }
 
-static bool T20_configureFilter_004(CL_T20_Mfcc::ST_Impl* p)
+static bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
 {
     if (!p->cfg.preprocess.filter.enable ||
         p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
@@ -674,17 +674,17 @@ static bool T20_configureFilter_004(CL_T20_Mfcc::ST_Impl* p)
 // [전처리 / 수학 유틸]
 // ============================================================================
 
-static float T20_hzToMel_004(float p_hz)
+static float T20_hzToMel(float p_hz)
 {
     return 2595.0f * log10f(1.0f + (p_hz / 700.0f));
 }
 
-static float T20_melToHz_004(float p_mel)
+static float T20_melToHz(float p_mel)
 {
     return 700.0f * (powf(10.0f, p_mel / 2595.0f) - 1.0f);
 }
 
-static void T20_buildHammingWindow_004(CL_T20_Mfcc::ST_Impl* p)
+static void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p)
 {
     for (int i = 0; i < G_T20_FFT_SIZE; ++i) {
         p->window[i] =
@@ -692,7 +692,7 @@ static void T20_buildHammingWindow_004(CL_T20_Mfcc::ST_Impl* p)
     }
 }
 
-static void T20_buildMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p)
+static void T20_buildMelFilterbank(CL_T20_Mfcc::ST_Impl* p)
 {
     memset(p->mel_bank, 0, sizeof(p->mel_bank));
 
@@ -700,8 +700,8 @@ static void T20_buildMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p)
     const float v_f_min = 0.0f;
     const float v_f_max = p->cfg.feature.sample_rate_hz * 0.5f;
 
-    float v_mel_min = T20_hzToMel_004(v_f_min);
-    float v_mel_max = T20_hzToMel_004(v_f_max);
+    float v_mel_min = T20_hzToMel(v_f_min);
+    float v_mel_max = T20_hzToMel(v_f_max);
 
     float v_mel_points[G_T20_MEL_FILTERS + 2];
     float v_hz_points[G_T20_MEL_FILTERS + 2];
@@ -710,7 +710,7 @@ static void T20_buildMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p)
     for (int i = 0; i < G_T20_MEL_FILTERS + 2; ++i) {
         float v_ratio = (float)i / (float)(G_T20_MEL_FILTERS + 1);
         v_mel_points[i] = v_mel_min + (v_mel_max - v_mel_min) * v_ratio;
-        v_hz_points[i] = T20_melToHz_004(v_mel_points[i]);
+        v_hz_points[i] = T20_melToHz(v_mel_points[i]);
 
         int v_bin = (int)floorf(((float)G_T20_FFT_SIZE + 1.0f) * v_hz_points[i] / p->cfg.feature.sample_rate_hz);
         if (v_bin < 0) v_bin = 0;
@@ -737,7 +737,7 @@ static void T20_buildMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p)
     }
 }
 
-static float T20_selectAxisSample_004(CL_T20_Mfcc::ST_Impl* p)
+static float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p)
 {
     switch (p->cfg.preprocess.axis) {
         case EN_T20_AXIS_X: return p->imu.data.accelX;
@@ -748,7 +748,7 @@ static float T20_selectAxisSample_004(CL_T20_Mfcc::ST_Impl* p)
     }
 }
 
-static void T20_applyDCRemove_004(float* p_data, uint16_t p_len)
+static void T20_applyDCRemove(float* p_data, uint16_t p_len)
 {
     float v_mean = 0.0f;
     for (uint16_t i = 0; i < p_len; ++i) {
@@ -761,7 +761,7 @@ static void T20_applyDCRemove_004(float* p_data, uint16_t p_len)
     }
 }
 
-static void T20_applyPreEmphasis_004(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha)
+static void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha)
 {
     float v_prev = p->prev_raw_sample;
 
@@ -774,7 +774,7 @@ static void T20_applyPreEmphasis_004(CL_T20_Mfcc::ST_Impl* p, float* p_data, uin
     p->prev_raw_sample = v_prev;
 }
 
-static void T20_applyNoiseGate_004(float* p_data, uint16_t p_len, float p_threshold_abs)
+static void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs)
 {
     for (uint16_t i = 0; i < p_len; ++i) {
         if (fabsf(p_data[i]) < p_threshold_abs) {
@@ -783,7 +783,7 @@ static void T20_applyNoiseGate_004(float* p_data, uint16_t p_len, float p_thresh
     }
 }
 
-static void T20_applyBiquadFilter_004(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len)
+static void T20_applyBiquadFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len)
 {
     if (!p->cfg.preprocess.filter.enable ||
         p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
@@ -794,14 +794,14 @@ static void T20_applyBiquadFilter_004(CL_T20_Mfcc::ST_Impl* p, const float* p_in
     dsps_biquad_f32(p_in, p_out, p_len, p->biquad_coeffs, p->biquad_state);
 }
 
-static void T20_applyWindow_004(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len)
+static void T20_applyWindow(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len)
 {
     for (uint16_t i = 0; i < p_len; ++i) {
         p_data[i] *= p->window[i];
     }
 }
 
-static void T20_computePowerSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power)
+static void T20_computePowerSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power)
 {
     for (int i = 0; i < G_T20_FFT_SIZE; ++i) {
         p->fft_buffer[2 * i + 0] = p_time[i];
@@ -823,7 +823,7 @@ static void T20_computePowerSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p
     }
 }
 
-static void T20_learnNoiseSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p_power)
+static void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power)
 {
     if (!p->cfg.preprocess.noise.enable_spectral_subtract) {
         return;
@@ -843,7 +843,7 @@ static void T20_learnNoiseSpectrum_004(CL_T20_Mfcc::ST_Impl* p, const float* p_p
     p->noise_learned_frames++;
 }
 
-static void T20_applySpectralSubtraction_004(CL_T20_Mfcc::ST_Impl* p, float* p_power)
+static void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power)
 {
     if (!p->cfg.preprocess.noise.enable_spectral_subtract) {
         return;
@@ -864,7 +864,7 @@ static void T20_applySpectralSubtraction_004(CL_T20_Mfcc::ST_Impl* p, float* p_p
     }
 }
 
-static void T20_applyMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out)
+static void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out)
 {
     const int v_num_bins = (G_T20_FFT_SIZE / 2) + 1;
 
@@ -883,7 +883,7 @@ static void T20_applyMelFilterbank_004(CL_T20_Mfcc::ST_Impl* p, const float* p_p
     }
 }
 
-static void T20_computeDCT2_004(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len)
+static void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len)
 {
     for (uint16_t n = 0; n < p_out_len; ++n) {
         float v_sum = 0.0f;
@@ -894,37 +894,37 @@ static void T20_computeDCT2_004(const float* p_in, float* p_out, uint16_t p_in_l
     }
 }
 
-static void T20_computeMFCC_004(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out)
+static void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out)
 {
     memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
 
     if (p->cfg.preprocess.remove_dc) {
-        T20_applyDCRemove_004(p->temp_frame, G_T20_FFT_SIZE);
+        T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
     }
 
     if (p->cfg.preprocess.preemphasis.enable) {
-        T20_applyPreEmphasis_004(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
+        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
     }
 
     if (p->cfg.preprocess.noise.enable_gate) {
-        T20_applyNoiseGate_004(p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.noise.gate_threshold_abs);
+        T20_applyNoiseGate(p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.noise.gate_threshold_abs);
     }
 
-    T20_applyBiquadFilter_004(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
-    T20_applyWindow_004(p, p->work_frame, G_T20_FFT_SIZE);
-    T20_computePowerSpectrum_004(p, p->work_frame, p->power);
+    T20_applyBiquadFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
+    T20_applyWindow(p, p->work_frame, G_T20_FFT_SIZE);
+    T20_computePowerSpectrum(p, p->work_frame, p->power);
 
-    T20_learnNoiseSpectrum_004(p, p->power);
-    T20_applySpectralSubtraction_004(p, p->power);
-    T20_applyMelFilterbank_004(p, p->power, p->log_mel);
-    T20_computeDCT2_004(p->log_mel, p_mfcc_out, G_T20_MEL_FILTERS, G_T20_MFCC_COEFFS);
+    T20_learnNoiseSpectrum(p, p->power);
+    T20_applySpectralSubtraction(p, p->power);
+    T20_applyMelFilterbank(p, p->power, p->log_mel);
+    T20_computeDCT2(p->log_mel, p_mfcc_out, G_T20_MEL_FILTERS, G_T20_MFCC_COEFFS);
 }
 
 // ============================================================================
 // [feature vector / sequence]
 // ============================================================================
 
-static void T20_pushMfccHistory_004(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc)
+static void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc)
 {
     if (p->mfcc_history_count < G_T20_MFCC_HISTORY) {
         memcpy(p->mfcc_history[p->mfcc_history_count], p_mfcc, sizeof(float) * 13);
@@ -937,7 +937,7 @@ static void T20_pushMfccHistory_004(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc
     }
 }
 
-static void T20_computeDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out)
+static void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out)
 {
     memset(p_delta_out, 0, sizeof(float) * 13);
 
@@ -965,7 +965,7 @@ static void T20_computeDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float* p_de
     }
 }
 
-static void T20_computeDeltaDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out)
+static void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out)
 {
     memset(p_delta2_out, 0, sizeof(float) * 13);
 
@@ -983,7 +983,7 @@ static void T20_computeDeltaDeltaFromHistory_004(CL_T20_Mfcc::ST_Impl* p, float*
     }
 }
 
-static void T20_buildVector39_004(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec)
+static void T20_buildVector39(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec)
 {
     int v_idx = 0;
 
@@ -992,7 +992,7 @@ static void T20_buildVector39_004(const float* p_mfcc, const float* p_delta, con
     for (int i = 0; i < 13; ++i) p_out_vec[v_idx++] = p_delta2[i];
 }
 
-static void T20_seqInit_004(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames)
+static void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames)
 {
     memset(p_rb, 0, sizeof(ST_T20_FeatureRingBuffer_t));
     p_rb->frames = p_frames;
@@ -1000,7 +1000,7 @@ static void T20_seqInit_004(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames)
     p_rb->full = false;
 }
 
-static void T20_seqPush_004(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec)
+static void T20_seqPush(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec)
 {
     memcpy(p_rb->data[p_rb->head], p_feature_vec, sizeof(float) * G_T20_FEATURE_DIM);
 
@@ -1011,12 +1011,12 @@ static void T20_seqPush_004(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_fea
     }
 }
 
-static bool T20_seqIsReady_004(const ST_T20_FeatureRingBuffer_t* p_rb)
+static bool T20_seqIsReady(const ST_T20_FeatureRingBuffer_t* p_rb)
 {
     return p_rb->full;
 }
 
-static void T20_seqExportFlatten_004(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_flat)
+static void T20_seqExportFlatten(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_flat)
 {
     // oldest -> newest 순서로 export
     uint16_t v_frames = p_rb->frames;
@@ -1032,7 +1032,7 @@ static void T20_seqExportFlatten_004(const ST_T20_FeatureRingBuffer_t* p_rb, flo
     }
 }
 
-static void T20_updateOutput_004(CL_T20_Mfcc::ST_Impl* p)
+static void T20_updateOutput(CL_T20_Mfcc::ST_Impl* p)
 {
     if (!p->latest_vector_valid) {
         return;
@@ -1043,12 +1043,12 @@ static void T20_updateOutput_004(CL_T20_Mfcc::ST_Impl* p)
         return;
     }
 
-    T20_seqPush_004(&p->seq_rb, p->latest_feature.vector39);
+    T20_seqPush(&p->seq_rb, p->latest_feature.vector39);
 
     if (p->cfg.output.sequence_flatten) {
-        T20_seqExportFlatten_004(&p->seq_rb, p->latest_sequence_flat);
+        T20_seqExportFlatten(&p->seq_rb, p->latest_sequence_flat);
     }
 
-    p->latest_sequence_valid = T20_seqIsReady_004(&p->seq_rb);
+    p->latest_sequence_valid = T20_seqIsReady(&p->seq_rb);
 }
 

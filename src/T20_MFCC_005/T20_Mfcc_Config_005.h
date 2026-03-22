@@ -8,7 +8,7 @@
 // [기본 상수]
 // ============================================================================
 
-#define G_T20_VERSION_STR                "T20_Mfcc_004"
+#define G_T20_VERSION_STR                "T20_Mfcc_005"
 
 #define G_T20_FFT_SIZE                   256
 #define G_T20_SAMPLE_RATE_HZ             1600.0f
