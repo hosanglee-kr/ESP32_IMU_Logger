@@ -610,10 +610,10 @@ static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
     memset(&v_int_cfg, 0, sizeof(v_int_cfg));
 
     v_int_cfg.pin_type = BMI2_INT1;
-    v_int_cfg.pin_cfg[0].output_en = BMI2_ENABLE;
-    v_int_cfg.pin_cfg[0].od        = BMI2_DISABLE;
-    v_int_cfg.pin_cfg[0].lvl       = BMI2_HIGH_G;
-    v_int_cfg.pin_cfg[0].input_en  = BMI2_DISABLE;
+    v_int_cfg.pin_cfg[0].output_en = BMI2_INT_OUTPUT_ENABLE;
+    v_int_cfg.pin_cfg[0].od        = BMI2_INT_PUSH_PULL;
+    v_int_cfg.pin_cfg[0].lvl       = BMI2_INT_ACTIVE_HIGH;
+    v_int_cfg.pin_cfg[0].input_en  = BMI2_INT_INPUT_DISABLE;
     v_int_cfg.int_latch = BMI2_INT_NON_LATCH;
     // v_int_cfg.pin_cfg[0].int_latch = BMI2_INT_NON_LATCH;
 
