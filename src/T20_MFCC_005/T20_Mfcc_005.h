@@ -90,6 +90,12 @@ private:
     // opaque internal storage는 cpp에서 구현
     
     ST_Impl* _impl;
+    
+    friend void IRAM_ATTR T20_onBmiDrdyISR();
+    friend void T20_sensorTask(void* p_arg);
+    friend void T20_processTask(void* p_arg);
+};
+
 };
 
 

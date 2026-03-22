@@ -612,7 +612,7 @@ static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
     v_int_cfg.pin_type = BMI2_INT1;
     v_int_cfg.pin_cfg[0].output_en = BMI2_ENABLE;
     v_int_cfg.pin_cfg[0].od        = BMI2_DISABLE;
-    v_int_cfg.pin_cfg[0].lvl       = BMI2_HIGH;
+    v_int_cfg.pin_cfg[0].lvl       = BMI2_HIGH_G;
     v_int_cfg.pin_cfg[0].input_en  = BMI2_DISABLE;
     v_int_cfg.pin_cfg[0].int_latch = BMI2_DISABLE;
 
@@ -808,8 +808,8 @@ static void T20_computePowerSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_tim
         p->fft_buffer[2 * i + 1] = 0.0f;
     }
 
-    dsps_fft2r_f32(p->fft_buffer, G_T20_FFT_SIZE);
-    dsps_bit_rev_f32(p->fft_buffer, G_T20_FFT_SIZE);
+    dsps_fft2r_fc32(p->fft_buffer, G_T20_FFT_SIZE);
+    dsps_bit_rev_fc32(p->fft_buffer, G_T20_FFT_SIZE);
 
     for (int k = 0; k <= (G_T20_FFT_SIZE / 2); ++k) {
         float v_re = p->fft_buffer[2 * k + 0];
