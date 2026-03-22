@@ -614,7 +614,8 @@ static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
     v_int_cfg.pin_cfg[0].od        = BMI2_DISABLE;
     v_int_cfg.pin_cfg[0].lvl       = BMI2_HIGH_G;
     v_int_cfg.pin_cfg[0].input_en  = BMI2_DISABLE;
-    v_int_cfg.pin_cfg[0].int_latch = BMI2_INT_NON_LATCH;
+    v_int_cfg.int_latch = BMI2_INT_NON_LATCH;
+    // v_int_cfg.pin_cfg[0].int_latch = BMI2_INT_NON_LATCH;
 
     v_rslt = p->imu.setInterruptPinConfig(v_int_cfg);
     if (v_rslt != BMI2_OK) return false;
