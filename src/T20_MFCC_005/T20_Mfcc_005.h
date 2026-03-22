@@ -62,6 +62,8 @@
 class CL_T20_Mfcc
 {
 public:
+    struct ST_Impl;
+    
     CL_T20_Mfcc();
 
     bool begin(const ST_T20_Config_t* p_cfg = nullptr);
@@ -86,7 +88,7 @@ private:
     CL_T20_Mfcc& operator=(const CL_T20_Mfcc&) = delete;
 
     // opaque internal storage는 cpp에서 구현
-    struct ST_Impl;
+    
     ST_Impl* _impl;
 };
 
