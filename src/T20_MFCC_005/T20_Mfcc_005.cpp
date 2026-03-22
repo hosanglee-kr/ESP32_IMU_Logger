@@ -126,9 +126,9 @@ struct CL_T20_Mfcc::ST_Impl
 
 static CL_T20_Mfcc* s_t20_instance = nullptr;
 
-static void IRAM_ATTR T20_onBmiDrdyISR(void);
-static void T20_sensorTask(void* p_arg);
-static void T20_processTask(void* p_arg);
+void IRAM_ATTR T20_onBmiDrdyISR(void);
+void T20_sensorTask(void* p_arg);
+void T20_processTask(void* p_arg);
 
 static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p);
 static bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p);
@@ -439,7 +439,7 @@ void CL_T20_Mfcc::printLatest(Stream& p_out) const
 // [ISR / Task]
 // ============================================================================
 
-static void IRAM_ATTR T20_onBmiDrdyISR(void)
+void IRAM_ATTR T20_onBmiDrdyISR(void)
 {
     if (s_t20_instance == nullptr) {
         return;
@@ -459,7 +459,7 @@ static void IRAM_ATTR T20_onBmiDrdyISR(void)
     }
 }
 
-static void T20_sensorTask(void* p_arg)
+void T20_sensorTask(void* p_arg)
 {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
 
@@ -498,7 +498,7 @@ static void T20_sensorTask(void* p_arg)
     }
 }
 
-static void T20_processTask(void* p_arg)
+void T20_processTask(void* p_arg)
 {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     ST_T20_FrameMessage_t v_msg;
@@ -614,7 +614,7 @@ static bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
     v_int_cfg.pin_cfg[0].od        = BMI2_DISABLE;
     v_int_cfg.pin_cfg[0].lvl       = BMI2_HIGH_G;
     v_int_cfg.pin_cfg[0].input_en  = BMI2_DISABLE;
-    v_int_cfg.pin_cfg[0].int_latch = BMI2_DISABLE;
+    v_int_cfg.pin_cfg[0].int_latch = BMI2_INT_NON_LATCH;
 
     v_rslt = p->imu.setInterruptPinConfig(v_int_cfg);
     if (v_rslt != BMI2_OK) return false;
