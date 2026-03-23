@@ -269,84 +269,6 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
     return true;
 }
 
-/*
-bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
-{
-    if (p_cfg != nullptr) {
-        _impl->cfg = *p_cfg;
-    } else {
-        _impl->cfg = T20_makeDefaultConfig();
-    }
-
-    if (_impl->cfg.feature.fft_size != G_T20_FFT_SIZE) {
-        return false;
-    }
-    if (_impl->cfg.feature.mel_filters != G_T20_MEL_FILTERS) {
-        return false;
-    }
-    if (_impl->cfg.feature.mfcc_coeffs != G_T20_MFCC_COEFFS) {
-        return false;
-    }
-    
-    if (_impl->cfg.feature.delta_window > (G_T20_MFCC_HISTORY / 2)) {
-        return false;
-    }
-
-    if (_impl->cfg.output.sequence_frames == 0 ||
-        _impl->cfg.output.sequence_frames > G_T20_MAX_SEQUENCE_FRAMES) {
-        return false;
-    }
-
-    _impl->mutex = xSemaphoreCreateMutex();
-    if (_impl->mutex == nullptr) {
-        return false;
-    }
-
-    _impl->frame_queue = xQueueCreate(G_T20_QUEUE_LEN, sizeof(ST_T20_FrameMessage_t));
-    if (_impl->frame_queue == nullptr) {
-        return false;
-    }
-
-    _impl->spi.begin(
-        G_T20_PIN_SPI_SCK,
-        G_T20_PIN_SPI_MISO,
-        G_T20_PIN_SPI_MOSI,
-        G_T20_PIN_BMI_CS
-    );
-
-    pinMode(G_T20_PIN_BMI_CS, OUTPUT);
-    digitalWrite(G_T20_PIN_BMI_CS, HIGH);
-    pinMode(G_T20_PIN_BMI_INT1, INPUT);
-    
-    if (!T20_initDSP(_impl)) {
-        T20_cleanupBeginFailure(_impl);
-        return false;
-    }
-    
-
-    if (!T20_initBMI270_SPI(_impl)) {
-        T20_cleanupBeginFailure(_impl);
-        return false;
-    }
-
-    if (!T20_configBMI270_1600Hz_DRDY(_impl)) {
-        T20_cleanupBeginFailure(_impl);
-        return false;
-    }
-
-    if (!T20_configureFilter(_impl)) {
-        T20_cleanupBeginFailure(_impl);
-        return false;
-    }
-
-    T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
-
-    // attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR, RISING);
-
-    _impl->initialized = true;
-    return true;
-}
-*/
 
 bool CL_T20_Mfcc::start(void)
 {
@@ -780,49 +702,6 @@ static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p)
     memset(p->latest_sequence_flat, 0, sizeof(p->latest_sequence_flat));
     memset(p->biquad_state, 0, sizeof(p->biquad_state));
 }
-
-/*
-static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p)
-{
-    if (p == nullptr) {
-        return;
-    }
-
-    detachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1));
-
-    if (p->sensor_task_handle != nullptr) {
-        vTaskDelete(p->sensor_task_handle);
-        p->sensor_task_handle = nullptr;
-    }
-
-    if (p->process_task_handle != nullptr) {
-        vTaskDelete(p->process_task_handle);
-        p->process_task_handle = nullptr;
-    }
-
-    if (p->frame_queue != nullptr) {
-        vQueueDelete(p->frame_queue);
-        p->frame_queue = nullptr;
-    }
-
-    if (p->mutex != nullptr) {
-        vSemaphoreDelete(p->mutex);
-        p->mutex = nullptr;
-    }
-
-    p->initialized = false;
-    p->running = false;
-
-    p->active_fill_buffer = 0;
-    p->active_sample_index = 0;
-    p->dropped_frames = 0;
-    p->mfcc_history_count = 0;
-    p->noise_learned_frames = 0;
-    p->latest_vector_valid = false;
-    p->latest_sequence_valid = false;
-    p->prev_raw_sample = 0.0f;
-}
-*/
 
 
 static bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p)
