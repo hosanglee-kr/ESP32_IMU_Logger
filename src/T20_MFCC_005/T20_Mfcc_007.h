@@ -4,8 +4,8 @@
 
 
 #include <Arduino.h>
-#include "T20_Mfcc_Types_005.h"
-#include "T20_Mfcc_Config_005.h"
+#include "T20_Mfcc_Types_007.h"
+#include "T20_Mfcc_Config_007.h"
 
 /*
 ===============================================================================
