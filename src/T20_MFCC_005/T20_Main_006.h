@@ -37,7 +37,7 @@ inline void T20_init()
         while (1) { delay(1000); }
     }
 
-    g_mfcc.printConfig(Serial);
+    v_mfcc.printConfig(Serial);
 }
 
 inline void T20_run()
