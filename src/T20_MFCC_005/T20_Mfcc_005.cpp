@@ -46,9 +46,10 @@ struct CL_T20_Mfcc::ST_Impl
     ST_T20_Config_t cfg;
 
     // ---- raw double buffer ----
-    float __attribute__((aligned(16))) frame_buffer[2][G_T20_FFT_SIZE];
+    float __attribute__((aligned(16))) frame_buffer[G_T20_RAW_FRAME_BUFFERS][G_T20_FFT_SIZE];
     volatile uint8_t  active_fill_buffer;
     volatile uint16_t active_sample_index;
+    volatile uint32_t dropped_frames;
 
     // ---- processing buffers ----
     float __attribute__((aligned(16))) work_frame[G_T20_FFT_SIZE];
@@ -112,6 +113,7 @@ struct CL_T20_Mfcc::ST_Impl
 
         active_fill_buffer = 0;
         active_sample_index = 0;
+        dropped_frames = 0;
         mfcc_history_count = 0;
         prev_raw_sample = 0.0f;
         noise_learned_frames = 0;
@@ -247,7 +249,7 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
 
     T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
 
-    attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR, RISING);
+    // attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR, RISING);
 
     _impl->initialized = true;
     return true;
@@ -290,6 +292,9 @@ bool CL_T20_Mfcc::start(void)
         }
         return false;
     }
+    
+    attachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1), T20_onBmiDrdyISR, RISING);
+
 
     _impl->running = true;
     return true;
@@ -298,6 +303,8 @@ bool CL_T20_Mfcc::start(void)
 void CL_T20_Mfcc::stop(void)
 {
     _impl->running = false;
+    
+    detachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1));
 
     if (_impl->sensor_task_handle != nullptr) {
         vTaskDelete(_impl->sensor_task_handle);
@@ -549,11 +556,12 @@ void T20_sensorTask(void* p_arg)
             v_msg.frame_index = v_buf;
 
             if (xQueueSend(p->frame_queue, &v_msg, 0) != pdTRUE) {
+                p->dropped_frames++;
                 // 필요 시 drop count 증가 또는 로그
             }
             // xQueueSend(p->frame_queue, &v_msg, 0);
 
-            p->active_fill_buffer = (uint8_t)((v_buf + 1U) % 2U);
+            p->active_fill_buffer = (uint8_t)((v_buf + 1U) % G_T20_RAW_FRAME_BUFFERS);
             p->active_sample_index = 0;
         }
     }
@@ -607,6 +615,8 @@ void T20_processTask(void* p_arg)
 
 static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p)
 {
+    detachInterrupt(digitalPinToInterrupt(G_T20_PIN_BMI_INT1));
+    
     if (p->frame_queue != nullptr) {
         vQueueDelete(p->frame_queue);
         p->frame_queue = nullptr;
@@ -616,6 +626,11 @@ static void T20_cleanupBeginFailure(CL_T20_Mfcc::ST_Impl* p)
         vSemaphoreDelete(p->mutex);
         p->mutex = nullptr;
     }
+    
+    p->initialized = false;
+    p->running = false;
+    p->drdy_flag = false;
+    
 }
 
 
