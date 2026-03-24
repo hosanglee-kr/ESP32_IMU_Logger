@@ -80,6 +80,9 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void)
     cfg.feature.delta_window   = G_T20_DELTA_WINDOW;
 
     cfg.output.output_mode      = EN_T20_OUTPUT_VECTOR;
+    
+    // 프레임 길이: FFT크기(256) / 샘플링(1600Hz) = 0.16초 = 160ms
+    // 전체 시퀀스가 커버하는 시간 : 8 * 160ms = 1.28초
     cfg.output.sequence_frames  = 8;
     cfg.output.sequence_flatten = true;
 
