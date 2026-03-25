@@ -472,7 +472,19 @@ void T20_processTask(void* p_arg)
         uint16_t mel_len     = cfg_snapshot.feature.mel_filters;
         uint16_t vector_len  = (uint16_t)(dim * 3);
 
-        T20_computeMFCC(p, &cfg_snapshot, p->work_frame, mfcc);
+        float filter_coeffs[5] = {0};
+
+        if (!T20_makeFilterCoeffs(&cfg_snapshot, filter_coeffs)) {
+            continue;
+        }
+        
+        T20_computeMFCC(p,
+                        &cfg_snapshot,
+                        filter_coeffs,
+                        p->process_biquad_state,
+                        p->work_frame,
+                        mfcc);
+                
         T20_pushMfccHistory(p, mfcc, dim);
         T20_computeDeltaFromHistory(p, dim, delta_win, delta);
         T20_computeDeltaDeltaFromHistory(p, dim, delta2);
@@ -655,6 +667,7 @@ void T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p)
     memset(p->latest_sequence_flat, 0, sizeof(p->latest_sequence_flat));
     memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
     memset(p->biquad_state, 0, sizeof(p->biquad_state));
+    memset(p->process_biquad_state, 0, sizeof(p->process_biquad_state));
 }
 
 void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p)

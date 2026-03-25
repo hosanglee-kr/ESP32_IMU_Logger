@@ -277,13 +277,17 @@ struct CL_T20_Mfcc::ST_Impl
      * - begin()/setConfig() 또는 runtime filter 구성 시 사용
      */
     float biquad_coeffs[5];
+    
 
     /*
      * biquad_state
      * - biquad filter state
      * - 필터 연속 처리 시 내부 상태 보존용
      */
-    float biquad_state[2];
+    float biquad_state[2]; // 사용 안 하거나 legacy 용도
+    
+    float process_biquad_state[2];   // 실제 frame processing 전용 상태
+
 
     /*
      * prev_raw_sample
@@ -345,6 +349,7 @@ struct CL_T20_Mfcc::ST_Impl
         memset(latest_sequence_flat, 0, sizeof(latest_sequence_flat));
         memset(biquad_coeffs, 0, sizeof(biquad_coeffs));
         memset(biquad_state, 0, sizeof(biquad_state));
+        memset(process_biquad_state, 0, sizeof(process_biquad_state));
     }
 };
 
@@ -532,8 +537,17 @@ void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs);
  * biquad filter 적용
  * - LPF / HPF / BPF 처리
  */
-void T20_applyBiquadFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len);
+bool  T20_configureFilter(CL_T20_Mfcc::ST_Impl* p);
 
+bool  T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out);
+
+void  T20_applyBiquadFilter(const ST_T20_Config_t* p_cfg,
+                            const float* p_coeffs,
+                            float* p_state,
+                            const float* p_in,
+                            float* p_out,
+                            uint16_t p_len);
+                            
 /*
  * Window 적용
  * - spectral leakage 감소 목적
@@ -574,8 +588,11 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
  * 전체 MFCC 추출 파이프라인
  * - 전처리 -> filter -> window -> FFT -> power -> mel -> log -> DCT
  */
-void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
-                     const ST_T20_Config_t* p_cfg,
-                     const float* p_frame,
-                     float* p_mfcc_out);
-                     
+
+void  T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
+                      const ST_T20_Config_t* p_cfg,
+                      const float* p_filter_coeffs,
+                      float* p_filter_state,
+                      const float* p_frame,
+                      float* p_mfcc_out);
+                      

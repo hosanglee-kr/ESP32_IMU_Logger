@@ -103,28 +103,46 @@ bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
 
 bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
 {
-    if (!p->cfg.preprocess.filter.enable ||
-        p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
-        memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
-        memset(p->biquad_state, 0, sizeof(p->biquad_state));
+    if (p == nullptr) {
+        return false;
+    }
+
+    bool ok = T20_makeFilterCoeffs(&p->cfg, p->biquad_coeffs);
+
+    // 설정이 바뀌면 processing state도 리셋
+    memset(p->biquad_state, 0, sizeof(p->biquad_state));
+    memset(p->process_biquad_state, 0, sizeof(p->process_biquad_state));
+
+    return ok;
+}
+
+bool T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out)
+{
+    if (p_cfg == nullptr || p_coeffs_out == nullptr) {
+        return false;
+    }
+
+    if (!p_cfg->preprocess.filter.enable ||
+        p_cfg->preprocess.filter.type == EN_T20_FILTER_OFF) {
+        memset(p_coeffs_out, 0, sizeof(float) * 5);
         return true;
     }
 
-    float fs = p->cfg.feature.sample_rate_hz;
-    float q  = (p->cfg.preprocess.filter.q_factor <= 0.0f) ? 0.707f : p->cfg.preprocess.filter.q_factor;
+    float fs = p_cfg->feature.sample_rate_hz;
+    float q  = (p_cfg->preprocess.filter.q_factor <= 0.0f) ? 0.707f : p_cfg->preprocess.filter.q_factor;
     esp_err_t res = ESP_OK;
 
-    if (p->cfg.preprocess.filter.type == EN_T20_FILTER_LPF) {
-        float norm = p->cfg.preprocess.filter.cutoff_hz_1 / fs;
-        res = dsps_biquad_gen_lpf_f32(p->biquad_coeffs, norm, q);
+    if (p_cfg->preprocess.filter.type == EN_T20_FILTER_LPF) {
+        float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
+        res = dsps_biquad_gen_lpf_f32(p_coeffs_out, norm, q);
     }
-    else if (p->cfg.preprocess.filter.type == EN_T20_FILTER_HPF) {
-        float norm = p->cfg.preprocess.filter.cutoff_hz_1 / fs;
-        res = dsps_biquad_gen_hpf_f32(p->biquad_coeffs, norm, q);
+    else if (p_cfg->preprocess.filter.type == EN_T20_FILTER_HPF) {
+        float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
+        res = dsps_biquad_gen_hpf_f32(p_coeffs_out, norm, q);
     }
     else {
-        float low  = p->cfg.preprocess.filter.cutoff_hz_1;
-        float high = p->cfg.preprocess.filter.cutoff_hz_2;
+        float low  = p_cfg->preprocess.filter.cutoff_hz_1;
+        float high = p_cfg->preprocess.filter.cutoff_hz_2;
 
         if (high <= low) {
             return false;
@@ -137,16 +155,12 @@ bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
 
         if (q_bpf < 0.1f) q_bpf = 0.1f;
 
-        res = dsps_biquad_gen_bpf_f32(p->biquad_coeffs, center_norm, q_bpf);
+        res = dsps_biquad_gen_bpf_f32(p_coeffs_out, center_norm, q_bpf);
     }
 
-    if (res != ESP_OK) {
-        return false;
-    }
-
-    memset(p->biquad_state, 0, sizeof(p->biquad_state));
-    return true;
+    return (res == ESP_OK);
 }
+
 
 float T20_hzToMel(float p_hz)
 {
@@ -246,15 +260,24 @@ void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs)
     }
 }
 
-void T20_applyBiquadFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len)
+void T20_applyBiquadFilter(const ST_T20_Config_t* p_cfg,
+                           const float* p_coeffs,
+                           float* p_state,
+                           const float* p_in,
+                           float* p_out,
+                           uint16_t p_len)
 {
-    if (!p->cfg.preprocess.filter.enable ||
-        p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
+    if (p_cfg == nullptr || p_in == nullptr || p_out == nullptr) {
+        return;
+    }
+
+    if (!p_cfg->preprocess.filter.enable ||
+        p_cfg->preprocess.filter.type == EN_T20_FILTER_OFF) {
         memcpy(p_out, p_in, sizeof(float) * p_len);
         return;
     }
 
-    dsps_biquad_f32(p_in, p_out, p_len, p->biquad_coeffs, p->biquad_state);
+    dsps_biquad_f32(p_in, p_out, p_len, p_coeffs, p_state);
 }
 
 void T20_applyWindow(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len)
@@ -359,6 +382,8 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
 
 void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
                      const ST_T20_Config_t* p_cfg,
+                     const float* p_filter_coeffs,
+                     float* p_filter_state,
                      const float* p_frame,
                      float* p_mfcc_out)
 {
@@ -376,7 +401,13 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
         T20_applyNoiseGate(p->temp_frame, G_T20_FFT_SIZE, p_cfg->preprocess.noise.gate_threshold_abs);
     }
 
-    T20_applyBiquadFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
+    T20_applyBiquadFilter(p_cfg,
+                          p_filter_coeffs,
+                          p_filter_state,
+                          p->temp_frame,
+                          p->work_frame,
+                          G_T20_FFT_SIZE);
+
     T20_applyWindow(p, p->work_frame, G_T20_FFT_SIZE);
     T20_computePowerSpectrum(p, p->work_frame, p->power);
 
