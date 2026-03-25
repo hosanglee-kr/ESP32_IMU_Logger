@@ -591,8 +591,7 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
 
 void  T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
                       const ST_T20_Config_t* p_cfg,
-                      const float* p_filter_coeffs,
+                      float* p_filter_coeffs,
                       float* p_filter_state,
                       const float* p_frame,
                       float* p_mfcc_out);
-                      
