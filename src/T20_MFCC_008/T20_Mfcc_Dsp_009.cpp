@@ -107,11 +107,14 @@ bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
         return false;
     }
 
+    // [의도]
+    // - 현재 cfg 기준으로 "기본 coeff" 준비 (디버그/참조용)
+    // - runtime processing은 snapshot 기반으로 별도 생성
+
     bool ok = T20_makeFilterCoeffs(&p->cfg, p->biquad_coeffs);
 
-    // 설정이 바뀌면 processing state도 리셋
-    memset(p->biquad_state, 0, sizeof(p->biquad_state));
-    memset(p->process_biquad_state, 0, sizeof(p->process_biquad_state));
+    // runtime state reset (프레임 경계 깨짐 방지)
+    memset(p->biquad_state_runtime, 0, sizeof(p->biquad_state_runtime));
 
     return ok;
 }

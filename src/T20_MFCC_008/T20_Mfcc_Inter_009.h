@@ -284,7 +284,7 @@ struct CL_T20_Mfcc::ST_Impl
      * - biquad filter state
      * - 필터 연속 처리 시 내부 상태 보존용
      */
-    float biquad_state[2]; // 사용 안 하거나 legacy 용도
+    // float biquad_state[2]; // 사용 안 하거나 legacy 용도
     
     float process_biquad_state[2];   // 실제 frame processing 전용 상태
 

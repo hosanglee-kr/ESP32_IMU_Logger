@@ -481,7 +481,7 @@ void T20_processTask(void* p_arg)
         T20_computeMFCC(p,
                         &cfg_snapshot,
                         filter_coeffs,
-                        p->process_biquad_state,
+                        p->biquad_state_runtime,
                         p->work_frame,
                         mfcc);
                 
@@ -667,7 +667,7 @@ void T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p)
     memset(p->latest_sequence_flat, 0, sizeof(p->latest_sequence_flat));
     memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
     memset(p->biquad_state, 0, sizeof(p->biquad_state));
-    memset(p->process_biquad_state, 0, sizeof(p->process_biquad_state));
+    memset(p->biquad_state_runtime, 0, sizeof(p->biquad_state_runtime));
 }
 
 void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p)
