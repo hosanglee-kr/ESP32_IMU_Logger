@@ -199,7 +199,7 @@ bool CL_T20_Mfcc::getLatestFeatureVector(ST_T20_FeatureVector_t* p_out) const
 
 bool CL_T20_Mfcc::getLatestVector(float* p_out_vec, uint16_t p_len) const
 {
-    if (p_out_vec == nullptr || p_len < G_T20_FEATURE_DIM_DEFAULT || _impl->mutex == nullptr) {
+    if (p_out_vec == nullptr || _impl->mutex == nullptr) {
         return false;
     }
 
@@ -208,12 +208,16 @@ bool CL_T20_Mfcc::getLatestVector(float* p_out_vec, uint16_t p_len) const
     }
 
     bool ok = _impl->latest_vector_valid;
-    if (ok) {
-        memcpy(p_out_vec, _impl->latest_feature.vector, sizeof(float) * G_T20_FEATURE_DIM_DEFAULT);
+    uint16_t need = _impl->latest_feature.vector_len;
+
+    if (!ok || p_len < need) {
+        xSemaphoreGive(_impl->mutex);
+        return false;
     }
 
+    memcpy(p_out_vec, _impl->latest_feature.vector, sizeof(float) * need);
     xSemaphoreGive(_impl->mutex);
-    return ok;
+    return true;
 }
 
 bool CL_T20_Mfcc::isSequenceReady(void) const
@@ -450,17 +454,29 @@ void T20_processTask(void* p_arg)
         T20_pushMfccHistory(p, mfcc);
         T20_computeDeltaFromHistory(p, delta);
         T20_computeDeltaDeltaFromHistory(p, delta2);
+        
+        uint16_t dim = p->cfg.feature.mfcc_coeffs;
+        uint16_t vector_len = dim * 3;
 
         if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            memcpy(p->latest_feature.mfcc,   mfcc,   sizeof(mfcc));
-            memcpy(p->latest_feature.delta,  delta,  sizeof(delta));
-            memcpy(p->latest_feature.delta2, delta2, sizeof(delta2));
-            T20_buildVector(mfcc, delta, delta2, p->latest_feature.vector);
+            p->latest_feature.log_mel_len = p->cfg.feature.mel_filters;
+            p->latest_feature.mfcc_len    = dim;
+            p->latest_feature.delta_len   = dim;
+            p->latest_feature.delta2_len  = dim;
+            p->latest_feature.vector_len  = vector_len;
+        
+            memcpy(p->latest_feature.log_mel, p->log_mel, sizeof(float) * p->cfg.feature.mel_filters);
+            memcpy(p->latest_feature.mfcc,   mfcc,   sizeof(float) * dim);
+            memcpy(p->latest_feature.delta,  delta,  sizeof(float) * dim);
+            memcpy(p->latest_feature.delta2, delta2, sizeof(float) * dim);
+        
+            T20_buildVector(mfcc, delta, delta2, dim, p->latest_feature.vector);
             p->latest_vector_valid = true;
-
+        
             T20_updateOutput(p);
-
+        
             xSemaphoreGive(p->mutex);
+            
         }
     }
 }
@@ -698,26 +714,31 @@ void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_o
     }
 }
 
-void T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec)
+void T20_buildVector(const float* p_mfcc,
+                     const float* p_delta,
+                     const float* p_delta2,
+                     uint16_t p_dim,
+                     float* p_out_vec)
 {
-    int idx = 0;
+    uint16_t idx = 0;
 
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out_vec[idx++] = p_mfcc[i];
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out_vec[idx++] = p_delta[i];
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out_vec[idx++] = p_delta2[i];
+    for (uint16_t i = 0; i < p_dim; ++i) p_out_vec[idx++] = p_mfcc[i];
+    for (uint16_t i = 0; i < p_dim; ++i) p_out_vec[idx++] = p_delta[i];
+    for (uint16_t i = 0; i < p_dim; ++i) p_out_vec[idx++] = p_delta2[i];
 }
 
-void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames)
+void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames, uint16_t p_feature_dim)
 {
     memset(p_rb, 0, sizeof(ST_T20_FeatureRingBuffer_t));
     p_rb->frames = p_frames;
+    p_rb->feature_dim = p_feature_dim;
     p_rb->head = 0;
     p_rb->full = false;
 }
 
 void T20_seqPush(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec)
 {
-    memcpy(p_rb->data[p_rb->head], p_feature_vec, sizeof(float) * G_T20_FEATURE_DIM);
+    memcpy(p_rb->data[p_rb->head], p_feature_vec, sizeof(float) * p_rb->feature_dim);
 
     p_rb->head++;
     if (p_rb->head >= p_rb->frames) {
@@ -739,13 +760,12 @@ void T20_seqExportFlatten(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_f
 
     for (uint16_t i = 0; i < frames; ++i) {
         uint16_t idx = (uint16_t)((start + i) % frames);
-        memcpy(&p_out_flat[written * G_T20_FEATURE_DIM],
+        memcpy(&p_out_flat[written * p_rb->feature_dim],
                p_rb->data[idx],
-               sizeof(float) * G_T20_FEATURE_DIM);
+               sizeof(float) * p_rb->feature_dim);
         written++;
     }
 }
-
 void T20_updateOutput(CL_T20_Mfcc::ST_Impl* p)
 {
     if (!p->latest_vector_valid) {
