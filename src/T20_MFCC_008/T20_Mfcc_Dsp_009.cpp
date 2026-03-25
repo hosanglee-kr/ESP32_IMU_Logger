@@ -264,13 +264,14 @@ void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs)
 }
 
 void T20_applyBiquadFilter(const ST_T20_Config_t* p_cfg,
-                           const float* p_coeffs,
+                           float* p_coeffs,
                            float* p_state,
                            const float* p_in,
                            float* p_out,
                            uint16_t p_len)
 {
-    if (p_cfg == nullptr || p_in == nullptr || p_out == nullptr) {
+    if (p_cfg == nullptr || p_coeffs == nullptr || p_state == nullptr ||
+        p_in == nullptr || p_out == nullptr) {
         return;
     }
 

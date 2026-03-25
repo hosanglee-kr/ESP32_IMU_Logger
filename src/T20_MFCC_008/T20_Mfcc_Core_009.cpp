@@ -666,7 +666,7 @@ void T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p)
     memset(&p->seq_rb, 0, sizeof(p->seq_rb));
     memset(p->latest_sequence_flat, 0, sizeof(p->latest_sequence_flat));
     memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
-    memset(p->biquad_state, 0, sizeof(p->biquad_state));
+    //memset(p->biquad_state, 0, sizeof(p->biquad_state));
     memset(p->biquad_state_runtime, 0, sizeof(p->biquad_state_runtime));
 }
 

@@ -286,7 +286,7 @@ struct CL_T20_Mfcc::ST_Impl
      */
     // float biquad_state[2]; // 사용 안 하거나 legacy 용도
     
-    float process_biquad_state[2];   // 실제 frame processing 전용 상태
+    float biquad_state_runtime[2];   // 실제 frame processing 전용 상태
 
 
     /*
@@ -348,8 +348,8 @@ struct CL_T20_Mfcc::ST_Impl
         memset(&seq_rb, 0, sizeof(seq_rb));
         memset(latest_sequence_flat, 0, sizeof(latest_sequence_flat));
         memset(biquad_coeffs, 0, sizeof(biquad_coeffs));
-        memset(biquad_state, 0, sizeof(biquad_state));
-        memset(process_biquad_state, 0, sizeof(process_biquad_state));
+        // memset(biquad_state, 0, sizeof(biquad_state));
+        memset(biquad_state_runtime, 0, sizeof(biquad_state_runtime));
     }
 };
 
@@ -542,7 +542,7 @@ bool  T20_configureFilter(CL_T20_Mfcc::ST_Impl* p);
 bool  T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out);
 
 void  T20_applyBiquadFilter(const ST_T20_Config_t* p_cfg,
-                            const float* p_coeffs,
+                            float* p_coeffs,
                             float* p_state,
                             const float* p_in,
                             float* p_out,
