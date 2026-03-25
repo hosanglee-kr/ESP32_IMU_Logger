@@ -1,9 +1,9 @@
-#include "T20_Mfcc_Internal_008.h"
+#include "T20_Mfcc_Inter_009.h"
 
 /*
 ===============================================================================
-소스명: T20_Mfcc_Core_008.cpp
-버전: v008
+소스명: T20_Mfcc_Core_009.cpp
+버전: v009
 
 [기능 스펙]
 - 모듈 생명주기 관리(begin/start/stop)
@@ -197,9 +197,9 @@ bool CL_T20_Mfcc::getLatestFeatureVector(ST_T20_FeatureVector_t* p_out) const
     return ok;
 }
 
-bool CL_T20_Mfcc::getLatestVector39(float* p_out_vec, uint16_t p_len) const
+bool CL_T20_Mfcc::getLatestVector(float* p_out_vec, uint16_t p_len) const
 {
-    if (p_out_vec == nullptr || p_len < G_T20_FEATURE_DIM_TOTAL || _impl->mutex == nullptr) {
+    if (p_out_vec == nullptr || p_len < G_T20_FEATURE_DIM_DEFAULT || _impl->mutex == nullptr) {
         return false;
     }
 
@@ -209,7 +209,7 @@ bool CL_T20_Mfcc::getLatestVector39(float* p_out_vec, uint16_t p_len) const
 
     bool ok = _impl->latest_vector_valid;
     if (ok) {
-        memcpy(p_out_vec, _impl->latest_feature.vector39, sizeof(float) * G_T20_FEATURE_DIM_TOTAL);
+        memcpy(p_out_vec, _impl->latest_feature.vector, sizeof(float) * G_T20_FEATURE_DIM_DEFAULT);
     }
 
     xSemaphoreGive(_impl->mutex);
@@ -241,7 +241,7 @@ bool CL_T20_Mfcc::getLatestSequenceFlat(float* p_out_seq, uint16_t p_len) const
         return false;
     }
 
-    uint16_t need = _impl->cfg.output.sequence_frames * G_T20_FEATURE_DIM_TOTAL;
+    uint16_t need = _impl->cfg.output.sequence_frames * G_T20_FEATURE_DIM_DEFAULT;
     if (p_len < need) {
         xSemaphoreGive(_impl->mutex);
         return false;
@@ -437,9 +437,9 @@ void T20_processTask(void* p_arg)
         // 완료된 버퍼 index만 queue로 전달되므로 processing task는 완료 프레임만 읽음
         memcpy(p->work_frame, p->frame_buffer[msg.frame_index], sizeof(float) * G_T20_FFT_SIZE);
 
-        float mfcc[G_T20_MFCC_COEFFS] = {0};
-        float delta[G_T20_MFCC_COEFFS] = {0};
-        float delta2[G_T20_MFCC_COEFFS] = {0};
+        float mfcc[G_T20_MFCC_COEFFS_MAX] = {0};
+        float delta[G_T20_MFCC_COEFFS_MAX] = {0};
+        float delta2[G_T20_MFCC_COEFFS_MAX] = {0};
 
         T20_computeMFCC(p, p->work_frame, mfcc);
         T20_pushMfccHistory(p, mfcc);
@@ -450,7 +450,7 @@ void T20_processTask(void* p_arg)
             memcpy(p->latest_feature.mfcc,   mfcc,   sizeof(mfcc));
             memcpy(p->latest_feature.delta,  delta,  sizeof(delta));
             memcpy(p->latest_feature.delta2, delta2, sizeof(delta2));
-            T20_buildVector39(mfcc, delta, delta2, p->latest_feature.vector39);
+            T20_buildVector(mfcc, delta, delta2, p->latest_feature.vector);
             p->latest_vector_valid = true;
 
             T20_updateOutput(p);
@@ -491,7 +491,7 @@ bool T20_validateConfig(const ST_T20_Config_t* p_cfg)
     }
 
     if (p_cfg->output.sequence_frames == 0 ||
-        p_cfg->output.sequence_frames > G_T20_MAX_SEQUENCE_FRAMES) {
+        p_cfg->output.sequence_frames > G_T20_SEQUENCE_FRAMES_MAX) {
         return false;
     }
 
@@ -693,7 +693,7 @@ void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_o
     }
 }
 
-void T20_buildVector39(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec)
+void T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec)
 {
     int idx = 0;
 
@@ -752,7 +752,7 @@ void T20_updateOutput(CL_T20_Mfcc::ST_Impl* p)
         return;
     }
 
-    T20_seqPush(&p->seq_rb, p->latest_feature.vector39);
+    T20_seqPush(&p->seq_rb, p->latest_feature.vector);
 
     if (p->cfg.output.sequence_flatten) {
         T20_seqExportFlatten(&p->seq_rb, p->latest_sequence_flat);

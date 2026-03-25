@@ -318,7 +318,7 @@ MFCC + Delta + Delta2 = 39차원
 
 ✅ 현재 구현
 
-T20_buildVector39()
+T20_buildVector()
 
 mfcc → delta → delta2
 

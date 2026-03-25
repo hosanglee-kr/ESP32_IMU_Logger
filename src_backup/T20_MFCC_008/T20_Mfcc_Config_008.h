@@ -21,7 +21,7 @@
 #define G_T20_MFCC_COEFFS                13
 #define G_T20_DELTA_WINDOW               2
 
-#define G_T20_FEATURE_DIM_TOTAL          39
+#define G_T20_FEATURE_DIM_DEFAULT          39
 
 #define G_T20_QUEUE_LEN                  4
 #define G_T20_SENSOR_TASK_STACK          6144

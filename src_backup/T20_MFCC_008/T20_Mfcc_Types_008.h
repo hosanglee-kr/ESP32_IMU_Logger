@@ -97,6 +97,20 @@ typedef struct
 // ============================================================================
 // [출력 구조체]
 // ============================================================================
+typedef struct
+{
+    uint16_t log_mel_len;   // 실제 사용된 log-mel 개수
+    uint16_t mfcc_len;      // 실제 사용된 mfcc 개수
+    uint16_t delta_len;
+    uint16_t delta2_len;
+    uint16_t vector_len;
+
+    float log_mel[G_T20_MEL_FILTERS];
+    float mfcc[G_T20_MFCC_COEFFS];
+    float delta[G_T20_MFCC_COEFFS];
+    float delta2[G_T20_MFCC_COEFFS];
+    float vector39[G_T20_FEATURE_DIM_DEFAULT];
+} ST_T20_FeatureVector2_t;
 
 typedef struct
 {
