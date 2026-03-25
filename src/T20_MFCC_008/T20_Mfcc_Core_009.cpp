@@ -325,16 +325,21 @@ void CL_T20_Mfcc::printLatest(Stream& p_out) const
     ST_T20_FeatureVector_t feat = _impl->latest_feature;
     xSemaphoreGive(_impl->mutex);
 
+
+    p_out.print(F("Log Mel      : "));
+    for (int i = 0; i < feat.log_mel_len; ++i) p_out.printf("%.4f ", feat.log_mel[i]);
+    p_out.println();
+    
     p_out.print(F("MFCC      : "));
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out.printf("%.4f ", feat.mfcc[i]);
+    for (int i = 0; i < feat.mfcc_len; ++i) p_out.printf("%.4f ", feat.mfcc[i]);
     p_out.println();
 
     p_out.print(F("Delta     : "));
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out.printf("%.4f ", feat.delta[i]);
+    for (int i = 0; i < feat.mfcc_len; ++i) p_out.printf("%.4f ", feat.delta[i]);
     p_out.println();
 
     p_out.print(F("DeltaDelta: "));
-    for (int i = 0; i < G_T20_MFCC_COEFFS; ++i) p_out.printf("%.4f ", feat.delta2[i]);
+    for (int i = 0; i < feat.mfcc_len; ++i) p_out.printf("%.4f ", feat.delta2[i]);
     p_out.println();
 }
 

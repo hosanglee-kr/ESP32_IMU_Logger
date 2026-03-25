@@ -380,5 +380,5 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfc
     T20_learnNoiseSpectrum(p, p->power);
     T20_applySpectralSubtraction(p, p->power);
     T20_applyMelFilterbank(p, p->power, p->log_mel);
-    T20_computeDCT2(p->log_mel, p_mfcc_out, G_T20_MEL_FILTERS, G_T20_MFCC_COEFFS);
+    T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
 }
