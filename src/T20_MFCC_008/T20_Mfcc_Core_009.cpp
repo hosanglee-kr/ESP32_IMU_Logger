@@ -87,8 +87,10 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
             break;
         }
 
-        T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
-
+        T20_seqInit(&_impl->seq_rb,
+            _impl->cfg.output.sequence_frames,
+            (uint16_t)(_impl->cfg.feature.mfcc_coeffs * 3));
+        
         ok = true;
     } while (0);
 
@@ -158,8 +160,11 @@ bool CL_T20_Mfcc::setConfig(const ST_T20_Config_t* p_cfg)
 
     _impl->cfg = *p_cfg;
     bool ok = T20_configureFilter(_impl);
-    T20_seqInit(&_impl->seq_rb, _impl->cfg.output.sequence_frames);
-
+    
+    T20_seqInit(&_impl->seq_rb,
+            _impl->cfg.output.sequence_frames,
+            (uint16_t)(_impl->cfg.feature.mfcc_coeffs * 3));
+            
     xSemaphoreGive(_impl->mutex);
     return ok;
 }
@@ -210,7 +215,7 @@ bool CL_T20_Mfcc::getLatestVector(float* p_out_vec, uint16_t p_len) const
     bool ok = _impl->latest_vector_valid;
     uint16_t need = _impl->latest_feature.vector_len;
 
-    if (!ok || p_len < need) {
+    if (!ok || need == 0 || p_len < need) {
         xSemaphoreGive(_impl->mutex);
         return false;
     }
@@ -245,7 +250,7 @@ bool CL_T20_Mfcc::getLatestSequenceFlat(float* p_out_seq, uint16_t p_len) const
         return false;
     }
 
-    uint16_t need = _impl->cfg.output.sequence_frames * G_T20_FEATURE_DIM_DEFAULT;
+    uint16_t need = _impl->cfg.output.sequence_frames * _impl->seq_rb.feature_dim;
     if (p_len < need) {
         xSemaphoreGive(_impl->mutex);
         return false;
@@ -499,7 +504,8 @@ bool T20_validateConfig(const ST_T20_Config_t* p_cfg)
         return false;
     }
 
-    if (p_cfg->feature.mfcc_coeffs != G_T20_MFCC_COEFFS) {
+    if (p_cfg->feature.mfcc_coeffs == 0 ||
+        p_cfg->feature.mfcc_coeffs > G_T20_MFCC_COEFFS_MAX) {
         return false;
     }
 

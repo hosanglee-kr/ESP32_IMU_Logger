@@ -126,9 +126,16 @@ float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p);
 void  T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc);
 void  T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out);
 void  T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out);
-void  T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_delta2, float* p_out_vec);
+void  T20_buildVector(const float* p_mfcc,
+                      const float* p_delta,
+                      const float* p_delta2,
+                      uint16_t p_dim,
+                      float* p_out_vec);
 
-void  T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames);
+void  T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb,
+                  uint16_t p_frames,
+                  uint16_t p_feature_dim);
+                  
 void  T20_seqPush(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec);
 bool  T20_seqIsReady(const ST_T20_FeatureRingBuffer_t* p_rb);
 void  T20_seqExportFlatten(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_flat);
