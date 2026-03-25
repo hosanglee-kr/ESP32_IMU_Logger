@@ -1,7 +1,7 @@
 #pragma once
 
 /* ============================================================================
- * File: T20_Mfcc_Def_010.h
+ * File: T20_Mfcc_Def_009.h
  * Summary:
  *   T20 MFCC / vibration feature module의 공개 정의 헤더
  *
