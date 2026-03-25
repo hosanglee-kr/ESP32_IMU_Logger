@@ -357,20 +357,23 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
     }
 }
 
-void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out)
+void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
+                     const ST_T20_Config_t* p_cfg,
+                     const float* p_frame,
+                     float* p_mfcc_out)
 {
     memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
 
-    if (p->cfg.preprocess.remove_dc) {
+    if (p_cfg->preprocess.remove_dc) {
         T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
     }
 
-    if (p->cfg.preprocess.preemphasis.enable) {
-        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
+    if (p_cfg->preprocess.preemphasis.enable) {
+        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p_cfg->preprocess.preemphasis.alpha);
     }
 
-    if (p->cfg.preprocess.noise.enable_gate) {
-        T20_applyNoiseGate(p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.noise.gate_threshold_abs);
+    if (p_cfg->preprocess.noise.enable_gate) {
+        T20_applyNoiseGate(p->temp_frame, G_T20_FFT_SIZE, p_cfg->preprocess.noise.gate_threshold_abs);
     }
 
     T20_applyBiquadFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
@@ -380,5 +383,5 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfc
     T20_learnNoiseSpectrum(p, p->power);
     T20_applySpectralSubtraction(p, p->power);
     T20_applyMelFilterbank(p, p->power, p->log_mel);
-    T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
+    T20_computeDCT2(p->log_mel, p_mfcc_out, p_cfg->feature.mel_filters, p_cfg->feature.mfcc_coeffs);
 }

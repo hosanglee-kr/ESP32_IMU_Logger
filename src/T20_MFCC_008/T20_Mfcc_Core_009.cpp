@@ -455,11 +455,10 @@ void T20_processTask(void* p_arg)
 
         memcpy(p->work_frame, p->frame_buffer[msg.frame_index], sizeof(float) * G_T20_FFT_SIZE);
 
-        float mfcc[G_T20_MFCC_COEFFS_MAX] = {0};
+        float mfcc[G_T20_MFCC_COEFFS_MAX]  = {0};
         float delta[G_T20_MFCC_COEFFS_MAX] = {0};
-        float delta2[G_T20_MFCC_COEFFS_MAX] = {0};
+        float delta2[G_T20_MFCC_COEFFS_MAX]= {0};
 
-        // 설정 스냅샷 확보
         ST_T20_Config_t cfg_snapshot;
         if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             cfg_snapshot = p->cfg;
@@ -468,22 +467,24 @@ void T20_processTask(void* p_arg)
             continue;
         }
 
-        T20_computeMFCC(p, p->work_frame, mfcc);
-        T20_pushMfccHistory(p, mfcc);
-        T20_computeDeltaFromHistory(p, delta);
-        T20_computeDeltaDeltaFromHistory(p, delta2);
+        uint16_t dim         = cfg_snapshot.feature.mfcc_coeffs;
+        uint16_t delta_win   = cfg_snapshot.feature.delta_window;
+        uint16_t mel_len     = cfg_snapshot.feature.mel_filters;
+        uint16_t vector_len  = (uint16_t)(dim * 3);
 
-        uint16_t dim = cfg_snapshot.feature.mfcc_coeffs;
-        uint16_t vector_len = (uint16_t)(dim * 3);
+        T20_computeMFCC(p, &cfg_snapshot, p->work_frame, mfcc);
+        T20_pushMfccHistory(p, mfcc, dim);
+        T20_computeDeltaFromHistory(p, dim, delta_win, delta);
+        T20_computeDeltaDeltaFromHistory(p, dim, delta2);
 
         if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            p->latest_feature.log_mel_len = cfg_snapshot.feature.mel_filters;
+            p->latest_feature.log_mel_len = mel_len;
             p->latest_feature.mfcc_len    = dim;
             p->latest_feature.delta_len   = dim;
             p->latest_feature.delta2_len  = dim;
             p->latest_feature.vector_len  = vector_len;
 
-            memcpy(p->latest_feature.log_mel, p->log_mel, sizeof(float) * cfg_snapshot.feature.mel_filters);
+            memcpy(p->latest_feature.log_mel, p->log_mel, sizeof(float) * mel_len);
             memcpy(p->latest_feature.mfcc,   mfcc,   sizeof(float) * dim);
             memcpy(p->latest_feature.delta,  delta,  sizeof(float) * dim);
             memcpy(p->latest_feature.delta2, delta2, sizeof(float) * dim);
@@ -678,33 +679,34 @@ float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p)
     }
 }
 
-void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc)
+void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p,
+                         const float* p_mfcc,
+                         uint16_t p_dim)
 {
-    uint16_t dim = p->cfg.feature.mfcc_coeffs;
-
     if (p->mfcc_history_count < G_T20_MFCC_HISTORY) {
-        memcpy(p->mfcc_history[p->mfcc_history_count], p_mfcc, sizeof(float) * dim);
+        memcpy(p->mfcc_history[p->mfcc_history_count], p_mfcc, sizeof(float) * p_dim);
         p->mfcc_history_count++;
     } else {
         for (int i = 0; i < G_T20_MFCC_HISTORY - 1; ++i) {
-            memcpy(p->mfcc_history[i], p->mfcc_history[i + 1], sizeof(float) * dim);
+            memcpy(p->mfcc_history[i], p->mfcc_history[i + 1], sizeof(float) * p_dim);
         }
-        memcpy(p->mfcc_history[G_T20_MFCC_HISTORY - 1], p_mfcc, sizeof(float) * dim);
+        memcpy(p->mfcc_history[G_T20_MFCC_HISTORY - 1], p_mfcc, sizeof(float) * p_dim);
     }
 }
 
-void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out)
+void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p,
+                                 uint16_t p_dim,
+                                 uint16_t p_delta_window,
+                                 float* p_delta_out)
 {
-    uint16_t dim = p->cfg.feature.mfcc_coeffs;
-
-    memset(p_delta_out, 0, sizeof(float) * dim);
+    memset(p_delta_out, 0, sizeof(float) * p_dim);
 
     if (p->mfcc_history_count < G_T20_MFCC_HISTORY) {
         return;
     }
 
     const int center = G_T20_MFCC_HISTORY / 2;
-    const int N = p->cfg.feature.delta_window;
+    const int N = p_delta_window;
 
     float den = 0.0f;
     for (int n = 1; n <= N; ++n) {
@@ -712,7 +714,7 @@ void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out)
     }
     den *= 2.0f;
 
-    for (uint16_t c = 0; c < dim; ++c) {
+    for (uint16_t c = 0; c < p_dim; ++c) {
         float num = 0.0f;
         for (int n = 1; n <= N; ++n) {
             float plus  = p->mfcc_history[center + n][c];
@@ -723,11 +725,11 @@ void T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out)
     }
 }
 
-void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out)
+void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p,
+                                      uint16_t p_dim,
+                                      float* p_delta2_out)
 {
-    uint16_t dim = p->cfg.feature.mfcc_coeffs;
-
-    memset(p_delta2_out, 0, sizeof(float) * dim);
+    memset(p_delta2_out, 0, sizeof(float) * p_dim);
 
     if (p->mfcc_history_count < G_T20_MFCC_HISTORY) {
         return;
@@ -735,7 +737,7 @@ void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_o
 
     const int center = G_T20_MFCC_HISTORY / 2;
 
-    for (uint16_t c = 0; c < dim; ++c) {
+    for (uint16_t c = 0; c < p_dim; ++c) {
         float prev = p->mfcc_history[center - 1][c];
         float curr = p->mfcc_history[center][c];
         float next = p->mfcc_history[center + 1][c];

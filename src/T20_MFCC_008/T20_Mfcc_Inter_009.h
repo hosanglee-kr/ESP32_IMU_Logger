@@ -123,9 +123,21 @@ void  T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p);
 void  T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p);
 
 float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p);
-void  T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc);
-void  T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta_out);
-void  T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, float* p_delta2_out);
+
+void  T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p,
+                          const float* p_mfcc,
+                          uint16_t p_dim);
+
+void  T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p,
+                                  uint16_t p_dim,
+                                  uint16_t p_delta_window,
+                                  float* p_delta_out);
+
+void  T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p,
+                                       uint16_t p_dim,
+                                       float* p_delta2_out);
+
+                      
 void  T20_buildVector(const float* p_mfcc,
                       const float* p_delta,
                       const float* p_delta2,
@@ -164,4 +176,8 @@ void  T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power);
 void  T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power);
 void  T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out);
 void  T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len);
-void  T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out);
+
+void  T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
+                      const ST_T20_Config_t* p_cfg,
+                      const float* p_frame,
+                      float* p_mfcc_out);
