@@ -20,6 +20,7 @@
   - window
   - noise_spectrum
   - current cfg filter coeff cache
+  - mel bank cache
 - frame-local snapshot:
   - cfg snapshot
   - filter coeff/state
@@ -128,7 +129,6 @@ bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
         return false;
     }
 
-    // 현재 cfg 기준 coeff cache 생성
     return T20_makeFilterCoeffs(&p->cfg, p->biquad_coeffs);
 }
 
@@ -149,7 +149,13 @@ bool T20_prepareDspSnapshot(CL_T20_Mfcc::ST_Impl* p,
 
     memset(p_snap->filter_state, 0, sizeof(p_snap->filter_state));
 
-    T20_buildMelFilterbankFromConfig(p_cfg, p_snap->mel_bank);
+    if (!T20_ensureMelBankCache(p, p_cfg)) {
+        return false;
+    }
+
+    memcpy(p_snap->mel_bank,
+           p->mel_bank_cache,
+           sizeof(p->mel_bank_cache));
 
     return true;
 }
@@ -202,6 +208,49 @@ bool T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out)
     }
 
     return (res == ESP_OK);
+}
+
+bool T20_isSameMelBankKey(const ST_T20_MelBankKey_t* p_a,
+                          const ST_T20_MelBankKey_t* p_b)
+{
+    if (p_a == nullptr || p_b == nullptr) {
+        return false;
+    }
+
+    return (p_a->fft_size == p_b->fft_size) &&
+           (p_a->sample_rate_hz == p_b->sample_rate_hz) &&
+           (p_a->mel_filters == p_b->mel_filters);
+}
+
+void T20_makeMelBankKey(const ST_T20_Config_t* p_cfg, ST_T20_MelBankKey_t* p_key_out)
+{
+    if (p_cfg == nullptr || p_key_out == nullptr) {
+        return;
+    }
+
+    p_key_out->fft_size       = p_cfg->feature.fft_size;
+    p_key_out->sample_rate_hz = p_cfg->feature.sample_rate_hz;
+    p_key_out->mel_filters    = p_cfg->feature.mel_filters;
+}
+
+bool T20_ensureMelBankCache(CL_T20_Mfcc::ST_Impl* p, const ST_T20_Config_t* p_cfg)
+{
+    if (p == nullptr || p_cfg == nullptr) {
+        return false;
+    }
+
+    ST_T20_MelBankKey_t new_key;
+    T20_makeMelBankKey(p_cfg, &new_key);
+
+    if (p->mel_cache_valid && T20_isSameMelBankKey(&p->mel_cache_key, &new_key)) {
+        return true;
+    }
+
+    T20_buildMelFilterbankFromConfig(p_cfg, p->mel_bank_cache);
+    p->mel_cache_key = new_key;
+    p->mel_cache_valid = true;
+
+    return true;
 }
 
 float T20_hzToMel(float p_hz)
@@ -497,8 +546,6 @@ void T20_computeMFCC_Snapshot(CL_T20_Mfcc::ST_Impl* p,
         return;
     }
 
-    // single-copy pipeline:
-    // raw frame -> temp_frame 으로 1회만 복사
     memcpy(p_snap->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
 
     if (p_snap->cfg.preprocess.remove_dc) {

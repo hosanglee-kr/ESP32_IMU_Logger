@@ -26,100 +26,36 @@
 // [기본 상수]
 // ============================================================================
 
-/*
- * 모듈 버전 문자열
- * - 로그 출력, 디버깅, 상태 출력 시 사용 가능
- */
 #define G_T20_VERSION_STR                "T20_Mfcc_010"
 
-/*
- * Raw frame buffer 개수
- * - Sensor task가 프레임 단위로 채우는 raw buffer 수
- * - Process task가 잠시 늦어질 때 흡수 가능한 여유 폭
- */
 #define G_T20_RAW_FRAME_BUFFERS          4
-
-/*
- * FFT 크기
- * - 반드시 2의 거듭제곱 사용
- * - 현재 256 samples
- * - 1600Hz 샘플링 기준 1 frame = 256 / 1600 = 160ms
- */
 #define G_T20_FFT_SIZE                   256
-
-/*
- * 기본 샘플링 주파수
- * - BMI270 accel ODR 1600Hz 기준
- */
 #define G_T20_SAMPLE_RATE_HZ             1600.0f
-
-/*
- * Mel filterbank 개수
- * - power spectrum을 mel scale로 투영할 때 사용
- */
 #define G_T20_MEL_FILTERS                26
 
-/*
- * MFCC 계수 수
- * - DEFAULT : 기본 설정값
- * - MAX     : 내부 고정 버퍼 최대 길이
- */
 #define G_T20_MFCC_COEFFS_DEFAULT        13
 #define G_T20_MFCC_COEFFS_MAX            32
 
-/*
- * Delta 계산 기본 window
- * - 중심 프레임 기준 ±N 프레임 사용
- */
 #define G_T20_DELTA_WINDOW               2
 
-/*
- * Sensor -> Process queue 길이
- */
 #define G_T20_QUEUE_LEN                  4
 
-/*
- * FreeRTOS task stack / priority
- */
 #define G_T20_SENSOR_TASK_STACK          6144
 #define G_T20_PROCESS_TASK_STACK         12288
 #define G_T20_SENSOR_TASK_PRIO           4
 #define G_T20_PROCESS_TASK_PRIO          3
 
-/*
- * Delta / Delta-Delta 계산용 history 깊이
- * - 현재 5 frame
- */
 #define G_T20_MFCC_HISTORY               5
-
-/*
- * Spectral subtraction 초기 noise profile 학습 최소 frame 수
- */
 #define G_T20_NOISE_MIN_FRAMES           8
 
-/*
- * Sequence frame 수
- * - DEFAULT : 기본 sequence frame 수
- * - MAX     : 내부 버퍼 최대 frame 수
- */
 #define G_T20_SEQUENCE_FRAMES_MAX        16
 #define G_T20_SEQUENCE_FRAMES_DEFAULT    8
 
-/*
- * Feature dimension
- * - vector = [mfcc | delta | delta2]
- */
 #define G_T20_FEATURE_DIM_DEFAULT        (G_T20_MFCC_COEFFS_DEFAULT * 3)
 #define G_T20_FEATURE_DIM_MAX            (G_T20_MFCC_COEFFS_MAX * 3)
 
-/*
- * BMI270 SPI 속도
- */
 #define G_T20_SPI_FREQ_HZ                10000000UL
 
-/*
- * 수학 상수
- */
 #define G_T20_PI                         3.14159265358979323846f
 #define G_T20_EPSILON                    1.0e-12f
 

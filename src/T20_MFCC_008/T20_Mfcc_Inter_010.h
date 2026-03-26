@@ -35,14 +35,6 @@
 ===============================================================================
 */
 
-/*
-===============================================================================
-[프레임 메시지]
--------------------------------------------------------------------------------
-Sensor task가 raw frame 하나를 모두 채운 뒤 Process task에 전달할 때 사용하는
-queue 메시지 구조체
-===============================================================================
-*/
 typedef struct
 {
     uint8_t frame_index;
@@ -50,25 +42,24 @@ typedef struct
 
 /*
 ===============================================================================
-[프레임 처리용 DSP Snapshot]
+[Mel Bank Cache Key]
 -------------------------------------------------------------------------------
-process task가 "한 프레임"을 처리하는 동안만 사용하는 작업 집합
+mel filterbank는 fft_size / sample_rate / mel_filters 조합에 의해 결정되므로
+이 3개 값이 동일하면 재생성이 불필요하다.
+===============================================================================
+*/
+typedef struct
+{
+    uint16_t fft_size;
+    float    sample_rate_hz;
+    uint16_t mel_filters;
+} ST_T20_MelBankKey_t;
 
-[목적]
-- cfg snapshot 기반으로 안전한 프레임 처리
-- setConfig()와 독립적인 처리 보장
-- 필터 / mel bank / working buffer / fft buffer를 프레임 처리 단위로 분리
-
-[구성]
-- cfg                 : 해당 프레임 처리 기준 설정 복사본
-- filter_coeffs       : snapshot 기준 필터 계수
-- filter_state        : snapshot 기준 필터 상태
-- temp_frame          : 전처리용 mutable 버퍼
-- work_frame          : 필터 출력 / FFT 입력 버퍼
-- fft_buffer          : complex FFT 버퍼
-- power               : power spectrum 버퍼
-- log_mel             : log mel energy 버퍼
-- mel_bank            : snapshot 기준 mel filterbank
+/*
+===============================================================================
+[DSP Snapshot]
+-------------------------------------------------------------------------------
+process task가 한 frame을 처리하는 동안만 사용하는 프레임 단위 작업 세트
 ===============================================================================
 */
 typedef struct
@@ -86,13 +77,6 @@ typedef struct
     float __attribute__((aligned(16))) mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE / 2) + 1];
 } ST_T20_DspSnapshot_t;
 
-/*
-===============================================================================
-[내부 구현체]
--------------------------------------------------------------------------------
-CL_T20_Mfcc의 실제 내부 상태를 보관하는 구현체
-===============================================================================
-*/
 struct CL_T20_Mfcc::ST_Impl
 {
     BMI270   imu;
@@ -109,29 +93,57 @@ struct CL_T20_Mfcc::ST_Impl
     ST_T20_Config_t cfg;
 
     /*
-     * Sensor task가 채우는 raw frame buffer
+     * sensor task fast-path에서 사용할 축 선택 캐시
+     * - setConfig()/begin()에서 갱신
+     */
+    volatile uint8_t active_axis;
+
+    /*
+     * 설정 변경 추적용 generation
+     * - begin()/setConfig()에서 증가
+     */
+    uint32_t cfg_generation;
+
+    /*
+     * Raw frame buffer
      */
     float __attribute__((aligned(16))) frame_buffer[G_T20_RAW_FRAME_BUFFERS][G_T20_FFT_SIZE];
 
     volatile uint8_t  active_fill_buffer;
     volatile uint16_t active_sample_index;
-    volatile uint32_t dropped_frames;
 
     /*
-     * 공유 immutable/long-lived DSP state
+     * 진단 카운터
+     */
+    volatile uint32_t dropped_frames_total;
+    volatile uint32_t dropped_frames_oldest;
+    volatile uint32_t dropped_frames_latest;
+    volatile uint32_t irq_notify_count;
+    volatile uint32_t sensor_frames_completed;
+    volatile uint32_t process_frames_completed;
+
+    /*
+     * Shared DSP tables / states
      */
     float __attribute__((aligned(16))) window[G_T20_FFT_SIZE];
     float __attribute__((aligned(16))) noise_spectrum[(G_T20_FFT_SIZE / 2) + 1];
-    float biquad_coeffs[5];   // 현재 cfg 기준 필터 계수 cache/debug 용도
+    float biquad_coeffs[5];
 
     /*
-     * Delta / Delta-Delta 계산용 MFCC history
+     * mel cache
+     */
+    ST_T20_MelBankKey_t mel_cache_key;
+    bool mel_cache_valid;
+    float __attribute__((aligned(16))) mel_bank_cache[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE / 2) + 1];
+
+    /*
+     * History
      */
     float __attribute__((aligned(16))) mfcc_history[G_T20_MFCC_HISTORY][G_T20_MFCC_COEFFS_MAX];
     uint16_t mfcc_history_count;
 
     /*
-     * 최신 출력
+     * Latest output
      */
     ST_T20_FeatureVector_t     latest_feature;
     ST_T20_FeatureRingBuffer_t seq_rb;
@@ -141,7 +153,7 @@ struct CL_T20_Mfcc::ST_Impl
     bool latest_sequence_valid;
 
     /*
-     * 기타 runtime state
+     * Runtime states
      */
     float prev_raw_sample;
     uint16_t noise_learned_frames;
@@ -158,20 +170,35 @@ struct CL_T20_Mfcc::ST_Impl
         running = false;
 
         cfg = T20_makeDefaultConfig();
+        active_axis = (uint8_t)cfg.preprocess.axis;
+        cfg_generation = 0U;
 
-        active_fill_buffer = 0;
-        active_sample_index = 0;
-        dropped_frames = 0;
-        mfcc_history_count = 0;
+        active_fill_buffer = 0U;
+        active_sample_index = 0U;
+
+        dropped_frames_total = 0U;
+        dropped_frames_oldest = 0U;
+        dropped_frames_latest = 0U;
+        irq_notify_count = 0U;
+        sensor_frames_completed = 0U;
+        process_frames_completed = 0U;
+
+        mfcc_history_count = 0U;
         prev_raw_sample = 0.0f;
-        noise_learned_frames = 0;
+        noise_learned_frames = 0U;
         latest_vector_valid = false;
         latest_sequence_valid = false;
+
+        mel_cache_key.fft_size = 0U;
+        mel_cache_key.sample_rate_hz = 0.0f;
+        mel_cache_key.mel_filters = 0U;
+        mel_cache_valid = false;
 
         memset(frame_buffer, 0, sizeof(frame_buffer));
         memset(window, 0, sizeof(window));
         memset(noise_spectrum, 0, sizeof(noise_spectrum));
         memset(biquad_coeffs, 0, sizeof(biquad_coeffs));
+        memset(mel_bank_cache, 0, sizeof(mel_bank_cache));
         memset(mfcc_history, 0, sizeof(mfcc_history));
         memset(&latest_feature, 0, sizeof(latest_feature));
         memset(&seq_rb, 0, sizeof(seq_rb));
@@ -182,7 +209,7 @@ struct CL_T20_Mfcc::ST_Impl
 extern CL_T20_Mfcc* g_t20_instance;
 
 // ============================================================================
-// [Core 계층 함수]
+// [Core]
 // ============================================================================
 
 bool T20_validateConfig(const ST_T20_Config_t* p_cfg);
@@ -193,6 +220,16 @@ void T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p);
 void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p);
 
 float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p);
+float T20_selectAxisSampleFromAxis(CL_T20_Mfcc::ST_Impl* p, uint8_t p_axis);
+
+bool T20_shouldResetHistoryOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                          const ST_T20_Config_t* p_new_cfg);
+
+bool T20_shouldResetNoiseOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                        const ST_T20_Config_t* p_new_cfg);
+
+bool T20_shouldResetSequenceOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                           const ST_T20_Config_t* p_new_cfg);
 
 void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p,
                          const float* p_mfcc,
@@ -223,7 +260,7 @@ void T20_seqExportFlatten(const ST_T20_FeatureRingBuffer_t* p_rb, float* p_out_f
 void T20_updateOutput(CL_T20_Mfcc::ST_Impl* p);
 
 // ============================================================================
-// [DSP 계층 함수]
+// [DSP]
 // ============================================================================
 
 bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p);
@@ -236,6 +273,13 @@ bool T20_prepareDspSnapshot(CL_T20_Mfcc::ST_Impl* p,
                             ST_T20_DspSnapshot_t* p_snap);
 
 bool T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out);
+
+bool T20_isSameMelBankKey(const ST_T20_MelBankKey_t* p_a,
+                          const ST_T20_MelBankKey_t* p_b);
+
+void T20_makeMelBankKey(const ST_T20_Config_t* p_cfg, ST_T20_MelBankKey_t* p_key_out);
+
+bool T20_ensureMelBankCache(CL_T20_Mfcc::ST_Impl* p, const ST_T20_Config_t* p_cfg);
 
 float T20_hzToMel(float p_hz);
 float T20_melToHz(float p_mel);

@@ -43,6 +43,8 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
         _impl->cfg = T20_makeDefaultConfig();
     }
 
+    _impl->active_axis = (uint8_t)_impl->cfg.preprocess.axis;
+
     bool ok = false;
 
     do {
@@ -83,6 +85,10 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
             break;
         }
 
+        if (!T20_ensureMelBankCache(_impl, &_impl->cfg)) {
+            break;
+        }
+
         if (!T20_configureFilter(_impl)) {
             break;
         }
@@ -90,6 +96,8 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg)
         T20_seqInit(&_impl->seq_rb,
                     _impl->cfg.output.sequence_frames,
                     (uint16_t)(_impl->cfg.feature.mfcc_coeffs * 3U));
+
+        _impl->cfg_generation++;
 
         ok = true;
     } while (0);
@@ -158,26 +166,46 @@ bool CL_T20_Mfcc::setConfig(const ST_T20_Config_t* p_cfg)
         return false;
     }
 
-    _impl->cfg = *p_cfg;
+    const ST_T20_Config_t old_cfg = _impl->cfg;
+    const ST_T20_Config_t new_cfg = *p_cfg;
 
-    bool ok = T20_configureFilter(_impl);
+    const bool reset_history  = T20_shouldResetHistoryOnConfigChange(&old_cfg, &new_cfg);
+    const bool reset_noise    = T20_shouldResetNoiseOnConfigChange(&old_cfg, &new_cfg);
+    const bool reset_sequence = T20_shouldResetSequenceOnConfigChange(&old_cfg, &new_cfg);
 
-    // 설정 변경 시 dimension/history/noise state 일관성 확보를 위해 관련 런타임 상태 초기화
-    _impl->mfcc_history_count = 0;
-    _impl->noise_learned_frames = 0;
-    _impl->prev_raw_sample = 0.0f;
-    _impl->latest_vector_valid = false;
-    _impl->latest_sequence_valid = false;
+    _impl->cfg = new_cfg;
+    _impl->active_axis = (uint8_t)_impl->cfg.preprocess.axis;
 
-    memset(_impl->mfcc_history, 0, sizeof(_impl->mfcc_history));
-    memset(_impl->noise_spectrum, 0, sizeof(_impl->noise_spectrum));
-    memset(&_impl->latest_feature, 0, sizeof(_impl->latest_feature));
-    memset(&_impl->seq_rb, 0, sizeof(_impl->seq_rb));
-    memset(_impl->latest_sequence_flat, 0, sizeof(_impl->latest_sequence_flat));
+    bool ok = T20_ensureMelBankCache(_impl, &_impl->cfg);
+    if (ok) {
+        ok = T20_configureFilter(_impl);
+    }
 
-    T20_seqInit(&_impl->seq_rb,
-                _impl->cfg.output.sequence_frames,
-                (uint16_t)(_impl->cfg.feature.mfcc_coeffs * 3U));
+    if (reset_history) {
+        _impl->mfcc_history_count = 0U;
+        _impl->prev_raw_sample = 0.0f;
+        memset(_impl->mfcc_history, 0, sizeof(_impl->mfcc_history));
+        _impl->latest_vector_valid = false;
+        memset(&_impl->latest_feature, 0, sizeof(_impl->latest_feature));
+    }
+
+    if (reset_noise) {
+        _impl->noise_learned_frames = 0U;
+        memset(_impl->noise_spectrum, 0, sizeof(_impl->noise_spectrum));
+    }
+
+    if (reset_sequence) {
+        _impl->latest_sequence_valid = false;
+        memset(_impl->latest_sequence_flat, 0, sizeof(_impl->latest_sequence_flat));
+
+        T20_seqInit(&_impl->seq_rb,
+                    _impl->cfg.output.sequence_frames,
+                    (uint16_t)(_impl->cfg.feature.mfcc_coeffs * 3U));
+    }
+
+    if (ok) {
+        _impl->cfg_generation++;
+    }
 
     xSemaphoreGive(_impl->mutex);
     return ok;
@@ -207,7 +235,7 @@ bool CL_T20_Mfcc::getLatestFeatureVector(ST_T20_FeatureVector_t* p_out) const
         return false;
     }
 
-    bool ok = _impl->latest_vector_valid;
+    const bool ok = _impl->latest_vector_valid;
     if (ok) {
         *p_out = _impl->latest_feature;
     }
@@ -304,6 +332,7 @@ void CL_T20_Mfcc::printConfig(Stream& p_out) const
     p_out.printf("Delta Window    : %u\n",   _impl->cfg.feature.delta_window);
     p_out.printf("Output Mode     : %s\n",   _impl->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR ? "VECTOR" : "SEQUENCE");
     p_out.printf("Seq Frames      : %u\n",   _impl->cfg.output.sequence_frames);
+    p_out.printf("Axis            : %u\n",   (unsigned)_impl->cfg.preprocess.axis);
     p_out.printf("PreEmphasis     : %s\n",   _impl->cfg.preprocess.preemphasis.enable ? "ON" : "OFF");
     p_out.printf("Noise Gate      : %s\n",   _impl->cfg.preprocess.noise.enable_gate ? "ON" : "OFF");
     p_out.printf("Spectral Sub    : %s\n",   _impl->cfg.preprocess.noise.enable_spectral_subtract ? "ON" : "OFF");
@@ -324,7 +353,13 @@ void CL_T20_Mfcc::printStatus(Stream& p_out) const
     p_out.println(F("----------- T20_Mfcc Status -----------"));
     p_out.printf("Initialized     : %s\n", _impl->initialized ? "YES" : "NO");
     p_out.printf("Running         : %s\n", _impl->running ? "YES" : "NO");
-    p_out.printf("Dropped Frames  : %lu\n", (unsigned long)_impl->dropped_frames);
+    p_out.printf("Cfg Generation  : %lu\n", (unsigned long)_impl->cfg_generation);
+    p_out.printf("IRQ Notify Cnt  : %lu\n", (unsigned long)_impl->irq_notify_count);
+    p_out.printf("Dropped Total   : %lu\n", (unsigned long)_impl->dropped_frames_total);
+    p_out.printf("Dropped Oldest  : %lu\n", (unsigned long)_impl->dropped_frames_oldest);
+    p_out.printf("Dropped Latest  : %lu\n", (unsigned long)_impl->dropped_frames_latest);
+    p_out.printf("Sensor Frames   : %lu\n", (unsigned long)_impl->sensor_frames_completed);
+    p_out.printf("Process Frames  : %lu\n", (unsigned long)_impl->process_frames_completed);
     p_out.printf("History Count   : %u\n",  _impl->mfcc_history_count);
     p_out.printf("Noise Learned   : %u\n",  _impl->noise_learned_frames);
     p_out.printf("Active Buffer   : %u\n",  _impl->active_fill_buffer);
@@ -334,6 +369,7 @@ void CL_T20_Mfcc::printStatus(Stream& p_out) const
     p_out.printf("Seq Full        : %s\n",  _impl->seq_rb.full ? "YES" : "NO");
     p_out.printf("Vector Valid    : %s\n",  _impl->latest_vector_valid ? "YES" : "NO");
     p_out.printf("Sequence Valid  : %s\n",  _impl->latest_sequence_valid ? "YES" : "NO");
+    p_out.printf("Mel Cache Valid : %s\n",  _impl->mel_cache_valid ? "YES" : "NO");
     p_out.println(F("---------------------------------------"));
 
     xSemaphoreGive(_impl->mutex);
@@ -398,6 +434,7 @@ void IRAM_ATTR T20_onBmiDrdyISR(void)
     BaseType_t hp_task_woken = pdFALSE;
 
     if (p != nullptr && p->sensor_task_handle != nullptr) {
+        p->irq_notify_count++;
         vTaskNotifyGiveFromISR(p->sensor_task_handle, &hp_task_woken);
     }
 
@@ -432,9 +469,10 @@ void T20_sensorTask(void* p_arg)
                 continue;
             }
 
-            const float sample = T20_selectAxisSample(p);
+            const uint8_t axis_snapshot = p->active_axis;
+            const float sample = T20_selectAxisSampleFromAxis(p, axis_snapshot);
 
-            const uint8_t  buf = p->active_fill_buffer;
+            const uint8_t buf = p->active_fill_buffer;
             uint16_t idx = p->active_sample_index;
 
             if (idx < G_T20_FFT_SIZE) {
@@ -448,21 +486,25 @@ void T20_sensorTask(void* p_arg)
                 msg.frame_index = buf;
 
                 if (xQueueSend(p->frame_queue, &msg, 0) != pdTRUE) {
-                    // queue full -> oldest frame 제거 후 latest frame 삽입 시도
                     ST_T20_FrameMessage_t old_msg;
                     if (xQueueReceive(p->frame_queue, &old_msg, 0) == pdTRUE) {
-                        p->dropped_frames++; // oldest frame drop
+                        p->dropped_frames_total++;
+                        p->dropped_frames_oldest++;
 
                         if (xQueueSend(p->frame_queue, &msg, 0) != pdTRUE) {
-                            p->dropped_frames++; // latest frame도 못 넣음
+                            p->dropped_frames_total++;
+                            p->dropped_frames_latest++;
                         }
                     } else {
-                        p->dropped_frames++;
+                        p->dropped_frames_total++;
+                        p->dropped_frames_latest++;
                     }
+                } else {
+                    p->sensor_frames_completed++;
                 }
 
                 p->active_fill_buffer = (uint8_t)((buf + 1U) % G_T20_RAW_FRAME_BUFFERS);
-                p->active_sample_index = 0;
+                p->active_sample_index = 0U;
             }
         }
     }
@@ -499,8 +541,6 @@ void T20_processTask(void* p_arg)
         float delta[G_T20_MFCC_COEFFS_MAX]  = {0};
         float delta2[G_T20_MFCC_COEFFS_MAX] = {0};
 
-        // single-copy pipeline:
-        // raw frame buffer를 직접 참조하고, temp_frame으로 1회만 복사
         const float* frame_ptr = p->frame_buffer[msg.frame_index];
 
         T20_computeMFCC_Snapshot(p, &dsp_snapshot, frame_ptr, mfcc);
@@ -541,6 +581,7 @@ void T20_processTask(void* p_arg)
             p->latest_vector_valid = true;
 
             T20_updateOutput(p);
+            p->process_frames_completed++;
 
             xSemaphoreGive(p->mutex);
         }
@@ -679,19 +720,35 @@ void T20_clearRuntimeState(CL_T20_Mfcc::ST_Impl* p)
 
     p->initialized = false;
     p->running = false;
-    p->active_fill_buffer = 0;
-    p->active_sample_index = 0;
-    p->dropped_frames = 0;
-    p->mfcc_history_count = 0;
-    p->noise_learned_frames = 0;
+    p->active_axis = (uint8_t)EN_T20_AXIS_Z;
+    p->cfg_generation = 0U;
+
+    p->active_fill_buffer = 0U;
+    p->active_sample_index = 0U;
+
+    p->dropped_frames_total = 0U;
+    p->dropped_frames_oldest = 0U;
+    p->dropped_frames_latest = 0U;
+    p->irq_notify_count = 0U;
+    p->sensor_frames_completed = 0U;
+    p->process_frames_completed = 0U;
+
+    p->mfcc_history_count = 0U;
+    p->noise_learned_frames = 0U;
     p->latest_vector_valid = false;
     p->latest_sequence_valid = false;
     p->prev_raw_sample = 0.0f;
+
+    p->mel_cache_key.fft_size = 0U;
+    p->mel_cache_key.sample_rate_hz = 0.0f;
+    p->mel_cache_key.mel_filters = 0U;
+    p->mel_cache_valid = false;
 
     memset(p->frame_buffer, 0, sizeof(p->frame_buffer));
     memset(p->window, 0, sizeof(p->window));
     memset(p->noise_spectrum, 0, sizeof(p->noise_spectrum));
     memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
+    memset(p->mel_bank_cache, 0, sizeof(p->mel_bank_cache));
     memset(p->mfcc_history, 0, sizeof(p->mfcc_history));
     memset(&p->latest_feature, 0, sizeof(p->latest_feature));
     memset(&p->seq_rb, 0, sizeof(p->seq_rb));
@@ -711,13 +768,81 @@ void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p)
 
 float T20_selectAxisSample(CL_T20_Mfcc::ST_Impl* p)
 {
-    switch (p->cfg.preprocess.axis) {
+    if (p == nullptr) {
+        return 0.0f;
+    }
+    return T20_selectAxisSampleFromAxis(p, (uint8_t)p->cfg.preprocess.axis);
+}
+
+float T20_selectAxisSampleFromAxis(CL_T20_Mfcc::ST_Impl* p, uint8_t p_axis)
+{
+    if (p == nullptr) {
+        return 0.0f;
+    }
+
+    switch ((EM_T20_AxisType_t)p_axis) {
         case EN_T20_AXIS_X: return p->imu.data.accelX;
         case EN_T20_AXIS_Y: return p->imu.data.accelY;
         case EN_T20_AXIS_Z:
         default:
             return p->imu.data.accelZ;
     }
+}
+
+bool T20_shouldResetHistoryOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                          const ST_T20_Config_t* p_new_cfg)
+{
+    if (p_old_cfg == nullptr || p_new_cfg == nullptr) {
+        return true;
+    }
+
+    if (p_old_cfg->feature.mfcc_coeffs != p_new_cfg->feature.mfcc_coeffs) return true;
+    if (p_old_cfg->feature.delta_window != p_new_cfg->feature.delta_window) return true;
+
+    if (p_old_cfg->preprocess.axis != p_new_cfg->preprocess.axis) return true;
+    if (p_old_cfg->preprocess.remove_dc != p_new_cfg->preprocess.remove_dc) return true;
+    if (p_old_cfg->preprocess.preemphasis.enable != p_new_cfg->preprocess.preemphasis.enable) return true;
+    if (p_old_cfg->preprocess.preemphasis.alpha  != p_new_cfg->preprocess.preemphasis.alpha) return true;
+
+    return false;
+}
+
+bool T20_shouldResetNoiseOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                        const ST_T20_Config_t* p_new_cfg)
+{
+    if (p_old_cfg == nullptr || p_new_cfg == nullptr) {
+        return true;
+    }
+
+    if (p_old_cfg->feature.sample_rate_hz != p_new_cfg->feature.sample_rate_hz) return true;
+    if (p_old_cfg->feature.mel_filters    != p_new_cfg->feature.mel_filters) return true;
+
+    if (p_old_cfg->preprocess.filter.enable      != p_new_cfg->preprocess.filter.enable) return true;
+    if (p_old_cfg->preprocess.filter.type        != p_new_cfg->preprocess.filter.type) return true;
+    if (p_old_cfg->preprocess.filter.cutoff_hz_1 != p_new_cfg->preprocess.filter.cutoff_hz_1) return true;
+    if (p_old_cfg->preprocess.filter.cutoff_hz_2 != p_new_cfg->preprocess.filter.cutoff_hz_2) return true;
+    if (p_old_cfg->preprocess.filter.q_factor    != p_new_cfg->preprocess.filter.q_factor) return true;
+
+    if (p_old_cfg->preprocess.noise.enable_spectral_subtract != p_new_cfg->preprocess.noise.enable_spectral_subtract) return true;
+    if (p_old_cfg->preprocess.noise.spectral_subtract_strength != p_new_cfg->preprocess.noise.spectral_subtract_strength) return true;
+    if (p_old_cfg->preprocess.noise.noise_learn_frames != p_new_cfg->preprocess.noise.noise_learn_frames) return true;
+
+    return false;
+}
+
+bool T20_shouldResetSequenceOnConfigChange(const ST_T20_Config_t* p_old_cfg,
+                                           const ST_T20_Config_t* p_new_cfg)
+{
+    if (p_old_cfg == nullptr || p_new_cfg == nullptr) {
+        return true;
+    }
+
+    if (p_old_cfg->output.output_mode != p_new_cfg->output.output_mode) return true;
+    if (p_old_cfg->output.sequence_frames != p_new_cfg->output.sequence_frames) return true;
+    if (p_old_cfg->output.sequence_flatten != p_new_cfg->output.sequence_flatten) return true;
+    if (p_old_cfg->feature.mfcc_coeffs != p_new_cfg->feature.mfcc_coeffs) return true;
+
+    return false;
 }
 
 void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p,
@@ -811,7 +936,7 @@ void T20_buildVector(const float* p_mfcc,
         return;
     }
 
-    uint16_t idx = 0;
+    uint16_t idx = 0U;
 
     for (uint16_t i = 0; i < p_dim; ++i) p_out_vec[idx++] = p_mfcc[i];
     for (uint16_t i = 0; i < p_dim; ++i) p_out_vec[idx++] = p_delta[i];
@@ -829,7 +954,7 @@ void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb,
     memset(p_rb, 0, sizeof(ST_T20_FeatureRingBuffer_t));
     p_rb->frames = p_frames;
     p_rb->feature_dim = p_feature_dim;
-    p_rb->head = 0;
+    p_rb->head = 0U;
     p_rb->full = false;
 }
 
@@ -844,7 +969,7 @@ void T20_seqPush(ST_T20_FeatureRingBuffer_t* p_rb, const float* p_feature_vec)
 
     p_rb->head++;
     if (p_rb->head >= p_rb->frames) {
-        p_rb->head = 0;
+        p_rb->head = 0U;
         p_rb->full = true;
     }
 }
