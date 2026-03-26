@@ -14,29 +14,50 @@
 - BMI270 SPI / interrupt pin / filter 설정
 - Window / FFT / Mel Filterbank / DCT-II
 - MFCC 전처리 및 특징 추출 파이프라인
+
+[구조]
+- shared impl:
+  - window
+  - noise_spectrum
+  - current cfg filter coeff cache
+- frame-local snapshot:
+  - cfg snapshot
+  - filter coeff/state
+  - temp/work/fft/power/logmel/melbank
 ===============================================================================
 */
 
 bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p)
 {
+    if (p == nullptr) {
+        return false;
+    }
+
     esp_err_t res = dsps_fft2r_init_fc32(NULL, G_T20_FFT_SIZE);
     if (res != ESP_OK) {
         return false;
     }
 
     T20_buildHammingWindow(p);
-    T20_buildMelFilterbank(p);
     return true;
 }
 
 bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p)
 {
-    int8_t rslt = p->imu.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
+    if (p == nullptr) {
+        return false;
+    }
+
+    const int8_t rslt = p->imu.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
     return (rslt == BMI2_OK);
 }
 
 bool T20_configBMI270_1600Hz_DRDY(CL_T20_Mfcc::ST_Impl* p)
 {
+    if (p == nullptr) {
+        return false;
+    }
+
     int8_t rslt = BMI2_OK;
 
     rslt = p->imu.setAccelODR(BMI2_ACC_ODR_1600HZ);
@@ -107,16 +128,30 @@ bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
         return false;
     }
 
-    // [의도]
-    // - 현재 cfg 기준으로 "기본 coeff" 준비 (디버그/참조용)
-    // - runtime processing은 snapshot 기반으로 별도 생성
+    // 현재 cfg 기준 coeff cache 생성
+    return T20_makeFilterCoeffs(&p->cfg, p->biquad_coeffs);
+}
 
-    bool ok = T20_makeFilterCoeffs(&p->cfg, p->biquad_coeffs);
+bool T20_prepareDspSnapshot(CL_T20_Mfcc::ST_Impl* p,
+                            const ST_T20_Config_t* p_cfg,
+                            ST_T20_DspSnapshot_t* p_snap)
+{
+    if (p == nullptr || p_cfg == nullptr || p_snap == nullptr) {
+        return false;
+    }
 
-    // runtime state reset (프레임 경계 깨짐 방지)
-    memset(p->biquad_state_runtime, 0, sizeof(p->biquad_state_runtime));
+    memset(p_snap, 0, sizeof(ST_T20_DspSnapshot_t));
+    p_snap->cfg = *p_cfg;
 
-    return ok;
+    if (!T20_makeFilterCoeffs(p_cfg, p_snap->filter_coeffs)) {
+        return false;
+    }
+
+    memset(p_snap->filter_state, 0, sizeof(p_snap->filter_state));
+
+    T20_buildMelFilterbankFromConfig(p_cfg, p_snap->mel_bank);
+
+    return true;
 }
 
 bool T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out)
@@ -127,43 +162,47 @@ bool T20_makeFilterCoeffs(const ST_T20_Config_t* p_cfg, float* p_coeffs_out)
 
     if (!p_cfg->preprocess.filter.enable ||
         p_cfg->preprocess.filter.type == EN_T20_FILTER_OFF) {
-        memset(p_coeffs_out, 0, sizeof(float) * 5);
+        memset(p_coeffs_out, 0, sizeof(float) * 5U);
         return true;
     }
 
-    float fs = p_cfg->feature.sample_rate_hz;
-    float q  = (p_cfg->preprocess.filter.q_factor <= 0.0f) ? 0.707f : p_cfg->preprocess.filter.q_factor;
+    const float fs = p_cfg->feature.sample_rate_hz;
+    const float q  = (p_cfg->preprocess.filter.q_factor <= 0.0f)
+        ? 0.707f
+        : p_cfg->preprocess.filter.q_factor;
+
     esp_err_t res = ESP_OK;
 
     if (p_cfg->preprocess.filter.type == EN_T20_FILTER_LPF) {
-        float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
+        const float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
         res = dsps_biquad_gen_lpf_f32(p_coeffs_out, norm, q);
     }
     else if (p_cfg->preprocess.filter.type == EN_T20_FILTER_HPF) {
-        float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
+        const float norm = p_cfg->preprocess.filter.cutoff_hz_1 / fs;
         res = dsps_biquad_gen_hpf_f32(p_coeffs_out, norm, q);
     }
     else {
-        float low  = p_cfg->preprocess.filter.cutoff_hz_1;
-        float high = p_cfg->preprocess.filter.cutoff_hz_2;
+        const float low  = p_cfg->preprocess.filter.cutoff_hz_1;
+        const float high = p_cfg->preprocess.filter.cutoff_hz_2;
 
         if (high <= low) {
             return false;
         }
 
-        float center_hz   = sqrtf(low * high);
-        float bw_hz       = high - low;
-        float q_bpf       = center_hz / (bw_hz + G_T20_EPSILON);
-        float center_norm = center_hz / fs;
+        const float center_hz   = sqrtf(low * high);
+        const float bw_hz       = high - low;
+        float q_bpf             = center_hz / (bw_hz + G_T20_EPSILON);
+        const float center_norm = center_hz / fs;
 
-        if (q_bpf < 0.1f) q_bpf = 0.1f;
+        if (q_bpf < 0.1f) {
+            q_bpf = 0.1f;
+        }
 
         res = dsps_biquad_gen_bpf_f32(p_coeffs_out, center_norm, q_bpf);
     }
 
     return (res == ESP_OK);
 }
-
 
 float T20_hzToMel(float p_hz)
 {
@@ -177,19 +216,32 @@ float T20_melToHz(float p_mel)
 
 void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p)
 {
+    if (p == nullptr) {
+        return;
+    }
+
     for (int i = 0; i < G_T20_FFT_SIZE; ++i) {
         p->window[i] =
             0.54f - 0.46f * cosf((2.0f * G_T20_PI * (float)i) / (float)(G_T20_FFT_SIZE - 1));
     }
 }
 
-void T20_buildMelFilterbank(CL_T20_Mfcc::ST_Impl* p)
+void T20_buildMelFilterbankFromConfig(
+    const ST_T20_Config_t* p_cfg,
+    float p_mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE / 2) + 1])
 {
-    memset(p->mel_bank, 0, sizeof(p->mel_bank));
+    if (p_cfg == nullptr || p_mel_bank == nullptr) {
+        return;
+    }
+
+    memset(p_mel_bank,
+           0,
+           sizeof(float) * G_T20_MEL_FILTERS * ((G_T20_FFT_SIZE / 2) + 1U));
 
     const int   num_bins = (G_T20_FFT_SIZE / 2) + 1;
     const float f_min = 0.0f;
-    const float f_max = p->cfg.feature.sample_rate_hz * 0.5f;
+    const float f_max = p_cfg->feature.sample_rate_hz * 0.5f;
+    const int   mel_filters = (int)p_cfg->feature.mel_filters;
 
     float mel_min = T20_hzToMel(f_min);
     float mel_max = T20_hzToMel(f_max);
@@ -198,18 +250,18 @@ void T20_buildMelFilterbank(CL_T20_Mfcc::ST_Impl* p)
     float hz_points[G_T20_MEL_FILTERS + 2];
     int   bin_points[G_T20_MEL_FILTERS + 2];
 
-    for (int i = 0; i < G_T20_MEL_FILTERS + 2; ++i) {
-        float ratio = (float)i / (float)(G_T20_MEL_FILTERS + 1);
+    for (int i = 0; i < mel_filters + 2; ++i) {
+        const float ratio = (float)i / (float)(mel_filters + 1);
         mel_points[i] = mel_min + (mel_max - mel_min) * ratio;
         hz_points[i] = T20_melToHz(mel_points[i]);
 
-        int bin = (int)floorf(((float)G_T20_FFT_SIZE + 1.0f) * hz_points[i] / p->cfg.feature.sample_rate_hz);
+        int bin = (int)floorf(((float)G_T20_FFT_SIZE + 1.0f) * hz_points[i] / p_cfg->feature.sample_rate_hz);
         if (bin < 0) bin = 0;
         if (bin >= num_bins) bin = num_bins - 1;
         bin_points[i] = bin;
     }
 
-    for (int m = 0; m < G_T20_MEL_FILTERS; ++m) {
+    for (int m = 0; m < mel_filters; ++m) {
         int left   = bin_points[m];
         int center = bin_points[m + 1];
         int right  = bin_points[m + 2];
@@ -219,17 +271,21 @@ void T20_buildMelFilterbank(CL_T20_Mfcc::ST_Impl* p)
         if (right >= num_bins) right = num_bins - 1;
 
         for (int k = left; k < center; ++k) {
-            p->mel_bank[m][k] = (float)(k - left) / (float)(center - left);
+            p_mel_bank[m][k] = (float)(k - left) / (float)(center - left);
         }
 
         for (int k = center; k <= right; ++k) {
-            p->mel_bank[m][k] = (float)(right - k) / (float)(right - center + 1e-6f);
+            p_mel_bank[m][k] = (float)(right - k) / (float)(right - center + 1e-6f);
         }
     }
 }
 
 void T20_applyDCRemove(float* p_data, uint16_t p_len)
 {
+    if (p_data == nullptr || p_len == 0U) {
+        return;
+    }
+
     float mean = 0.0f;
     for (uint16_t i = 0; i < p_len; ++i) {
         mean += p_data[i];
@@ -241,12 +297,19 @@ void T20_applyDCRemove(float* p_data, uint16_t p_len)
     }
 }
 
-void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha)
+void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p,
+                          float* p_data,
+                          uint16_t p_len,
+                          float p_alpha)
 {
+    if (p == nullptr || p_data == nullptr || p_len == 0U) {
+        return;
+    }
+
     float prev = p->prev_raw_sample;
 
     for (uint16_t i = 0; i < p_len; ++i) {
-        float cur = p_data[i];
+        const float cur = p_data[i];
         p_data[i] = cur - (p_alpha * prev);
         prev = cur;
     }
@@ -256,6 +319,10 @@ void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len
 
 void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs)
 {
+    if (p_data == nullptr || p_len == 0U) {
+        return;
+    }
+
     for (uint16_t i = 0; i < p_len; ++i) {
         if (fabsf(p_data[i]) < p_threshold_abs) {
             p_data[i] = 0.0f;
@@ -281,49 +348,66 @@ void T20_applyBiquadFilter(const ST_T20_Config_t* p_cfg,
         return;
     }
 
-    dsps_biquad_f32(p_in, p_out, p_len, p_coeffs, p_state);
+    dsps_biquad_f32(p_in, p_out, (int)p_len, p_coeffs, p_state);
 }
 
-void T20_applyWindow(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len)
+void T20_applyWindowWithTable(const float* p_window, float* p_data, uint16_t p_len)
 {
+    if (p_window == nullptr || p_data == nullptr || p_len == 0U) {
+        return;
+    }
+
     for (uint16_t i = 0; i < p_len; ++i) {
-        p_data[i] *= p->window[i];
+        p_data[i] *= p_window[i];
     }
 }
 
-void T20_computePowerSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power)
+void T20_computePowerSpectrumSnapshot(ST_T20_DspSnapshot_t* p_snap,
+                                      const float* p_time,
+                                      float* p_power)
 {
-    for (int i = 0; i < G_T20_FFT_SIZE; ++i) {
-        p->fft_buffer[2 * i + 0] = p_time[i];
-        p->fft_buffer[2 * i + 1] = 0.0f;
+    if (p_snap == nullptr || p_time == nullptr || p_power == nullptr) {
+        return;
     }
 
-    dsps_fft2r_fc32(p->fft_buffer, G_T20_FFT_SIZE);
-    dsps_bit_rev_fc32(p->fft_buffer, G_T20_FFT_SIZE);
+    for (int i = 0; i < G_T20_FFT_SIZE; ++i) {
+        p_snap->fft_buffer[2 * i + 0] = p_time[i];
+        p_snap->fft_buffer[2 * i + 1] = 0.0f;
+    }
+
+    dsps_fft2r_fc32(p_snap->fft_buffer, G_T20_FFT_SIZE);
+    dsps_bit_rev_fc32(p_snap->fft_buffer, G_T20_FFT_SIZE);
 
     for (int k = 0; k <= (G_T20_FFT_SIZE / 2); ++k) {
-        float re = p->fft_buffer[2 * k + 0];
-        float im = p->fft_buffer[2 * k + 1];
+        const float re = p_snap->fft_buffer[2 * k + 0];
+        const float im = p_snap->fft_buffer[2 * k + 1];
         float pw = (re * re + im * im) / (float)G_T20_FFT_SIZE;
 
         if (pw < G_T20_EPSILON) {
             pw = G_T20_EPSILON;
         }
+
         p_power[k] = pw;
     }
 }
 
-void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power)
+void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p,
+                            const ST_T20_Config_t* p_cfg,
+                            const float* p_power)
 {
-    if (!p->cfg.preprocess.noise.enable_spectral_subtract) {
+    if (p == nullptr || p_cfg == nullptr || p_power == nullptr) {
         return;
     }
 
-    if (p->noise_learned_frames >= p->cfg.preprocess.noise.noise_learn_frames) {
+    if (!p_cfg->preprocess.noise.enable_spectral_subtract) {
         return;
     }
 
-    uint16_t count = p->noise_learned_frames;
+    if (p->noise_learned_frames >= p_cfg->preprocess.noise.noise_learn_frames) {
+        return;
+    }
+
+    const uint16_t count = p->noise_learned_frames;
 
     for (int k = 0; k <= (G_T20_FFT_SIZE / 2); ++k) {
         p->noise_spectrum[k] =
@@ -333,17 +417,23 @@ void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power)
     p->noise_learned_frames++;
 }
 
-void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power)
+void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p,
+                                  const ST_T20_Config_t* p_cfg,
+                                  float* p_power)
 {
-    if (!p->cfg.preprocess.noise.enable_spectral_subtract) {
+    if (p == nullptr || p_cfg == nullptr || p_power == nullptr) {
         return;
     }
 
-    if (p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames) {
+    if (!p_cfg->preprocess.noise.enable_spectral_subtract) {
         return;
     }
 
-    float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
+    if (p->noise_learned_frames < p_cfg->preprocess.noise.noise_learn_frames) {
+        return;
+    }
+
+    const float strength = p_cfg->preprocess.noise.spectral_subtract_strength;
 
     for (int k = 0; k <= (G_T20_FFT_SIZE / 2); ++k) {
         float sub = p_power[k] - (strength * p->noise_spectrum[k]);
@@ -354,15 +444,22 @@ void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power)
     }
 }
 
-void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out)
+void T20_applyMelFilterbankSnapshot(ST_T20_DspSnapshot_t* p_snap,
+                                    const float* p_power,
+                                    float* p_log_mel_out)
 {
-    const int num_bins = (G_T20_FFT_SIZE / 2) + 1;
+    if (p_snap == nullptr || p_power == nullptr || p_log_mel_out == nullptr) {
+        return;
+    }
 
-    for (int m = 0; m < G_T20_MEL_FILTERS; ++m) {
+    const int num_bins = (G_T20_FFT_SIZE / 2) + 1;
+    const int mel_filters = (int)p_snap->cfg.feature.mel_filters;
+
+    for (int m = 0; m < mel_filters; ++m) {
         float sum = 0.0f;
 
         for (int k = 0; k < num_bins; ++k) {
-            sum += p_power[k] * p->mel_bank[m][k];
+            sum += p_power[k] * p_snap->mel_bank[m][k];
         }
 
         if (sum < G_T20_EPSILON) {
@@ -373,8 +470,15 @@ void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float
     }
 }
 
-void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len)
+void T20_computeDCT2(const float* p_in,
+                     float* p_out,
+                     uint16_t p_in_len,
+                     uint16_t p_out_len)
 {
+    if (p_in == nullptr || p_out == nullptr || p_in_len == 0U || p_out_len == 0U) {
+        return;
+    }
+
     for (uint16_t n = 0; n < p_out_len; ++n) {
         float sum = 0.0f;
         for (uint16_t k = 0; k < p_in_len; ++k) {
@@ -384,39 +488,54 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
     }
 }
 
-void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p,
-                     const ST_T20_Config_t* p_cfg,
-                     float* p_filter_coeffs,
-                     float* p_filter_state,
-                     const float* p_frame,
-                     float* p_mfcc_out)
+void T20_computeMFCC_Snapshot(CL_T20_Mfcc::ST_Impl* p,
+                              ST_T20_DspSnapshot_t* p_snap,
+                              const float* p_frame,
+                              float* p_mfcc_out)
 {
-    memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
-
-    if (p_cfg->preprocess.remove_dc) {
-        T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
+    if (p == nullptr || p_snap == nullptr || p_frame == nullptr || p_mfcc_out == nullptr) {
+        return;
     }
 
-    if (p_cfg->preprocess.preemphasis.enable) {
-        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p_cfg->preprocess.preemphasis.alpha);
+    // single-copy pipeline:
+    // raw frame -> temp_frame 으로 1회만 복사
+    memcpy(p_snap->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
+
+    if (p_snap->cfg.preprocess.remove_dc) {
+        T20_applyDCRemove(p_snap->temp_frame, G_T20_FFT_SIZE);
     }
 
-    if (p_cfg->preprocess.noise.enable_gate) {
-        T20_applyNoiseGate(p->temp_frame, G_T20_FFT_SIZE, p_cfg->preprocess.noise.gate_threshold_abs);
+    if (p_snap->cfg.preprocess.preemphasis.enable) {
+        T20_applyPreEmphasis(p,
+                             p_snap->temp_frame,
+                             G_T20_FFT_SIZE,
+                             p_snap->cfg.preprocess.preemphasis.alpha);
     }
 
-    T20_applyBiquadFilter(p_cfg,
-                          p_filter_coeffs,
-                          p_filter_state,
-                          p->temp_frame,
-                          p->work_frame,
+    if (p_snap->cfg.preprocess.noise.enable_gate) {
+        T20_applyNoiseGate(p_snap->temp_frame,
+                           G_T20_FFT_SIZE,
+                           p_snap->cfg.preprocess.noise.gate_threshold_abs);
+    }
+
+    T20_applyBiquadFilter(&p_snap->cfg,
+                          p_snap->filter_coeffs,
+                          p_snap->filter_state,
+                          p_snap->temp_frame,
+                          p_snap->work_frame,
                           G_T20_FFT_SIZE);
 
-    T20_applyWindow(p, p->work_frame, G_T20_FFT_SIZE);
-    T20_computePowerSpectrum(p, p->work_frame, p->power);
+    T20_applyWindowWithTable(p->window, p_snap->work_frame, G_T20_FFT_SIZE);
 
-    T20_learnNoiseSpectrum(p, p->power);
-    T20_applySpectralSubtraction(p, p->power);
-    T20_applyMelFilterbank(p, p->power, p->log_mel);
-    T20_computeDCT2(p->log_mel, p_mfcc_out, p_cfg->feature.mel_filters, p_cfg->feature.mfcc_coeffs);
+    T20_computePowerSpectrumSnapshot(p_snap, p_snap->work_frame, p_snap->power);
+
+    T20_learnNoiseSpectrum(p, &p_snap->cfg, p_snap->power);
+    T20_applySpectralSubtraction(p, &p_snap->cfg, p_snap->power);
+
+    T20_applyMelFilterbankSnapshot(p_snap, p_snap->power, p_snap->log_mel);
+
+    T20_computeDCT2(p_snap->log_mel,
+                    p_mfcc_out,
+                    p_snap->cfg.feature.mel_filters,
+                    p_snap->cfg.feature.mfcc_coeffs);
 }
