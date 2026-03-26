@@ -3,8 +3,6 @@
 #include <Arduino.h>
 #include "T20_Mfcc_Def_010.h"
 
-
-
 /*
 ===============================================================================
 소스명: T20_Mfcc_010.h
@@ -31,7 +29,7 @@
    - Sequence Mode : 최근 N프레임 ring buffer sequence
 6. 운영/진단 API
    - printConfig() : 샘플링/필터/출력모드 출력
-   - printStatus() : dropped frame, runtime 상태 출력
+   - printStatus() : dropped frame, generation, runtime 상태 출력
    - printLatest() : 최신 특징값 출력
 
 [정책]
@@ -46,6 +44,9 @@
 4. processTask
    - cfg snapshot + dsp snapshot 기반으로 frame 단위 처리
    - setConfig()와 독립적으로 한 frame 처리 완료 가능
+5. generation 관리
+   - history / noise / latest output에 generation 추적을 두어
+     설정 변경 직후 old/new state 혼합을 방지
 ===============================================================================
 */
 

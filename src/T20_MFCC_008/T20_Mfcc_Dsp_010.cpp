@@ -14,17 +14,8 @@
 - BMI270 SPI / interrupt pin / filter 설정
 - Window / FFT / Mel Filterbank / DCT-II
 - MFCC 전처리 및 특징 추출 파이프라인
-
-[구조]
-- shared impl:
-  - window
-  - noise_spectrum
-  - current cfg filter coeff cache
-  - mel bank cache
-- frame-local snapshot:
-  - cfg snapshot
-  - filter coeff/state
-  - temp/work/fft/power/logmel/melbank
+- snapshot 기반 frame 처리
+- mel cache / noise generation 관리
 ===============================================================================
 */
 
@@ -134,6 +125,7 @@ bool T20_configureFilter(CL_T20_Mfcc::ST_Impl* p)
 
 bool T20_prepareDspSnapshot(CL_T20_Mfcc::ST_Impl* p,
                             const ST_T20_Config_t* p_cfg,
+                            uint32_t p_cfg_generation,
                             ST_T20_DspSnapshot_t* p_snap)
 {
     if (p == nullptr || p_cfg == nullptr || p_snap == nullptr) {
@@ -142,6 +134,7 @@ bool T20_prepareDspSnapshot(CL_T20_Mfcc::ST_Impl* p,
 
     memset(p_snap, 0, sizeof(ST_T20_DspSnapshot_t));
     p_snap->cfg = *p_cfg;
+    p_snap->cfg_generation = p_cfg_generation;
 
     if (!T20_makeFilterCoeffs(p_cfg, p_snap->filter_coeffs)) {
         return false;
@@ -442,6 +435,7 @@ void T20_computePowerSpectrumSnapshot(ST_T20_DspSnapshot_t* p_snap,
 
 void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p,
                             const ST_T20_Config_t* p_cfg,
+                            uint32_t p_cfg_generation,
                             const float* p_power)
 {
     if (p == nullptr || p_cfg == nullptr || p_power == nullptr) {
@@ -450,6 +444,12 @@ void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p,
 
     if (!p_cfg->preprocess.noise.enable_spectral_subtract) {
         return;
+    }
+
+    if (p->noise_generation != p_cfg_generation) {
+        p->noise_generation = p_cfg_generation;
+        p->noise_learned_frames = 0U;
+        memset(p->noise_spectrum, 0, sizeof(p->noise_spectrum));
     }
 
     if (p->noise_learned_frames >= p_cfg->preprocess.noise.noise_learn_frames) {
@@ -468,6 +468,7 @@ void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p,
 
 void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p,
                                   const ST_T20_Config_t* p_cfg,
+                                  uint32_t p_cfg_generation,
                                   float* p_power)
 {
     if (p == nullptr || p_cfg == nullptr || p_power == nullptr) {
@@ -475,6 +476,10 @@ void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p,
     }
 
     if (!p_cfg->preprocess.noise.enable_spectral_subtract) {
+        return;
+    }
+
+    if (p->noise_generation != p_cfg_generation) {
         return;
     }
 
@@ -576,8 +581,15 @@ void T20_computeMFCC_Snapshot(CL_T20_Mfcc::ST_Impl* p,
 
     T20_computePowerSpectrumSnapshot(p_snap, p_snap->work_frame, p_snap->power);
 
-    T20_learnNoiseSpectrum(p, &p_snap->cfg, p_snap->power);
-    T20_applySpectralSubtraction(p, &p_snap->cfg, p_snap->power);
+    T20_learnNoiseSpectrum(p,
+                           &p_snap->cfg,
+                           p_snap->cfg_generation,
+                           p_snap->power);
+
+    T20_applySpectralSubtraction(p,
+                                 &p_snap->cfg,
+                                 p_snap->cfg_generation,
+                                 p_snap->power);
 
     T20_applyMelFilterbankSnapshot(p_snap, p_snap->power, p_snap->log_mel);
 

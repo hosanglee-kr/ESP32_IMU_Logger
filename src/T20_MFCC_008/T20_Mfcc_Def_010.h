@@ -59,6 +59,8 @@
 #define G_T20_PI                         3.14159265358979323846f
 #define G_T20_EPSILON                    1.0e-12f
 
+#define G_T20_COUNTER_U32_MAX            0xFFFFFFFFUL
+
 // ============================================================================
 // [핀 설정]
 // ============================================================================
@@ -159,8 +161,29 @@ typedef struct
 // [출력 구조체]
 // ============================================================================
 
+/*
+ * 최신 특징 벡터 출력 구조체
+ *
+ * [generation 메타]
+ * - cfg_generation       : 이 특징이 어떤 설정 세대 기준인지 표시
+ * - history_generation   : delta 계산에 사용된 history 세대
+ * - noise_generation     : spectral subtraction에 사용된 noise profile 세대
+ * - sequence_generation  : sequence 출력에 반영된 세대
+ *
+ * [flags]
+ * - vector_valid         : vector가 유효한지 여부
+ * - sequence_valid       : sequence가 유효한지 여부
+ */
 typedef struct
 {
+    uint32_t cfg_generation;
+    uint32_t history_generation;
+    uint32_t noise_generation;
+    uint32_t sequence_generation;
+
+    bool     vector_valid;
+    bool     sequence_valid;
+
     uint16_t log_mel_len;
     uint16_t mfcc_len;
     uint16_t delta_len;
