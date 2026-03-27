@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>T20 MFCC Monitor</title>
+  <link rel="stylesheet" href="/t20/t20.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>T20 MFCC Monitor</h1>
+
+    <section class="card">
+      <div class="row">
+        <button id="btnStart">측정 시작</button>
+        <button id="btnStop">측정 종료</button>
+        <button id="btnRefresh">새로고침</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>설정 JSON</h2>
+      <textarea id="configEdit" rows="16"></textarea>
+      <div class="row"><button id="btnSaveConfig">설정 저장</button></div>
+    </section>
+
+    <section class="card"><h2>상태</h2><pre id="status">loading...</pre></section>
+    <section class="card"><h2>최신 특징</h2><pre id="latest">loading...</pre></section>
+    <section class="card"><h2>Wave</h2><pre id="wave">loading...</pre></section>
+    <section class="card"><h2>Sequence</h2><pre id="sequence">loading...</pre></section>
+
+    <section class="card">
+      <h2>다운로드</h2>
+      <div class="downloads">
+        <a href="/api/t20/download/raw" target="_blank">raw</a>
+        <a href="/api/t20/download/config" target="_blank">config</a>
+        <a href="/api/t20/download/meta" target="_blank">meta</a>
+        <a href="/api/t20/download/event" target="_blank">event</a>
+        <a href="/api/t20/download/feature" target="_blank">feature</a>
+      </div>
+    </section>
+  
+  <section class="card">
+    <h2>Recorder Index</h2>
+    <button id="btn-load-recorder-index">목록 새로고침</button>
+    <pre id="recorder-list"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer State</h2>
+    <pre id="viewer-state"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Config Export</h2>
+    <button id="btn-load-config-export">설정 JSON 보기</button>
+    <pre id="config-export"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Recorder Manifest</h2>
+    <button id="btn-load-manifest">매니페스트 새로고침</button>
+    <pre id="recorder-manifest"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Data</h2>
+    <button id="btn-load-viewer-data">뷰어 데이터 새로고침</button>
+    <pre id="viewer-data"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Waveform</h2>
+    <button id="btn-load-viewer-waveform">파형 새로고침</button>
+    <pre id="viewer-waveform"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Spectrum</h2>
+    <button id="btn-load-viewer-spectrum">스펙트럼 새로고침</button>
+    <pre id="viewer-spectrum"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Events</h2>
+    <button id="btn-load-viewer-events">이벤트 새로고침</button>
+    <pre id="viewer-events"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Sequence</h2>
+    <button id="btn-load-viewer-sequence">시퀀스 새로고침</button>
+    <pre id="viewer-sequence"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Overview</h2>
+    <button id="btn-load-viewer-overview">개요 새로고침</button>
+    <pre id="viewer-overview"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer MultiFrame</h2>
+    <button id="btn-load-viewer-multiframe">멀티프레임 새로고침</button>
+    <pre id="viewer-multiframe"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Recorder Preview</h2>
+    <input id="rec-preview-path" placeholder="/logs/example.txt" />
+    <input id="rec-preview-bytes" type="number" value="512" />
+    <button id="btn-load-rec-preview">프리뷰 조회</button>
+    <pre id="rec-preview"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Recorder Parsed Preview</h2>
+    <button id="btn-load-rec-preview-parsed">파싱 프리뷰 조회</button>
+    <pre id="rec-preview-parsed"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Recorder Range JSON</h2>
+    <input id="rec-range-offset" type="number" value="0" />
+    <input id="rec-range-length" type="number" value="256" />
+    <button id="btn-load-rec-range">범위 조회</button>
+    <pre id="rec-range-json"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer Chart Bundle</h2>
+    <input id="viewer-chart-points" type="number" value="64" />
+    <button id="btn-load-viewer-chart">차트 데이터 조회</button>
+    <label>Zoom <input id="chart-zoom" type="number" value="1" step="0.5" min="1" /></label>
+    <label>Pan <input id="chart-pan" type="number" value="0" step="1" min="0" /></label>
+    <button id="btn-apply-chart-view">차트 뷰 적용</button>
+    <pre id="viewer-chart-bundle"></pre>
+    <canvas id="chart-waveform" width="640" height="220"></canvas>
+    <canvas id="chart-spectrum" width="640" height="220"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Recorder Binary Header</h2>
+    <button id="btn-load-rec-header">헤더 해석 조회</button>
+    <pre id="rec-header-json"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Binary Record Preview</h2>
+    <button id="btn-load-rec-binary-records">Binary 레코드 조회</button>
+    <button id="btn-load-rec-binary-payload-schema">Binary payload schema 조회</button>
+    <pre id="rec-binary-records-json"></pre>
+    <button id="btn-rec-session-open-binary">Binary 세션 열기(미리보기)</button>
+    <button id="btn-rec-session-finalize-binary">Binary 세션 종료/헤더확정</button>
+    <button id="btn-rec-request-flush">Recorder flush 요청</button>
+    <button id="btn-rec-request-finalize">Recorder finalize 요청</button>
+    <pre id="rec-binary-payload-schema-json"></pre>
+  </section>
+
+  <section class="card">
+    <h2>CSV Table Preview</h2>
+    <button id="btn-load-rec-csv-table">CSV 테이블 조회</button>
+    <button id="btn-load-rec-csv-table-filtered">CSV 서버 필터 조회</button>
+    <button id="btn-load-rec-csv-table-column-filtered">CSV 서버 컬럼필터 조회</button>
+    <button id="btn-load-rec-csv-table-advanced">CSV 고급 조회</button>
+    <button id="btn-load-rec-csv-type-meta">CSV 타입 메타 조회</button>
+    <button id="btn-load-render-selection-sync">Render/Selection Sync 조회</button>
+    <button id="btn-load-rec-csv-schema">CSV 스키마 추론</button>
+    <pre id="rec-csv-table-json"></pre>
+    <pre id="rec-csv-schema-json"></pre>
+    <div id="csv-col-filters"></div>
+    <div id="csv-table-wrap"></div>
+  </section>
+</main>
+  <script src="/t20/t20.js"></script>
+<script>window.T20_CFG_IMPORT_SAMPLE = {"feature":{"mfcc_coeffs":13},"output":{"output_mode":"vector"}}</script>
+</body>
+</html>
