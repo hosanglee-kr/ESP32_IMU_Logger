@@ -1,0 +1,1175 @@
+const qs=(s)=>document.querySelector(s);
+async function getJson(url){ const r=await fetch(url); return await r.json(); }
+
+function shortArrayText(obj, key, limit=32){
+  if(!obj || !Array.isArray(obj[key])) return JSON.stringify(obj, null, 2);
+  const copy = {...obj};
+  copy[key] = obj[key].slice(0, limit);
+  if(obj[key].length > limit) copy[key + '_truncated'] = true;
+  return JSON.stringify(copy, null, 2);
+}
+
+function renderBundle(bundle){
+  if(!bundle) return;
+  if(bundle.status) qs('#status').textContent = JSON.stringify(bundle.status, null, 2);
+  if(bundle.latest) qs('#latest').textContent = JSON.stringify(bundle.latest, null, 2);
+  if(bundle.wave) qs('#wave').textContent = shortArrayText(bundle.wave, 'samples', 64);
+  if(bundle.sequence) qs('#sequence').textContent = shortArrayText(bundle.sequence, 'data', 96);
+}
+
+async function refresh(){
+  try{
+    const status = await getJson('/api/t20/live/status');
+    const config = await getJson('/api/t20/config');
+    const latest = await getJson('/api/t20/live/latest');
+    const wave = await getJson('/api/t20/live/wave');
+    const sequence = await getJson('/api/t20/live/sequence');
+
+    qs('#status').textContent = JSON.stringify(status, null, 2);
+    qs('#configEdit').value = JSON.stringify(config, null, 2);
+    qs('#latest').textContent = JSON.stringify(latest, null, 2);
+    qs('#wave').textContent = shortArrayText(wave, 'samples', 64);
+    qs('#sequence').textContent = shortArrayText(sequence, 'data', 96);
+  }catch(e){
+    qs('#status').textContent = 'error: ' + e;
+  }
+}
+
+function setupLive(){
+  try{
+    const es = new EventSource('/api/t20/live/sse');
+    es.addEventListener('live', (ev)=>{
+      try{ renderBundle(JSON.parse(ev.data)); }catch(_e){}
+    });
+    es.onerror = ()=>{};
+  }catch(_e){}
+
+  try{
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const ws = new WebSocket(proto + location.host + '/api/t20/live/ws');
+    ws.onmessage = (ev)=>{
+      try{ renderBundle(JSON.parse(ev.data)); }catch(_e){}
+    };
+  }catch(_e){}
+}
+
+qs('#btnStart').onclick = async()=>{ await fetch('/api/t20/measurement/start',{method:'POST'}); refresh(); };
+qs('#btnStop').onclick = async()=>{ await fetch('/api/t20/measurement/stop',{method:'POST'}); refresh(); };
+qs('#btnRefresh').onclick = refresh;
+qs('#btnSaveConfig').onclick = async()=>{
+  const body = qs('#configEdit').value;
+  const r = await fetch('/api/t20/config', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body
+  });
+  const t = await r.text();
+  alert(t);
+  refresh();
+};
+
+refresh();
+setupLive();
+setInterval(refresh, 3000);
+
+
+async function refreshRotates(){
+  try{
+    const rotates = await getJson('/api/t20/files/rotates');
+    const el = qs('#rotates');
+    if(el) el.textContent = JSON.stringify(rotates, null, 2);
+  }catch(e){
+    const el = qs('#rotates');
+    if(el) el.textContent = 'error: ' + e;
+  }
+}
+
+const btnRotates = qs('#btnRotates');
+if(btnRotates) btnRotates.onclick = refreshRotates;
+
+
+async function cleanupRotates(){
+  try{
+    await fetch('/api/t20/files/cleanup', {method:'POST'});
+    await refreshRotates();
+  }catch(e){
+    const el = qs('#rotates');
+    if(el) el.textContent = 'cleanup error: ' + e;
+  }
+}
+
+async function saveRuntimeConfig(){
+  try{
+    const r = await fetch('/api/t20/config/runtime/save', {method:'POST'});
+    const t = await r.text();
+    console.log('save config', t);
+  }catch(e){
+    console.log('save config error', e);
+  }
+}
+
+const btnCleanup = qs('#btnCleanup');
+if(btnCleanup) btnCleanup.onclick = cleanupRotates;
+
+const btnCfgSave = qs('#btnCfgSave');
+if(btnCfgSave) btnCfgSave.onclick = saveRuntimeConfig;
+
+
+async function exportRuntimeConfig(){
+  try{
+    const cfg = await getJson('/api/t20/config/export');
+    const el = qs('#rotates');
+    if(el) el.textContent = JSON.stringify(cfg, null, 2);
+  }catch(e){
+    console.log('export config error', e);
+  }
+}
+
+async function importRuntimeConfig(){
+  try{
+    const sample = window.T20_CFG_IMPORT_SAMPLE || {};
+    await fetch('/api/t20/config/import', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(sample)
+    });
+    await refreshStatus();
+  }catch(e){
+    console.log('import config error', e);
+  }
+}
+
+const btnCfgExport = qs('#btnCfgExport');
+if(btnCfgExport) btnCfgExport.onclick = exportRuntimeConfig;
+
+const btnCfgImport = qs('#btnCfgImport');
+if(btnCfgImport) btnCfgImport.onclick = importRuntimeConfig;
+
+
+async function saveProfileSlot(idx=0){
+  try{
+    await fetch('/api/t20/config/profile/save?index=' + idx, {method:'POST'});
+    await refreshStatus();
+  }catch(e){
+    console.log('save profile error', e);
+  }
+}
+
+async function loadProfileSlot(idx=0){
+  try{
+    await fetch('/api/t20/config/profile/load?index=' + idx, {method:'POST'});
+    await refreshStatus();
+  }catch(e){
+    console.log('load profile error', e);
+  }
+}
+
+const btnProfileSave = qs('#btnProfileSave');
+if(btnProfileSave) btnProfileSave.onclick = ()=>saveProfileSlot(0);
+
+const btnProfileLoad = qs('#btnProfileLoad');
+if(btnProfileLoad) btnProfileLoad.onclick = ()=>loadProfileSlot(0);
+
+
+async function loadConfigSchema(){
+  try{
+    const r = await fetch('/api/t20/config/schema');
+    const j = await r.json();
+    console.log('schema', j);
+  }catch(e){
+    console.log('schema error', e);
+  }
+}
+setTimeout(loadConfigSchema, 1500);
+
+
+async function loadRecorderIndex(){
+  try{
+    const r = await fetch('/api/t20/recorder/index');
+    const j = await r.json();
+    const el = document.getElementById('recorder-list');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+    if(j && Array.isArray(j.rows)){ renderCsvTable(j.rows); }
+  }catch(e){
+    const el = document.getElementById('recorder-list');
+    if(el){ el.textContent = '목록 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerState(){
+  try{
+    const r = await fetch('/api/t20/viewer/state');
+    const j = await r.json();
+    const el = document.getElementById('viewer-state');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-state');
+    if(el){ el.textContent = '상태 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btn-load-recorder-index');
+  if(b){ b.addEventListener('click', loadRecorderIndex); }
+  setTimeout(loadRecorderIndex, 1000);
+  setTimeout(loadViewerState, 1200);
+});
+
+
+async function loadRecorderManifest(){
+  try{
+    const r = await fetch('/api/t20/recorder/manifest');
+    const j = await r.json();
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = '매니페스트 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerData(){
+  try{
+    const r = await fetch('/api/t20/viewer/data');
+    const j = await r.json();
+    const el = document.getElementById('viewer-data');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-data');
+    if(el){ el.textContent = '뷰어 데이터 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bm = document.getElementById('btn-load-manifest');
+  if(bm){ bm.addEventListener('click', loadRecorderManifest); }
+  const bv = document.getElementById('btn-load-viewer-data');
+  if(bv){ bv.addEventListener('click', loadViewerData); }
+  setTimeout(loadRecorderManifest, 1400);
+  setTimeout(loadViewerData, 1600);
+});
+
+
+async function loadConfigExport(){
+  try{
+    const r = await fetch('/api/t20/config/export');
+    const j = await r.json();
+    const el = document.getElementById('config-export');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('config-export');
+    if(el){ el.textContent = '설정 export 로드 실패: ' + e; }
+  }
+}
+
+function renderManifestLinks(manifest){
+  const el = document.getElementById('recorder-manifest');
+  if(!el){ return; }
+  let text = JSON.stringify(manifest, null, 2);
+  if(Array.isArray(manifest.items)){
+    text += "\n\n[다운로드 예시]\n";
+    manifest.items.forEach((it, idx)=>{
+      text += `#${idx} data: /api/t20/recorder/file?path=${it.path}\n`;
+      text += `#${idx} summary: /api/t20/recorder/summary?path=${it.summary}\n`;
+      text += `#${idx} meta: /api/t20/recorder/meta?path=${it.meta}\n`;
+    });
+  }
+  el.textContent = text;
+}
+
+const _origLoadRecorderManifest = loadRecorderManifest;
+loadRecorderManifest = async function(){
+  try{
+    const r = await fetch('/api/t20/recorder/manifest');
+    const j = await r.json();
+    renderManifestLinks(j);
+  }catch(e){
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = '매니페스트 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bc = document.getElementById('btn-load-config-export');
+  if(bc){ bc.addEventListener('click', loadConfigExport); }
+  setTimeout(loadConfigExport, 700);
+});
+
+
+async function loadViewerWaveform(){
+  try{
+    const r = await fetch('/api/t20/viewer/waveform');
+    const j = await r.json();
+    const el = document.getElementById('viewer-waveform');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-waveform');
+    if(el){ el.textContent = '파형 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerSpectrum(){
+  try{
+    const r = await fetch('/api/t20/viewer/spectrum');
+    const j = await r.json();
+    const el = document.getElementById('viewer-spectrum');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-spectrum');
+    if(el){ el.textContent = '스펙트럼 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerEvents(){
+  try{
+    const r = await fetch('/api/t20/viewer/events');
+    const j = await r.json();
+    const el = document.getElementById('viewer-events');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-events');
+    if(el){ el.textContent = '이벤트 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bw = document.getElementById('btn-load-viewer-waveform');
+  if(bw){ bw.addEventListener('click', loadViewerWaveform); }
+
+  const bs = document.getElementById('btn-load-viewer-spectrum');
+  if(bs){ bs.addEventListener('click', loadViewerSpectrum); }
+
+  const be = document.getElementById('btn-load-viewer-events');
+  if(be){ be.addEventListener('click', loadViewerEvents); }
+
+  setTimeout(loadViewerWaveform, 1800);
+  setTimeout(loadViewerSpectrum, 2000);
+  setTimeout(loadViewerEvents, 2200);
+});
+
+
+async function loadViewerSequence(){
+  try{
+    const r = await fetch('/api/t20/viewer/sequence');
+    const j = await r.json();
+    const el = document.getElementById('viewer-sequence');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-sequence');
+    if(el){ el.textContent = '시퀀스 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerOverview(){
+  try{
+    const r = await fetch('/api/t20/viewer/overview');
+    const j = await r.json();
+    const el = document.getElementById('viewer-overview');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-overview');
+    if(el){ el.textContent = '개요 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bseq = document.getElementById('btn-load-viewer-sequence');
+  if(bseq){ bseq.addEventListener('click', loadViewerSequence); }
+
+  const bov = document.getElementById('btn-load-viewer-overview');
+  if(bov){ bov.addEventListener('click', loadViewerOverview); }
+
+  setTimeout(loadViewerSequence, 2400);
+  setTimeout(loadViewerOverview, 2600);
+});
+
+
+async function loadViewerMultiFrame(){
+  try{
+    const r = await fetch('/api/t20/viewer/multiframe');
+    const j = await r.json();
+    const el = document.getElementById('viewer-multiframe');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-multiframe');
+    if(el){ el.textContent = '멀티프레임 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bm = document.getElementById('btn-load-viewer-multiframe');
+  if(bm){ bm.addEventListener('click', loadViewerMultiFrame); }
+  setTimeout(loadViewerMultiFrame, 2800);
+});
+
+
+async function loadRecorderPreview(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const bytes = document.getElementById('rec-preview-bytes')?.value || '512';
+    const r = await fetch('/api/t20/recorder/file_preview?path=' + encodeURIComponent(path) + '&bytes=' + encodeURIComponent(bytes));
+    const j = await r.json();
+    const el = document.getElementById('rec-preview');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-preview');
+    if(el){ el.textContent = '프리뷰 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const brp = document.getElementById('btn-load-rec-preview');
+  if(brp){ brp.addEventListener('click', loadRecorderPreview); }
+});
+
+
+async function loadRecorderParsedPreview(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const bytes = document.getElementById('rec-preview-bytes')?.value || '512';
+    const r = await fetch('/api/t20/recorder/file_preview_parsed?path=' + encodeURIComponent(path) + '&bytes=' + encodeURIComponent(bytes));
+    const j = await r.json();
+    const el = document.getElementById('rec-preview-parsed');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-preview-parsed');
+    if(el){ el.textContent = '파싱 프리뷰 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bp = document.getElementById('btn-load-rec-preview-parsed');
+  if(bp){ bp.addEventListener('click', loadRecorderParsedPreview); }
+});
+
+
+async function loadRecorderRangeJson(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const offset = document.getElementById('rec-range-offset')?.value || '0';
+    const length = document.getElementById('rec-range-length')?.value || '256';
+    const r = await fetch('/api/t20/recorder/file_range_json?path=' + encodeURIComponent(path) + '&offset=' + encodeURIComponent(offset) + '&length=' + encodeURIComponent(length));
+    const j = await r.json();
+    const el = document.getElementById('rec-range-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-range-json');
+    if(el){ el.textContent = '범위 조회 실패: ' + e; }
+  }
+}
+
+async function loadViewerChartBundle(){
+  try{
+    const points = document.getElementById('viewer-chart-points')?.value || '64';
+    const r = await fetch('/api/t20/viewer/chart_bundle?points=' + encodeURIComponent(points));
+    const j = await r.json();
+    const el = document.getElementById('viewer-chart-bundle');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+    window.__t20ChartBundle = j;
+    applyChartView();
+  }catch(e){
+    const el = document.getElementById('viewer-chart-bundle');
+    if(el){ el.textContent = '차트 번들 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const brr = document.getElementById('btn-load-rec-range');
+  if(brr){ brr.addEventListener('click', loadRecorderRangeJson); }
+  const bvc = document.getElementById('btn-load-viewer-chart');
+  if(bvc){ bvc.addEventListener('click', loadViewerChartBundle); }
+});
+
+
+function drawSimpleLineChart(canvasId, values){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas || !Array.isArray(values) || values.length === 0){ return; }
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  let min = values[0];
+  let max = values[0];
+  for(const v of values){
+    if(v < min) min = v;
+    if(v > max) max = v;
+  }
+  const span = (max - min) || 1;
+
+  ctx.beginPath();
+  for(let i=0;i<values.length;i++){
+    const x = (i * (w - 1)) / Math.max(1, values.length - 1);
+    const y = h - (((values[i] - min) / span) * (h - 1));
+    if(i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+async function loadRecorderBinaryHeader(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const r = await fetch('/api/t20/recorder/file_binary_header?path=' + encodeURIComponent(path));
+    const j = await r.json();
+    const el = document.getElementById('rec-header-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-header-json');
+    if(el){ el.textContent = '헤더 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bh = document.getElementById('btn-load-rec-header');
+  if(bh){ bh.addEventListener('click', loadRecorderBinaryHeader); }
+});
+
+
+function drawOverlayLineChart(canvasId, seriesList){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas || !Array.isArray(seriesList) || seriesList.length === 0){ return; }
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  let min = Infinity;
+  let max = -Infinity;
+  for(const arr of seriesList){
+    if(!Array.isArray(arr)) continue;
+    for(const v of arr){
+      if(v < min) min = v;
+      if(v > max) max = v;
+    }
+  }
+  if(!isFinite(min) || !isFinite(max)){ return; }
+  const span = (max - min) || 1;
+
+  for(const values of seriesList){
+    if(!Array.isArray(values) || values.length === 0) continue;
+    ctx.beginPath();
+    for(let i=0;i<values.length;i++){
+      const x = (i * (w - 1)) / Math.max(1, values.length - 1);
+      const y = h - (((values[i] - min) / span) * (h - 1));
+      if(i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+async function loadRecorderCsvTable(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const r = await fetch('/api/t20/recorder/file_csv_table?path=' + encodeURIComponent(path));
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'CSV 테이블 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bc = document.getElementById('btn-load-rec-csv-table');
+  if(bc){ bc.addEventListener('click', loadRecorderCsvTable); }
+});
+
+
+window.__t20ChartBundle = null;
+
+function sliceForView(values){
+  if(!Array.isArray(values)){ return []; }
+  const zoom = Math.max(1, Number(document.getElementById('chart-zoom')?.value || 1));
+  const pan = Math.max(0, Number(document.getElementById('chart-pan')?.value || 0));
+  const viewLen = Math.max(8, Math.floor(values.length / zoom));
+  const start = Math.min(pan, Math.max(0, values.length - viewLen));
+  return values.slice(start, start + viewLen);
+}
+
+function applyChartView(){
+  const j = window.__t20ChartBundle;
+  if(!j){ return; }
+
+  renderChartLegend(j);
+
+  if(Array.isArray(j.waveform)){
+    const arr = applyChartSelectionZoom(sliceForView(j.waveform));
+    drawSimpleLineChart('chart-waveform', arr);
+    drawSelectionInfo(j.waveform.length);
+    syncOtherChartCanvas();
+    syncChartViewAcrossCanvases();
+  }
+
+  if(Array.isArray(j.spectrum)){
+    const arr = applyChartSelectionZoom(sliceForView(j.spectrum));
+    drawSimpleLineChart('chart-spectrum', arr);
+  }
+
+  if(Array.isArray(j.overlaySeries) && j.overlaySeries.length > 0){
+    const series = j.overlaySeries.map(v => applyChartSelectionZoom(sliceForView(v)));
+    drawOverlayLineChart('chart-waveform', series);
+  }
+}
+
+function renderCsvTable(rows){
+  const wrap = document.getElementById('csv-table-wrap');
+  if(!wrap){ return; }
+  if(!Array.isArray(rows) || rows.length === 0){
+    wrap.innerHTML = '';
+    return;
+  }
+
+  let html = '<table><tbody>';
+  for(let r=0;r<rows.length;r++){
+    const cols = Array.isArray(rows[r]) ? rows[r] : [];
+    html += '<tr>';
+    for(let c=0;c<cols.length;c++){
+      const tag = (r === 0 ? 'th' : 'td');
+      html += '<' + tag + '>' + String(cols[c]).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;') + '</' + tag + '>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function loadRecorderCsvSchema(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const r = await fetch('/api/t20/recorder/file_csv_schema?path=' + encodeURIComponent(path));
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-schema-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-csv-schema-json');
+    if(el){ el.textContent = 'CSV 스키마 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bs = document.getElementById('btn-load-rec-csv-schema');
+  if(bs){ bs.addEventListener('click', loadRecorderCsvSchema); }
+  const bv = document.getElementById('btn-apply-chart-view');
+  if(bv){ bv.addEventListener('click', applyChartView); }
+});
+
+
+window.__t20CsvRows = null;
+window.__t20CsvPage = 0;
+
+function getCsvTableOptions(){
+  const filter = String(document.getElementById('csv-filter')?.value || '').toLowerCase();
+  const sortCol = Number(document.getElementById('csv-sort-col')?.value || 0);
+  const pageSize = Math.max(1, Math.min(50, Number(document.getElementById('csv-page-size')?.value || 10)));
+  return { filter, sortCol, pageSize };
+}
+
+function renderCsvTableInteractive(){
+  const wrap = document.getElementById('csv-table-wrap');
+  if(!wrap || !Array.isArray(window.__t20CsvRows) || window.__t20CsvRows.length === 0){
+    if(wrap){ wrap.innerHTML = ''; }
+    return;
+  }
+
+  const header = Array.isArray(window.__t20CsvRows[0]) ? window.__t20CsvRows[0] : [];
+  let dataRows = window.__t20CsvRows.slice(1).filter(r => Array.isArray(r));
+
+  const opt = getCsvTableOptions();
+  const colFilters = getCsvColumnFilters();
+  if(opt.filter){
+    dataRows = dataRows.filter(row => row.some(v => String(v).toLowerCase().includes(opt.filter)));
+  }
+  if(Array.isArray(colFilters) && colFilters.length > 0){
+    dataRows = dataRows.filter(row => colFilters.every((f, idx) => !f || String(row[idx] ?? '').toLowerCase().includes(String(f).toLowerCase())));
+  }
+
+  dataRows.sort((a,b) => String(a[opt.sortCol] ?? '').localeCompare(String(b[opt.sortCol] ?? '')));
+
+  const totalPages = Math.max(1, Math.ceil(dataRows.length / opt.pageSize));
+  if(window.__t20CsvPage >= totalPages){ window.__t20CsvPage = totalPages - 1; }
+  const start = window.__t20CsvPage * opt.pageSize;
+  const pageRows = dataRows.slice(start, start + opt.pageSize);
+
+  let html = '<div class="table-toolbar">';
+  html += '<span>page ' + (window.__t20CsvPage + 1) + ' / ' + totalPages + '</span>';
+  html += '</div><table><tbody><tr>';
+  for(let c=0;c<header.length;c++){
+    html += '<th>' + String(header[c]).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;') + '</th>';
+  }
+  html += '</tr>';
+
+  for(const row of pageRows){
+    html += '<tr>';
+    for(let c=0;c<header.length;c++){
+      html += '<td>' + String(row[c] ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;') + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function csvPrevPage(){
+  if(window.__t20CsvPage > 0){
+    window.__t20CsvPage--;
+    renderCsvTableInteractive();
+  }
+}
+
+function csvNextPage(){
+  const opt = getCsvTableOptions();
+  const rows = Array.isArray(window.__t20CsvRows) ? window.__t20CsvRows.slice(1) : [];
+  const totalPages = Math.max(1, Math.ceil(rows.length / opt.pageSize));
+  if(window.__t20CsvPage < totalPages - 1){
+    window.__t20CsvPage++;
+    renderCsvTableInteractive();
+  }
+}
+
+
+async function loadRecorderBinaryRecords(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const r = await fetch('/api/t20/recorder/file_binary_records?path=' + encodeURIComponent(path));
+    const j = await r.json();
+    const el = document.getElementById('rec-binary-records-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-binary-records-json');
+    if(el){ el.textContent = 'Binary 레코드 조회 실패: ' + e; }
+  }
+}
+
+
+window.__t20ChartSelection = { start: null, end: null };
+
+function renderChartLegend(bundle){
+  const el = document.getElementById('chart-legend-wrap');
+  if(!el){ return; }
+  let html = '';
+  if(bundle && Array.isArray(bundle.waveform)){ html += '<span>waveform</span>'; }
+  if(bundle && Array.isArray(bundle.spectrum)){ html += '<span>spectrum</span>'; }
+  if(bundle && Array.isArray(bundle.overlaySeries)){
+    for(let i=0;i<bundle.overlaySeries.length;i++){
+      html += '<span>overlay ' + i + '</span>';
+    }
+  }
+  el.innerHTML = html;
+}
+
+function drawSelectionInfo(total){
+  const el = document.getElementById('chart-selection-info');
+  if(!el){ return; }
+  const s = window.__t20ChartSelection.start;
+  const e = window.__t20ChartSelection.end;
+  if(s === null || e === null){
+    el.textContent = '선택 구간 없음';
+    return;
+  }
+  const a = Math.min(s, e);
+  const b = Math.max(s, e);
+  el.textContent = '선택 구간: ' + a + ' ~ ' + b + ' / total ' + total;
+}
+
+function applyChartSelectionZoom(values){
+  if(!Array.isArray(values)){ return values; }
+  const s = window.__t20ChartSelection.start;
+  const e = window.__t20ChartSelection.end;
+  if(s === null || e === null){ return values; }
+  const a = Math.max(0, Math.min(s, e));
+  const b = Math.min(values.length, Math.max(s, e));
+  if((b - a) < 8){ return values; }
+  return values.slice(a, b);
+}
+
+async function loadRecorderBinaryPayloadSchema(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const r = await fetch('/api/t20/recorder/file_binary_payload_schema?path=' + encodeURIComponent(path));
+    const j = await r.json();
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = 'Binary payload schema 조회 실패: ' + e; }
+  }
+}
+
+
+function setupChartSelection(canvasId){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas){ return; }
+
+  let dragging = false;
+  canvas.addEventListener('mousedown', function(ev){
+    dragging = true;
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const total = Array.isArray(window.__t20ChartBundle?.waveform) ? window.__t20ChartBundle.waveform.length : canvas.width;
+    window.__t20ChartSelection.start = Math.floor((x / rect.width) * total);
+    window.__t20ChartSelection.end = window.__t20ChartSelection.start;
+    applyChartView();
+  });
+
+  canvas.addEventListener('mousemove', function(ev){
+    if(!dragging){ return; }
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const total = Array.isArray(window.__t20ChartBundle?.waveform) ? window.__t20ChartBundle.waveform.length : canvas.width;
+    window.__t20ChartSelection.end = Math.floor((x / rect.width) * total);
+    applyChartView();
+  });
+
+  window.addEventListener('mouseup', function(){
+    dragging = false;
+  });
+
+  canvas.addEventListener('dblclick', function(){
+    window.__t20ChartSelection.start = null;
+    window.__t20ChartSelection.end = null;
+    applyChartView();
+  });
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bp = document.getElementById('btn-load-rec-binary-payload-schema');
+  if(bp){ bp.addEventListener('click', loadRecorderBinaryPayloadSchema); }
+
+  setupChartSelection('chart-waveform');
+  setupChartSelection('chart-spectrum');
+});
+
+
+function getCsvColumnFilters(){
+  const out = [];
+  document.querySelectorAll('.csv-col-filter').forEach(el => {
+    out.push(String(el.value || ''));
+  });
+  return out;
+}
+
+function rebuildCsvColumnFilters(){
+  const host = document.getElementById('csv-col-filters');
+  if(!host){ return; }
+  host.innerHTML = '';
+  const rows = window.__t20CsvRows;
+  if(!Array.isArray(rows) || rows.length === 0 || !Array.isArray(rows[0])){ return; }
+
+  const header = rows[0];
+  for(let i=0;i<header.length && i<8;i++){
+    const inp = document.createElement('input');
+    inp.className = 'csv-col-filter';
+    inp.placeholder = 'col ' + i + ' filter';
+    inp.dataset.col = String(i);
+    inp.addEventListener('input', ()=>{ window.__t20CsvPage = 0; renderCsvTableInteractive(); });
+    host.appendChild(inp);
+  }
+}
+
+
+async function openRecorderBinarySessionPreview(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '/t20_session.bin';
+    const r = await fetch('/api/t20/recorder/session_open_binary', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'path=' + encodeURIComponent(path)
+    });
+    const t = await r.text();
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = t; }
+  }catch(e){
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = 'Binary 세션 열기 실패: ' + e; }
+  }
+}
+
+function syncChartControls(){
+  const zoom = document.getElementById('chart-zoom');
+  const pan = document.getElementById('chart-pan');
+  if(zoom){ zoom.addEventListener('input', applyChartView); }
+  if(pan){ pan.addEventListener('input', applyChartView); }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bo = document.getElementById('btn-rec-session-open-binary');
+  if(bo){ bo.addEventListener('click', openRecorderBinarySessionPreview); }
+  syncChartControls();
+});
+
+
+async function loadRecorderCsvTableFiltered(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const filter = String(document.getElementById('csv-filter')?.value || '');
+    const sortCol = Number(document.getElementById('csv-sort-col')?.value || 0);
+    const pageSize = Number(document.getElementById('csv-page-size')?.value || 10);
+    const url = '/api/t20/recorder/file_csv_table_filtered?path=' + encodeURIComponent(path)
+      + '&filter=' + encodeURIComponent(filter)
+      + '&sort_col=' + encodeURIComponent(sortCol)
+      + '&page=0'
+      + '&page_size=' + encodeURIComponent(pageSize);
+
+    const r = await fetch(url);
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+    if(j && Array.isArray(j.rows)){
+      window.__t20CsvRows = j.rows;
+      window.__t20CsvPage = 0;
+      rebuildCsvColumnFilters();
+      renderCsvTableInteractive();
+    }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'CSV 서버 필터 조회 실패: ' + e; }
+  }
+}
+
+async function finalizeRecorderBinarySessionPreview(){
+  try{
+    const r = await fetch('/api/t20/recorder/session_finalize_binary', { method:'POST' });
+    const t = await r.text();
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = t; }
+  }catch(e){
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = 'Binary 세션 종료 실패: ' + e; }
+  }
+}
+
+
+function syncOtherChartCanvas(){
+  const info = document.getElementById('chart-selection-info');
+  if(!info || !window.__t20ChartBundle){ return; }
+  const z = document.getElementById('chart-zoom')?.value || '1';
+  const p = document.getElementById('chart-pan')?.value || '0';
+  info.textContent += ' | zoom=' + z + ' pan=' + p;
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bf = document.getElementById('btn-load-rec-csv-table-filtered');
+  if(bf){ bf.addEventListener('click', loadRecorderCsvTableFiltered); }
+
+  const bfin = document.getElementById('btn-rec-session-finalize-binary');
+  if(bfin){ bfin.addEventListener('click', finalizeRecorderBinarySessionPreview); }
+});
+
+
+async function requestRecorderFlushPreview(){
+  try{
+    const r = await fetch('/api/t20/recorder/request_flush', { method:'POST' });
+    const t = await r.text();
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = t; }
+  }catch(e){
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = 'Recorder flush 요청 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const brf = document.getElementById('btn-rec-request-flush');
+  if(brf){ brf.addEventListener('click', requestRecorderFlushPreview); }
+});
+
+
+function setChartViewState(zoom, pan){
+  const z = document.getElementById('chart-zoom');
+  const p = document.getElementById('chart-pan');
+  if(z){ z.value = String(zoom); }
+  if(p){ p.value = String(pan); }
+  applyChartView();
+}
+
+
+function getCsvColumnFiltersCsv(){
+  return getCsvColumnFilters().join('|');
+}
+
+async function loadRecorderCsvTableColumnFiltered(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const filter = String(document.getElementById('csv-filter')?.value || '');
+    const sortCol = Number(document.getElementById('csv-sort-col')?.value || 0);
+    const pageSize = Number(document.getElementById('csv-page-size')?.value || 10);
+    const colFilters = getCsvColumnFiltersCsv();
+
+    const url = '/api/t20/recorder/file_csv_table_column_filtered?path=' + encodeURIComponent(path)
+      + '&filter=' + encodeURIComponent(filter)
+      + '&col_filters=' + encodeURIComponent(colFilters)
+      + '&sort_col=' + encodeURIComponent(sortCol)
+      + '&page=0'
+      + '&page_size=' + encodeURIComponent(pageSize);
+
+    const r = await fetch(url);
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+    if(j && Array.isArray(j.rows)){
+      window.__t20CsvRows = j.rows;
+      window.__t20CsvPage = 0;
+      rebuildCsvColumnFilters();
+      renderCsvTableInteractive();
+    }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'CSV 서버 컬럼필터 조회 실패: ' + e; }
+  }
+}
+
+async function requestRecorderFinalizePreview(){
+  try{
+    const r = await fetch('/api/t20/recorder/request_finalize', { method:'POST' });
+    const t = await r.text();
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = t; }
+  }catch(e){
+    const el = document.getElementById('rec-binary-payload-schema-json');
+    if(el){ el.textContent = 'Recorder finalize 요청 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bcf = document.getElementById('btn-load-rec-csv-table-column-filtered');
+  if(bcf){ bcf.addEventListener('click', loadRecorderCsvTableColumnFiltered); }
+
+  const brfin = document.getElementById('btn-rec-request-finalize');
+  if(brfin){ brfin.addEventListener('click', requestRecorderFinalizePreview); }
+});
+
+
+async function loadRecorderCsvTableAdvanced(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const filter = String(document.getElementById('csv-filter')?.value || '');
+    const sortCol = Number(document.getElementById('csv-sort-col')?.value || 0);
+    const sortDir = Number(document.getElementById('csv-sort-dir')?.value || 0);
+    const pageSize = Number(document.getElementById('csv-page-size')?.value || 10);
+    const colFilters = getCsvColumnFiltersCsv();
+
+    const url = '/api/t20/recorder/file_csv_table_advanced?path=' + encodeURIComponent(path)
+      + '&filter=' + encodeURIComponent(filter)
+      + '&col_filters=' + encodeURIComponent(colFilters)
+      + '&sort_col=' + encodeURIComponent(sortCol)
+      + '&sort_dir=' + encodeURIComponent(sortDir)
+      + '&page=0'
+      + '&page_size=' + encodeURIComponent(pageSize);
+
+    const r = await fetch(url);
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+    if(j && Array.isArray(j.rows)){
+      window.__t20CsvRows = j.rows;
+      window.__t20CsvPage = 0;
+      rebuildCsvColumnFilters();
+      renderCsvTableInteractive();
+    }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'CSV 고급 조회 실패: ' + e; }
+  }
+}
+
+
+function syncChartViewAcrossCanvases(){
+  const zoom = Number(document.getElementById('chart-zoom')?.value || 1);
+  const pan = Number(document.getElementById('chart-pan')?.value || 0);
+  const info = document.getElementById('chart-selection-info');
+  if(info){
+    const base = info.textContent || '';
+    info.textContent = base.split('|')[0].trim() + ' | sync zoom=' + zoom + ' pan=' + pan + ' | render-sync ready | selection-link skeleton | type-meta bridge ready';
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const badv = document.getElementById('btn-load-rec-csv-table-advanced');
+  if(badv){ badv.addEventListener('click', loadRecorderCsvTableAdvanced); }
+
+  const sortDir = document.getElementById('csv-sort-dir');
+  if(sortDir){ sortDir.addEventListener('change', renderCsvTableInteractive); }
+});
+
+
+window.__t20ChartSyncState = {
+  zoom: 1,
+  pan: 0
+};
+
+function updateSharedChartSyncState(){
+  window.__t20ChartSyncState.zoom = Number(document.getElementById('chart-zoom')?.value || 1);
+  window.__t20ChartSyncState.pan = Number(document.getElementById('chart-pan')?.value || 0);
+}
+
+function applySharedChartSyncState(){
+  const z = document.getElementById('chart-zoom');
+  const p = document.getElementById('chart-pan');
+  if(z){ z.value = String(window.__t20ChartSyncState.zoom); }
+  if(p){ p.value = String(window.__t20ChartSyncState.pan); }
+  applyChartView();
+}
+
+async function loadRecorderCsvTypeMeta(){
+  try{
+    const path = document.getElementById('rec-preview-path')?.value || '';
+    const url = '/api/t20/recorder/file_csv_type_meta?path=' + encodeURIComponent(path);
+    const r = await fetch(url);
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'CSV 타입 메타 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const btm = document.getElementById('btn-load-rec-csv-type-meta');
+  if(btm){ btm.addEventListener('click', loadRecorderCsvTypeMeta); }
+
+  const z = document.getElementById('chart-zoom');
+  const p = document.getElementById('chart-pan');
+  if(z){ z.addEventListener('input', ()=>{ updateSharedChartSyncState(); syncChartViewAcrossCanvases(); }); }
+  if(p){ p.addEventListener('input', ()=>{ updateSharedChartSyncState(); syncChartViewAcrossCanvases(); }); }
+});
+
+
+async function loadRenderSelectionSync(){
+  try{
+    const r = await fetch('/api/t20/render_selection_sync');
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'Render/Selection Sync 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const brs = document.getElementById('btn-load-render-selection-sync');
+  if(brs){ brs.addEventListener('click', loadRenderSelectionSync); }
+});
+
+
+async function loadTypeMetaPreviewLink(){
+  try{
+    const r = await fetch('/api/t20/type_meta_preview_link');
+    const j = await r.json();
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('rec-csv-table-json');
+    if(el){ el.textContent = 'TypeMeta/Preview Link 조회 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const btp = document.getElementById('btn-load-type-meta-preview-link');
+  if(btp){ btp.addEventListener('click', loadTypeMetaPreviewLink); }
+});
