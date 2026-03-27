@@ -1,0 +1,14 @@
+async function loadJson(path){
+  const r = await fetch(path);
+  const t = await r.text();
+  document.getElementById('out').textContent = t;
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('btn-status').addEventListener('click', ()=>loadJson('/api/t20/status'));
+  document.getElementById('btn-config').addEventListener('click', ()=>loadJson('/api/t20/config'));
+  document.getElementById('btn-viewer-data').addEventListener('click', ()=>loadJson('/api/t20/viewer/data'));
+  document.getElementById('btn-rec-manifest').addEventListener('click', ()=>loadJson('/api/t20/recorder/manifest'));
+  document.getElementById('btn-sync').addEventListener('click', ()=>loadJson('/api/t20/render_selection_sync'));
+  document.getElementById('btn-type-meta-link').addEventListener('click', ()=>loadJson('/api/t20/type_meta_preview_link'));
+});
