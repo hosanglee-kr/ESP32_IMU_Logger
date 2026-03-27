@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>T20 MFCC Monitor</title>
+  <link rel="stylesheet" href="/t20/t20.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>T20 MFCC Monitor</h1>
+
+    <section class="card">
+      <div class="row">
+        <button id="btnStart">측정 시작</button>
+        <button id="btnStop">측정 종료</button>
+        <button id="btnRefresh">새로고침</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>설정 JSON</h2>
+      <textarea id="configEdit" rows="16"></textarea>
+      <div class="row"><button id="btnSaveConfig">설정 저장</button></div>
+    </section>
+
+    <section class="card"><h2>상태</h2><pre id="status">loading...</pre></section>
+    <section class="card"><h2>최신 특징</h2><pre id="latest">loading...</pre></section>
+    <section class="card"><h2>Wave</h2><pre id="wave">loading...</pre></section>
+    <section class="card"><h2>Sequence</h2><pre id="sequence">loading...</pre></section>
+
+    <section class="card">
+      <h2>다운로드</h2>
+      <div class="downloads">
+        <a href="/api/t20/download/raw" target="_blank">raw</a>
+        <a href="/api/t20/download/config" target="_blank">config</a>
+        <a href="/api/t20/download/meta" target="_blank">meta</a>
+        <a href="/api/t20/download/event" target="_blank">event</a>
+        <a href="/api/t20/download/feature" target="_blank">feature</a>
+      </div>
+    </section>
+  
+  <section class="card">
+    <h2>Recorder Index</h2>
+    <button id="btn-load-recorder-index">목록 새로고침</button>
+    <pre id="recorder-list"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Viewer State</h2>
+    <pre id="viewer-state"></pre>
+  </section>
+</main>
+  <script src="/t20/t20.js"></script>
+<script>window.T20_CFG_IMPORT_SAMPLE = {"feature":{"mfcc_coeffs":13},"output":{"output_mode":"vector"}}</script>
+</body>
+</html>

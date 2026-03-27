@@ -1,0 +1,75 @@
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#111827;color:#e5e7eb;margin:0}
+.wrap{max-width:980px;margin:0 auto;padding:24px}
+h1,h2{margin:0 0 12px}
+.card{background:#1f2937;border:1px solid #374151;border-radius:12px;padding:16px;margin:0 0 16px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button,a{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 14px;text-decoration:none;cursor:pointer}
+pre,textarea{white-space:pre-wrap;word-break:break-word;background:#0f172a;padding:12px;border-radius:8px;width:100%;box-sizing:border-box;color:#e5e7eb}
+textarea{min-height:260px}
+.downloads{display:flex;gap:8px;flex-wrap:wrap}
+
+
+canvas{
+  width:100%;
+  max-width:100%;
+  border:1px solid #ccc;
+  background:#fff;
+  margin-top:8px;
+}
+
+
+#csv-table-wrap{
+  overflow:auto;
+  margin-top:8px;
+}
+#csv-table-wrap table{
+  border-collapse:collapse;
+  width:100%;
+  background:#fff;
+}
+#csv-table-wrap th,
+#csv-table-wrap td{
+  border:1px solid #ccc;
+  padding:4px 6px;
+  font-size:12px;
+  white-space:nowrap;
+}
+
+
+.table-toolbar{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin:8px 0;
+}
+
+
+#chart-legend-wrap{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:8px;
+  font-size:12px;
+}
+#chart-legend-wrap span{
+  padding:2px 6px;
+  border:1px solid #ccc;
+  border-radius:10px;
+  background:#fafafa;
+}
+#chart-selection-info{
+  margin-top:6px;
+  font-size:12px;
+}
+
+
+#csv-col-filters{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin:8px 0;
+}
+#csv-col-filters input{
+  width:120px;
+}

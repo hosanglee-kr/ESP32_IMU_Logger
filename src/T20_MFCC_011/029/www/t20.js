@@ -1,0 +1,295 @@
+const qs=(s)=>document.querySelector(s);
+async function getJson(url){ const r=await fetch(url); return await r.json(); }
+
+function shortArrayText(obj, key, limit=32){
+  if(!obj || !Array.isArray(obj[key])) return JSON.stringify(obj, null, 2);
+  const copy = {...obj};
+  copy[key] = obj[key].slice(0, limit);
+  if(obj[key].length > limit) copy[key + '_truncated'] = true;
+  return JSON.stringify(copy, null, 2);
+}
+
+function renderBundle(bundle){
+  if(!bundle) return;
+  if(bundle.status) qs('#status').textContent = JSON.stringify(bundle.status, null, 2);
+  if(bundle.latest) qs('#latest').textContent = JSON.stringify(bundle.latest, null, 2);
+  if(bundle.wave) qs('#wave').textContent = shortArrayText(bundle.wave, 'samples', 64);
+  if(bundle.sequence) qs('#sequence').textContent = shortArrayText(bundle.sequence, 'data', 96);
+}
+
+async function refresh(){
+  try{
+    const status = await getJson('/api/t20/live/status');
+    const config = await getJson('/api/t20/config');
+    const latest = await getJson('/api/t20/live/latest');
+    const wave = await getJson('/api/t20/live/wave');
+    const sequence = await getJson('/api/t20/live/sequence');
+
+    qs('#status').textContent = JSON.stringify(status, null, 2);
+    qs('#configEdit').value = JSON.stringify(config, null, 2);
+    qs('#latest').textContent = JSON.stringify(latest, null, 2);
+    qs('#wave').textContent = shortArrayText(wave, 'samples', 64);
+    qs('#sequence').textContent = shortArrayText(sequence, 'data', 96);
+  }catch(e){
+    qs('#status').textContent = 'error: ' + e;
+  }
+}
+
+function setupLive(){
+  try{
+    const es = new EventSource('/api/t20/live/sse');
+    es.addEventListener('live', (ev)=>{
+      try{ renderBundle(JSON.parse(ev.data)); }catch(_e){}
+    });
+    es.onerror = ()=>{};
+  }catch(_e){}
+
+  try{
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const ws = new WebSocket(proto + location.host + '/api/t20/live/ws');
+    ws.onmessage = (ev)=>{
+      try{ renderBundle(JSON.parse(ev.data)); }catch(_e){}
+    };
+  }catch(_e){}
+}
+
+qs('#btnStart').onclick = async()=>{ await fetch('/api/t20/measurement/start',{method:'POST'}); refresh(); };
+qs('#btnStop').onclick = async()=>{ await fetch('/api/t20/measurement/stop',{method:'POST'}); refresh(); };
+qs('#btnRefresh').onclick = refresh;
+qs('#btnSaveConfig').onclick = async()=>{
+  const body = qs('#configEdit').value;
+  const r = await fetch('/api/t20/config', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body
+  });
+  const t = await r.text();
+  alert(t);
+  refresh();
+};
+
+refresh();
+setupLive();
+setInterval(refresh, 3000);
+
+
+async function refreshRotates(){
+  try{
+    const rotates = await getJson('/api/t20/files/rotates');
+    const el = qs('#rotates');
+    if(el) el.textContent = JSON.stringify(rotates, null, 2);
+  }catch(e){
+    const el = qs('#rotates');
+    if(el) el.textContent = 'error: ' + e;
+  }
+}
+
+const btnRotates = qs('#btnRotates');
+if(btnRotates) btnRotates.onclick = refreshRotates;
+
+
+async function cleanupRotates(){
+  try{
+    await fetch('/api/t20/files/cleanup', {method:'POST'});
+    await refreshRotates();
+  }catch(e){
+    const el = qs('#rotates');
+    if(el) el.textContent = 'cleanup error: ' + e;
+  }
+}
+
+async function saveRuntimeConfig(){
+  try{
+    const r = await fetch('/api/t20/config/runtime/save', {method:'POST'});
+    const t = await r.text();
+    console.log('save config', t);
+  }catch(e){
+    console.log('save config error', e);
+  }
+}
+
+const btnCleanup = qs('#btnCleanup');
+if(btnCleanup) btnCleanup.onclick = cleanupRotates;
+
+const btnCfgSave = qs('#btnCfgSave');
+if(btnCfgSave) btnCfgSave.onclick = saveRuntimeConfig;
+
+
+async function exportRuntimeConfig(){
+  try{
+    const cfg = await getJson('/api/t20/config/export');
+    const el = qs('#rotates');
+    if(el) el.textContent = JSON.stringify(cfg, null, 2);
+  }catch(e){
+    console.log('export config error', e);
+  }
+}
+
+async function importRuntimeConfig(){
+  try{
+    const sample = window.T20_CFG_IMPORT_SAMPLE || {};
+    await fetch('/api/t20/config/import', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(sample)
+    });
+    await refreshStatus();
+  }catch(e){
+    console.log('import config error', e);
+  }
+}
+
+const btnCfgExport = qs('#btnCfgExport');
+if(btnCfgExport) btnCfgExport.onclick = exportRuntimeConfig;
+
+const btnCfgImport = qs('#btnCfgImport');
+if(btnCfgImport) btnCfgImport.onclick = importRuntimeConfig;
+
+
+async function saveProfileSlot(idx=0){
+  try{
+    await fetch('/api/t20/config/profile/save?index=' + idx, {method:'POST'});
+    await refreshStatus();
+  }catch(e){
+    console.log('save profile error', e);
+  }
+}
+
+async function loadProfileSlot(idx=0){
+  try{
+    await fetch('/api/t20/config/profile/load?index=' + idx, {method:'POST'});
+    await refreshStatus();
+  }catch(e){
+    console.log('load profile error', e);
+  }
+}
+
+const btnProfileSave = qs('#btnProfileSave');
+if(btnProfileSave) btnProfileSave.onclick = ()=>saveProfileSlot(0);
+
+const btnProfileLoad = qs('#btnProfileLoad');
+if(btnProfileLoad) btnProfileLoad.onclick = ()=>loadProfileSlot(0);
+
+
+async function loadConfigSchema(){
+  try{
+    const r = await fetch('/api/t20/config/schema');
+    const j = await r.json();
+    console.log('schema', j);
+  }catch(e){
+    console.log('schema error', e);
+  }
+}
+setTimeout(loadConfigSchema, 1500);
+
+
+async function loadRecorderIndex(){
+  try{
+    const r = await fetch('/api/t20/recorder/index');
+    const j = await r.json();
+    const el = document.getElementById('recorder-list');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('recorder-list');
+    if(el){ el.textContent = '목록 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerState(){
+  try{
+    const r = await fetch('/api/t20/viewer/state');
+    const j = await r.json();
+    const el = document.getElementById('viewer-state');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-state');
+    if(el){ el.textContent = '상태 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btn-load-recorder-index');
+  if(b){ b.addEventListener('click', loadRecorderIndex); }
+  setTimeout(loadRecorderIndex, 1000);
+  setTimeout(loadViewerState, 1200);
+});
+
+
+async function loadRecorderManifest(){
+  try{
+    const r = await fetch('/api/t20/recorder/manifest');
+    const j = await r.json();
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = '매니페스트 로드 실패: ' + e; }
+  }
+}
+
+async function loadViewerData(){
+  try{
+    const r = await fetch('/api/t20/viewer/data');
+    const j = await r.json();
+    const el = document.getElementById('viewer-data');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('viewer-data');
+    if(el){ el.textContent = '뷰어 데이터 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bm = document.getElementById('btn-load-manifest');
+  if(bm){ bm.addEventListener('click', loadRecorderManifest); }
+  const bv = document.getElementById('btn-load-viewer-data');
+  if(bv){ bv.addEventListener('click', loadViewerData); }
+  setTimeout(loadRecorderManifest, 1400);
+  setTimeout(loadViewerData, 1600);
+});
+
+
+async function loadConfigExport(){
+  try{
+    const r = await fetch('/api/t20/config/export');
+    const j = await r.json();
+    const el = document.getElementById('config-export');
+    if(el){ el.textContent = JSON.stringify(j, null, 2); }
+  }catch(e){
+    const el = document.getElementById('config-export');
+    if(el){ el.textContent = '설정 export 로드 실패: ' + e; }
+  }
+}
+
+function renderManifestLinks(manifest){
+  const el = document.getElementById('recorder-manifest');
+  if(!el){ return; }
+  let text = JSON.stringify(manifest, null, 2);
+  if(Array.isArray(manifest.items)){
+    text += "\n\n[다운로드 예시]\n";
+    manifest.items.forEach((it, idx)=>{
+      text += `#${idx} data: /api/t20/recorder/file?path=${it.path}\n`;
+      text += `#${idx} summary: /api/t20/recorder/summary?path=${it.summary}\n`;
+      text += `#${idx} meta: /api/t20/recorder/meta?path=${it.meta}\n`;
+    });
+  }
+  el.textContent = text;
+}
+
+const _origLoadRecorderManifest = loadRecorderManifest;
+loadRecorderManifest = async function(){
+  try{
+    const r = await fetch('/api/t20/recorder/manifest');
+    const j = await r.json();
+    renderManifestLinks(j);
+  }catch(e){
+    const el = document.getElementById('recorder-manifest');
+    if(el){ el.textContent = '매니페스트 로드 실패: ' + e; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const bc = document.getElementById('btn-load-config-export');
+  if(bc){ bc.addEventListener('click', loadConfigExport); }
+  setTimeout(loadConfigExport, 700);
+});
