@@ -125,6 +125,95 @@
 #define G_T20_PIN_BMI_INT1                  14
 #define G_T20_PIN_BUTTON                    0
 
+/////##########################
+
+
+#define G_T20_WEB_PUSH_MIN_INTERVAL_MS      250
+#define G_T20_WEB_PUSH_FORCE_INTERVAL_MS    2000
+#define G_T20_RECORDER_ROTATE_INDEX_PATH     "/t20_rotate_index.jsonl"
+#define G_T20_RECORDER_MAX_ROTATE_LIST       32
+#define G_T20_RECORDER_ROTATE_KEEP_FILES      12
+#define G_T20_RECORDER_RECOVERY_RETRY_MAX      3
+#define G_T20_RECORDER_RECOVERY_RETRY_DELAY_MS 500
+#define G_T20_WEB_ROTATE_JSON_BUFFER_SIZE      6144
+#define G_T20_CFG_RUNTIME_PATH                "/t20_cfg_runtime.json"
+#define G_T20_CFG_EXPORT_PATH                 "/t20_cfg_export.json"
+#define G_T20_CFG_IMPORT_TMP_PATH             "/t20_cfg_import.tmp"
+#define G_T20_CFG_JSON_BUFFER_SIZE            2048
+#define G_T20_DSP_CACHE_ENABLE_DEFAULT        1
+#define G_T20_DSP_CACHE_MAX_ITEMS             4
+#define G_T20_CFG_PROFILE_COUNT               4
+#define G_T20_CFG_PROFILE_NAME_LEN            24
+#define G_T20_CFG_PROFILE_INDEX_DEFAULT       0
+#define G_T20_CFG_PROFILE_BASE_PATH           "/t20_cfg_profile_"
+#define G_T20_CFG_PROFILE_SUFFIX              ".json"
+#define G_T20_RECORDER_INDEX_PATH           "/t20/recorder/index.json"
+#define G_T20_RECORDER_SUMMARY_SUFFIX       ".summary.json"
+#define G_T20_RECORDER_META_SUFFIX          ".meta.json"
+#define G_T20_RECORDER_MAX_LIST_ITEMS       32
+#define G_T20_WEB_JSON_BUF_SIZE             2048
+#define G_T20_RECORDER_MANIFEST_PATH        "/t20/recorder/manifest.json"
+#define G_T20_RECORDER_VIEWER_JSON_PATH     "/t20/recorder/viewer.json"
+#define G_T20_WEB_LARGE_JSON_BUF_SIZE       8192
+#define G_T20_JSON_PARSE_TMP_BUF_SIZE       512
+#define G_T20_WEB_VIEWER_SEQUENCE_MAX        512
+#define G_T20_WEB_DOWNLOAD_PARAM_MAX        128
+#define G_T20_WEB_PATH_BUF_SIZE             160
+#define G_T20_VIEWER_EVENT_MAX              64
+#define G_T20_VIEWER_WAVEFORM_POINTS_MAX    G_T20_FFT_SIZE
+#define G_T20_VIEWER_SPECTRUM_POINTS_MAX    ((G_T20_FFT_SIZE / 2) + 1)
+#define G_T20_RECORDER_PAGE_SIZE_DEFAULT    10
+#define G_T20_RECORDER_PAGE_SIZE_MAX        50
+#define G_T20_WEB_RANGE_BUF_SIZE              4096
+#define G_T20_RECORDER_TAIL_BYTES_DEFAULT     1024
+#define G_T20_RECORDER_TAIL_BYTES_MAX         8192
+#define G_T20_RECORDER_RANGE_BYTES_DEFAULT    1024
+#define G_T20_RECORDER_RANGE_BYTES_MAX        8192
+#define G_T20_VIEWER_MULTI_FRAMES_MAX        4
+#define G_T20_VIEWER_CHART_POINTS_MAX        G_T20_FFT_SIZE
+#define G_T20_RECORDER_STREAM_CHUNK_SIZE     1024
+#define G_T20_HOP_SIZE_DEFAULT               0
+#define G_T20_HOP_SIZE_MAX                   G_T20_FFT_SIZE
+#define G_T20_PREVIEW_TEXT_BYTES_DEFAULT     512
+#define G_T20_PREVIEW_TEXT_BYTES_MAX         4096
+#define G_T20_FRAME_ACCUM_CAPACITY           (G_T20_FFT_SIZE * 2)
+#define G_T20_PREVIEW_LINES_MAX              32
+#define G_T20_CHART_DOWNSAMPLE_POINTS_MAX      128
+#define G_T20_BINARY_HEADER_PREVIEW_BYTES      64
+#define G_T20_HTTP_RANGE_DEFAULT_LENGTH        1024
+#define G_T20_HTTP_RANGE_MAX_LENGTH            8192
+#define G_T20_HTTP_STREAM_CHUNK_SIZE           1024
+#define G_T20_BINARY_HEURISTIC_HEADER_BYTES    32
+#define G_T20_CANVAS_WIDTH_DEFAULT             640
+#define G_T20_CANVAS_HEIGHT_DEFAULT            220
+#define G_T20_CSV_PREVIEW_COLUMNS_MAX          16
+#define G_T20_CHART_OVERLAY_SERIES_MAX        4
+#define G_T20_BINARY_HEADER_MAGIC_LEN         4
+#define G_T20_CSV_PREVIEW_ROWS_MAX             24
+#define G_T20_BINARY_HEADER_VERSION_SUPPORTED  1
+#define G_T20_BINARY_HEADER_RESERVED_BYTES     8
+#define G_T20_CSV_TABLE_PAGE_SIZE_DEFAULT      10
+#define G_T20_CSV_TABLE_PAGE_SIZE_MAX          50
+#define G_T20_BINARY_RECORD_PREVIEW_MAX        32
+#define G_T20_CHART_SELECTION_MIN_POINTS       8
+#define G_T20_BINARY_RECORD_KIND_VECTOR        1
+#define G_T20_BINARY_RECORD_KIND_STATUS        2
+#define G_T20_CSV_MAX_COLUMN_FILTERS          8
+#define G_T20_CSV_FILTER_TEXT_MAX            32
+#define G_T20_CHART_SYNC_VIEW_DEFAULT        1
+#define G_T20_RECORDER_BATCH_MAX_RECORDS       8
+#define G_T20_RECORDER_FILE_PATH_MAX          128
+#define G_T20_CSV_SERVER_MAX_ROWS             200
+
+#define G_T20_RECORDER_BATCH_SAMPLES        1024
+#define G_T20_RECORDER_FLUSH_INTERVAL_MS    200
+#define G_T20_RECORDER_BLOCK_ALIGN_BYTES    32
+
+#define G_T20_DSP_TWIDDLE_CACHE_MAX_ITEMS   4
+#define G_T20_JSON_SECTION_BUF_SIZE         256
+#define G_T20_JSON_ARRAY_BUF_SIZE           128
+
+
 enum EM_T20_FilterType_t
 {
     EN_T20_FILTER_OFF = 0,
@@ -425,90 +514,6 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void)
     return cfg;
 }
 
-#define G_T20_WEB_PUSH_MIN_INTERVAL_MS      250
-#define G_T20_WEB_PUSH_FORCE_INTERVAL_MS    2000
-#define G_T20_RECORDER_ROTATE_INDEX_PATH     "/t20_rotate_index.jsonl"
-#define G_T20_RECORDER_MAX_ROTATE_LIST       32
-#define G_T20_RECORDER_ROTATE_KEEP_FILES      12
-#define G_T20_RECORDER_RECOVERY_RETRY_MAX      3
-#define G_T20_RECORDER_RECOVERY_RETRY_DELAY_MS 500
-#define G_T20_WEB_ROTATE_JSON_BUFFER_SIZE      6144
-#define G_T20_CFG_RUNTIME_PATH                "/t20_cfg_runtime.json"
-#define G_T20_CFG_EXPORT_PATH                 "/t20_cfg_export.json"
-#define G_T20_CFG_IMPORT_TMP_PATH             "/t20_cfg_import.tmp"
-#define G_T20_CFG_JSON_BUFFER_SIZE            2048
-#define G_T20_DSP_CACHE_ENABLE_DEFAULT        1
-#define G_T20_DSP_CACHE_MAX_ITEMS             4
-#define G_T20_CFG_PROFILE_COUNT               4
-#define G_T20_CFG_PROFILE_NAME_LEN            24
-#define G_T20_CFG_PROFILE_INDEX_DEFAULT       0
-#define G_T20_CFG_PROFILE_BASE_PATH           "/t20_cfg_profile_"
-#define G_T20_CFG_PROFILE_SUFFIX              ".json"
-#define G_T20_RECORDER_INDEX_PATH           "/t20/recorder/index.json"
-#define G_T20_RECORDER_SUMMARY_SUFFIX       ".summary.json"
-#define G_T20_RECORDER_META_SUFFIX          ".meta.json"
-#define G_T20_RECORDER_MAX_LIST_ITEMS       32
-#define G_T20_WEB_JSON_BUF_SIZE             2048
-#define G_T20_RECORDER_MANIFEST_PATH        "/t20/recorder/manifest.json"
-#define G_T20_RECORDER_VIEWER_JSON_PATH     "/t20/recorder/viewer.json"
-#define G_T20_WEB_LARGE_JSON_BUF_SIZE       8192
-#define G_T20_JSON_PARSE_TMP_BUF_SIZE       512
-#define G_T20_WEB_VIEWER_SEQUENCE_MAX        512
-#define G_T20_WEB_DOWNLOAD_PARAM_MAX        128
-#define G_T20_WEB_PATH_BUF_SIZE             160
-#define G_T20_VIEWER_EVENT_MAX              64
-#define G_T20_VIEWER_WAVEFORM_POINTS_MAX    G_T20_FFT_SIZE
-#define G_T20_VIEWER_SPECTRUM_POINTS_MAX    ((G_T20_FFT_SIZE / 2) + 1)
-#define G_T20_RECORDER_PAGE_SIZE_DEFAULT    10
-#define G_T20_RECORDER_PAGE_SIZE_MAX        50
-#define G_T20_WEB_RANGE_BUF_SIZE              4096
-#define G_T20_RECORDER_TAIL_BYTES_DEFAULT     1024
-#define G_T20_RECORDER_TAIL_BYTES_MAX         8192
-#define G_T20_RECORDER_RANGE_BYTES_DEFAULT    1024
-#define G_T20_RECORDER_RANGE_BYTES_MAX        8192
-#define G_T20_VIEWER_MULTI_FRAMES_MAX        4
-#define G_T20_VIEWER_CHART_POINTS_MAX        G_T20_FFT_SIZE
-#define G_T20_RECORDER_STREAM_CHUNK_SIZE     1024
-#define G_T20_HOP_SIZE_DEFAULT               0
-#define G_T20_HOP_SIZE_MAX                   G_T20_FFT_SIZE
-#define G_T20_PREVIEW_TEXT_BYTES_DEFAULT     512
-#define G_T20_PREVIEW_TEXT_BYTES_MAX         4096
-#define G_T20_FRAME_ACCUM_CAPACITY           (G_T20_FFT_SIZE * 2)
-#define G_T20_PREVIEW_LINES_MAX              32
-#define G_T20_CHART_DOWNSAMPLE_POINTS_MAX      128
-#define G_T20_BINARY_HEADER_PREVIEW_BYTES      64
-#define G_T20_HTTP_RANGE_DEFAULT_LENGTH        1024
-#define G_T20_HTTP_RANGE_MAX_LENGTH            8192
-#define G_T20_HTTP_STREAM_CHUNK_SIZE           1024
-#define G_T20_BINARY_HEURISTIC_HEADER_BYTES    32
-#define G_T20_CANVAS_WIDTH_DEFAULT             640
-#define G_T20_CANVAS_HEIGHT_DEFAULT            220
-#define G_T20_CSV_PREVIEW_COLUMNS_MAX          16
-#define G_T20_CHART_OVERLAY_SERIES_MAX        4
-#define G_T20_BINARY_HEADER_MAGIC_LEN         4
-#define G_T20_CSV_PREVIEW_ROWS_MAX             24
-#define G_T20_BINARY_HEADER_VERSION_SUPPORTED  1
-#define G_T20_BINARY_HEADER_RESERVED_BYTES     8
-#define G_T20_CSV_TABLE_PAGE_SIZE_DEFAULT      10
-#define G_T20_CSV_TABLE_PAGE_SIZE_MAX          50
-#define G_T20_BINARY_RECORD_PREVIEW_MAX        32
-#define G_T20_CHART_SELECTION_MIN_POINTS       8
-#define G_T20_BINARY_RECORD_KIND_VECTOR        1
-#define G_T20_BINARY_RECORD_KIND_STATUS        2
-#define G_T20_CSV_MAX_COLUMN_FILTERS          8
-#define G_T20_CSV_FILTER_TEXT_MAX            32
-#define G_T20_CHART_SYNC_VIEW_DEFAULT        1
-#define G_T20_RECORDER_BATCH_MAX_RECORDS       8
-#define G_T20_RECORDER_FILE_PATH_MAX          128
-#define G_T20_CSV_SERVER_MAX_ROWS             200
-
-#define G_T20_RECORDER_BATCH_SAMPLES        1024
-#define G_T20_RECORDER_FLUSH_INTERVAL_MS    200
-#define G_T20_RECORDER_BLOCK_ALIGN_BYTES    32
-
-#define G_T20_DSP_TWIDDLE_CACHE_MAX_ITEMS   4
-#define G_T20_JSON_SECTION_BUF_SIZE         256
-#define G_T20_JSON_ARRAY_BUF_SIZE           128
 
 
 /*

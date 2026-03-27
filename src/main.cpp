@@ -19,12 +19,17 @@
 #endif
 
 
-#define T20
+// #define T20
 #ifdef T20
 	#include "T20_MFCC_008/T20_Main_010.h"
 	// #include "T20_MFCC_005/T20_Main_007.h"
 #endif
 
+#define T20_11
+#ifdef T20_11
+	#include "T20_MFCC_011/047/T20_Main_047.h"
+	// #include "T20_MFCC_005/T20_Main_007.h"
+#endif
 
 void setup() {
 	// delay(5000);
@@ -43,8 +48,14 @@ void setup() {
 	#ifdef T04
 		A10_init();
 	#endif
-	
+
 	#ifdef T20
+		T20_init();
+	#endif
+
+
+
+	#ifdef T20_11
 		T20_init();
 	#endif
 
@@ -64,12 +75,14 @@ void loop() {
 	#ifdef T04
 		A10_run();
 	#endif
-	
-	
+
+
 	#ifdef T20
 		T20_run();
 	#endif
 
-
+	#ifdef T20_11
+		T20_run();
+	#endif
 
 }
