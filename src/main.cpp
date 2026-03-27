@@ -27,7 +27,7 @@
 
 #define T20_11
 #ifdef T20_11
-	#include "T20_MFCC_011/051/T20_Main_051.h"
+	#include "T20_MFCC_011/052/T20_Main_052.h"
 #endif
 
 void setup() {
