@@ -1,0 +1,20 @@
+async function loadJson(path){
+  const r = await fetch(path);
+  const t = await r.text();
+  document.getElementById('out').textContent = t;
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('btn-status').addEventListener('click', ()=>loadJson('/api/t20/status'));
+  document.getElementById('btn-config').addEventListener('click', ()=>loadJson('/api/t20/config'));
+  document.getElementById('btn-viewer-data').addEventListener('click', ()=>loadJson('/api/t20/viewer/data'));
+  document.getElementById('btn-rec-manifest').addEventListener('click', ()=>loadJson('/api/t20/recorder/manifest'));
+  document.getElementById('btn-sync').addEventListener('click', ()=>loadJson('/api/t20/render_selection_sync'));
+  document.getElementById('btn-type-meta-link').addEventListener('click', ()=>loadJson('/api/t20/type_meta_preview_link'));
+  const sel = document.getElementById('btn-selection-sync'); if (sel) sel.addEventListener('click', ()=>loadJson('/api/t20/selection_sync'));
+  const tm = document.getElementById('btn-type-meta'); if (tm) tm.addEventListener('click', ()=>loadJson('/api/t20/type_meta'));
+});
+
+const _uvb=document.getElementById('btn-unified-viewer-bundle'); if(_uvb){ _uvb.addEventListener('click', ()=>loadJson('/api/t20/viewer_bundle_unified')); }
+
+const _rs=document.getElementById('btn-recorder-storage'); if(_rs){ _rs.addEventListener('click', ()=>loadJson('/api/t20/recorder_storage')); }
