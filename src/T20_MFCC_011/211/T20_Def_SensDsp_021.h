@@ -24,7 +24,7 @@
 #define G_T20_PI                                  3.14159265358979323846f
 #define G_T20_EPSILON                             1.0e-12f
 
-/* --- [BMI270 Hardware & SPI Register Constants] --- */
+/* --- [BMI270 Hardware & SPI Constants] --- */
 #define G_T20_SPI_FREQ_HZ                         10000000UL
 #define G_T20_BMI270_CHIP_ID_EXPECTED             0x24U
 #define G_T20_BMI270_REG_CHIP_ID                  0x00U
@@ -38,8 +38,9 @@
 #define G_T20_BMI270_BURST_AXIS_COUNT             3U
 #define G_T20_BMI270_REG_FAKE_VECTOR_BASE         0x40U
 #define G_T20_BMI270_FAKE_RAW_DECODE_SCALE        100.0f
+#define G_T20_BMI270_STATUS_TEXT_MAX              48U
 
-/* --- [Runtime & Simulation Logic Constants] --- */
+/* --- [Runtime Logic & ISR Constants] --- */
 #define G_T20_DSP_ENABLE_RUNTIME_FILTER           1U
 #define G_T20_DSP_ENABLE_RUNTIME_NOISE_PROFILE    1U
 #define G_T20_RUNTIME_SIM_FRAME_INTERVAL_MS       160U
@@ -60,9 +61,8 @@
 #define G_T20_BMI270_ISR_QUEUE_SIM_MAX            4U
 #define G_T20_LIVE_FRAME_MAX_SAMPLES              1024U
 #define G_T20_LIVE_FRAME_TEMP_MAX                 512U
-#define G_T20_BMI270_STATUS_TEXT_MAX              48U
 
-/* --- [BMI270 / DSP State Transition Constants (All)] --- */
+/* --- [BMI270 / DSP State Constants (Full)] --- */
 #define G_T20_BMI270_SPI_BEGIN_OK                 1U
 #define G_T20_BMI270_SPI_BEGIN_FAIL               0U
 #define G_T20_BMI270_SPI_BUS_READY                1U
@@ -92,7 +92,7 @@
 #define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_READY   1U
 #define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_DONE    2U
 
-#define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_IDLE 0U
+#define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_IDLE  0U
 #define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_READY 1U
 #define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_DONE  2U
 
@@ -201,7 +201,5 @@ typedef struct {
     uint16_t frames; uint16_t feature_dim; uint16_t head; bool full;
 } ST_T20_FeatureRingBuffer_t;
 
-typedef struct {
-    uint8_t frame_index;
-} ST_T20_FrameMessage_t;
+typedef struct { uint8_t frame_index; } ST_T20_FrameMessage_t;
 
