@@ -25,10 +25,28 @@
 	// #include "T20_MFCC_005/T20_Main_007.h"
 #endif
 
+
 #define T20_11
 #ifdef T20_11
-	#include "T20_MFCC_011/082/T20_Main_082.h"
+    // 1. 버전 정의
+    #define VER  083
+
+    // 2. 매크로를 문자열로 변환하기 위한 보조 매크로
+    #define TO_STR(x) #x
+    #define GET_PATH(v) TO_STR(T20_MFCC_011/v/T20_Main_##v.h)
+
+    // 3. 최종 include (계산된 경로 적용)
+    #include GET_PATH(VER)
 #endif
+
+
+/*
+#define T20_11
+#ifdef T20_11
+	#include "T20_MFCC_011/083/T20_Main_083.h"
+#endif
+*/
+
 
 void setup() {
 	// delay(5000);
