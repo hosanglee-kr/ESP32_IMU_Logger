@@ -21,93 +21,121 @@
 #define G_T20_PREPROCESS_STAGE_MAX                8U
 #define G_T20_MFCC_HISTORY                        5U
 #define G_T20_NOISE_MIN_FRAMES                    8U
+#define G_T20_PI                                  3.14159265358979323846f
+#define G_T20_EPSILON                             1.0e-12f
 
-/* --- [BMI270 Hardware Registers & SPI] --- */
+/* --- [BMI270 Hardware & SPI Register Constants] --- */
 #define G_T20_SPI_FREQ_HZ                         10000000UL
-#define G_T20_BMI270_CHIP_ID_EXPECTED           0x24U
-#define G_T20_BMI270_REG_CHIP_ID                0x00U
-#define G_T20_BMI270_REG_STATUS                 0x03U
-#define G_T20_BMI270_REG_GYR_X_LSB              0x0CU
-#define G_T20_BMI270_REG_ACC_X_LSB              0x12U
-#define G_T20_BMI270_REG_INT_STATUS_1           0x1DU
-#define G_T20_BMI270_REG_READ_FLAG              0x80U
-#define G_T20_BMI270_SPI_DUMMY_READ             0x00U
-#define G_T20_BMI270_BURST_SAMPLE_BYTES         6U
-#define G_T20_BMI270_BURST_AXIS_COUNT           3U
-#define G_T20_BMI270_REG_FAKE_VECTOR_BASE       0x40U
-#define G_T20_BMI270_FAKE_RAW_DECODE_SCALE      100.0f
+#define G_T20_BMI270_CHIP_ID_EXPECTED             0x24U
+#define G_T20_BMI270_REG_CHIP_ID                  0x00U
+#define G_T20_BMI270_REG_STATUS                   0x03U
+#define G_T20_BMI270_REG_GYR_X_LSB                0x0CU
+#define G_T20_BMI270_REG_ACC_X_LSB                0x12U
+#define G_T20_BMI270_REG_INT_STATUS_1             0x1DU
+#define G_T20_BMI270_REG_READ_FLAG                0x80U
+#define G_T20_BMI270_SPI_DUMMY_READ               0x00U
+#define G_T20_BMI270_BURST_SAMPLE_BYTES           6U
+#define G_T20_BMI270_BURST_AXIS_COUNT             3U
+#define G_T20_BMI270_REG_FAKE_VECTOR_BASE         0x40U
+#define G_T20_BMI270_FAKE_RAW_DECODE_SCALE        100.0f
 
-/* --- [Sensor & DSP Logic Constants] --- */
+/* --- [Runtime & Simulation Logic Constants] --- */
 #define G_T20_DSP_ENABLE_RUNTIME_FILTER           1U
 #define G_T20_DSP_ENABLE_RUNTIME_NOISE_PROFILE    1U
 #define G_T20_RUNTIME_SIM_FRAME_INTERVAL_MS       160U
 #define G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT       0.20f
 #define G_T20_BMI270_SIM_SAMPLE_INTERVAL_MS       5U
-#define G_T20_BMI270_AXIS_MODE_GYRO_Z           0U
-#define G_T20_BMI270_AXIS_MODE_ACC_Z            1U
-#define G_T20_BMI270_AXIS_MODE_GYRO_NORM        2U
-#define G_T20_LIVE_SOURCE_MODE_SYNTHETIC        0U
-#define G_T20_LIVE_SOURCE_MODE_BMI270           1U
-#define G_T20_LIVE_SOURCE_MODE_OFF              255U
-#define G_T20_BMI270_INIT_RETRY_MAX             3U
-#define G_T20_BMI270_SPI_RETRY_MAX              3U
-#define G_T20_BMI270_DRDY_POLL_INTERVAL_MS      2U
-#define G_T20_LIVE_DRDY_TIMEOUT_MS              100U
-#define G_T20_LIVE_QUEUE_DEPTH                   16U
-#define G_T20_BMI270_ISR_FLAG_SET               1U
-#define G_T20_BMI270_ISR_QUEUE_SIM_MAX          4U
-#define G_T20_LIVE_FRAME_MAX_SAMPLES            1024U
+#define G_T20_BMI270_AXIS_MODE_GYRO_Z             0U
+#define G_T20_BMI270_AXIS_MODE_ACC_Z              1U
+#define G_T20_BMI270_AXIS_MODE_GYRO_NORM          2U
+#define G_T20_LIVE_SOURCE_MODE_SYNTHETIC          0U
+#define G_T20_LIVE_SOURCE_MODE_BMI270             1U
+#define G_T20_LIVE_SOURCE_MODE_OFF                255U
+#define G_T20_BMI270_INIT_RETRY_MAX               3U
+#define G_T20_BMI270_SPI_RETRY_MAX                3U
+#define G_T20_BMI270_DRDY_POLL_INTERVAL_MS        2U
+#define G_T20_LIVE_DRDY_TIMEOUT_MS                100U
+#define G_T20_LIVE_QUEUE_DEPTH                    16U
+#define G_T20_BMI270_ISR_FLAG_SET                 1U
+#define G_T20_BMI270_ISR_QUEUE_SIM_MAX            4U
+#define G_T20_LIVE_FRAME_MAX_SAMPLES              1024U
+#define G_T20_LIVE_FRAME_TEMP_MAX                 512U
+#define G_T20_BMI270_STATUS_TEXT_MAX              48U
 
-/* --- [BMI270 / DSP State Transition Constants (Full)] --- */
-#define G_T20_BMI270_SPI_BEGIN_OK               1U
-#define G_T20_BMI270_SPI_BEGIN_FAIL             0U
-#define G_T20_BMI270_SPI_BUS_READY              1U
-#define G_T20_BMI270_SPI_BUS_NOT_READY          0U
-#define G_T20_BMI270_SPI_TRANSACTION_OK         1U
-#define G_T20_BMI270_SPI_TRANSACTION_FAIL       0U
-#define G_T20_BMI270_SPI_READ_OK                1U
-#define G_T20_BMI270_AXIS_DECODE_OK            1U
-#define G_T20_BMI270_AXIS_DECODE_FAIL          0U
+/* --- [BMI270 / DSP State Transition Constants (All)] --- */
+#define G_T20_BMI270_SPI_BEGIN_OK                 1U
+#define G_T20_BMI270_SPI_BEGIN_FAIL               0U
+#define G_T20_BMI270_SPI_BUS_READY                1U
+#define G_T20_BMI270_SPI_BUS_NOT_READY            0U
+#define G_T20_BMI270_SPI_TRANSACTION_OK           1U
+#define G_T20_BMI270_SPI_TRANSACTION_FAIL         0U
+#define G_T20_BMI270_SPI_READ_OK                  1U
+#define G_T20_BMI270_AXIS_DECODE_OK               1U
+#define G_T20_BMI270_AXIS_DECODE_FAIL             0U
+#define G_T20_BMI270_ISR_ATTACH_OK                1U
+#define G_T20_BMI270_ISR_HOOK_READY               1U
+#define G_T20_BMI270_ISR_ATTACH_STATE_READY       1U
 
-#define G_T20_BMI270_READ_STATE_IDLE            0U
-#define G_T20_BMI270_READ_STATE_PREPARED        1U
-#define G_T20_BMI270_READ_STATE_DONE            2U
+#define G_T20_BMI270_READ_STATE_IDLE              0U
+#define G_T20_BMI270_READ_STATE_PREPARED          1U
+#define G_T20_BMI270_READ_STATE_DONE              2U
 
-#define G_T20_BMI270_DRIVER_STATE_IDLE             0U
-#define G_T20_BMI270_DRIVER_STATE_READY            1U
-#define G_T20_BMI270_DRIVER_STATE_DONE             2U
+#define G_T20_BMI270_DRIVER_STATE_IDLE            0U
+#define G_T20_BMI270_DRIVER_STATE_READY           1U
+#define G_T20_BMI270_DRIVER_STATE_DONE            2U
 
-#define G_T20_BMI270_BOOT_STATE_IDLE                0U
-#define G_T20_BMI270_BOOT_STATE_READY               1U
-#define G_T20_BMI270_BOOT_STATE_DONE                2U
+#define G_T20_BMI270_BOOT_STATE_IDLE              0U
+#define G_T20_BMI270_BOOT_STATE_READY             1U
+#define G_T20_BMI270_BOOT_STATE_DONE              2U
 
-#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_IDLE      0U
-#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_READY     1U
-#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_DONE      2U
+#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_IDLE    0U
+#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_READY   1U
+#define G_T20_BMI270_SPI_BEGIN_RUNTIME_STATE_DONE    2U
 
-#define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_IDLE  0U
+#define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_IDLE 0U
 #define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_READY 1U
 #define G_T20_BMI270_REGISTER_READ_RUNTIME_STATE_DONE  2U
 
-#define G_T20_BMI270_BURST_RUNTIME_STATE_IDLE         0U
-#define G_T20_BMI270_BURST_RUNTIME_STATE_READY        1U
-#define G_T20_BMI270_BURST_RUNTIME_STATE_DONE         2U
+#define G_T20_BMI270_BURST_RUNTIME_STATE_IDLE       0U
+#define G_T20_BMI270_BURST_RUNTIME_STATE_READY      1U
+#define G_T20_BMI270_BURST_RUNTIME_STATE_DONE       2U
 
-#define G_T20_BMI270_HW_LINK_STATE_IDLE                0U
-#define G_T20_BMI270_HW_LINK_STATE_READY               1U
-#define G_T20_BMI270_HW_LINK_STATE_DONE                2U
+#define G_T20_BMI270_HW_LINK_STATE_IDLE             0U
+#define G_T20_BMI270_HW_LINK_STATE_READY            1U
+#define G_T20_BMI270_HW_LINK_STATE_DONE             2U
 
-#define G_T20_BMI270_PIPELINE_LINK_STATE_IDLE           0U
-#define G_T20_BMI270_PIPELINE_LINK_STATE_READY          1U
-#define G_T20_BMI270_PIPELINE_LINK_STATE_DONE           2U
+#define G_T20_BMI270_PIPELINE_LINK_STATE_IDLE       0U
+#define G_T20_BMI270_PIPELINE_LINK_STATE_READY      1U
+#define G_T20_BMI270_PIPELINE_LINK_STATE_DONE       2U
 
-#define G_T20_BMI270_MEGA_PIPELINE_STATE_IDLE           0U
-#define G_T20_BMI270_MEGA_PIPELINE_STATE_READY          1U
-#define G_T20_BMI270_MEGA_PIPELINE_STATE_DONE           2U
+#define G_T20_BMI270_MEGA_PIPELINE_STATE_IDLE       0U
+#define G_T20_BMI270_MEGA_PIPELINE_STATE_READY      1U
+#define G_T20_BMI270_MEGA_PIPELINE_STATE_DONE       2U
 
-#define G_T20_BMI270_DSP_INGRESS_STATE_IDLE             0U
-#define G_T20_BMI270_DSP_INGRESS_STATE_READY            1U
-#define G_T20_BMI270_DSP_INGRESS_STATE_DONE             2U
+#define G_T20_BMI270_DSP_INGRESS_STATE_IDLE         0U
+#define G_T20_BMI270_DSP_INGRESS_STATE_READY        1U
+#define G_T20_BMI270_DSP_INGRESS_STATE_DONE         2U
+
+#define G_T20_BMI270_ISR_QUEUE_STATE_IDLE           0U
+#define G_T20_BMI270_ISR_QUEUE_STATE_READY          1U
+#define G_T20_BMI270_ISR_QUEUE_STATE_DONE           2U
+
+#define G_T20_BMI270_CONNECT_PREP_STATE_IDLE        0U
+#define G_T20_BMI270_CONNECT_PREP_STATE_READY       1U
+#define G_T20_BMI270_CONNECT_PREP_STATE_DONE        2U
+
+#define G_T20_BMI270_REAL_CONNECT_STAGE_IDLE        0U
+#define G_T20_BMI270_REAL_CONNECT_STAGE_READY       1U
+#define G_T20_BMI270_REAL_CONNECT_STAGE_DONE        2U
+
+#define G_T20_BMI270_ACTUAL_REG_READ_READY          1U
+#define G_T20_BMI270_ACTUAL_REG_READ_IDLE           0U
+#define G_T20_BMI270_ACTUAL_BURST_READY             1U
+#define G_T20_BMI270_ACTUAL_BURST_IDLE              0U
+
+#define G_T20_BMI270_ISR_REQUEST_IDLE               0U
+#define G_T20_BMI270_ISR_REQUEST_PENDING            1U
+#define G_T20_BMI270_ISR_REQUEST_CONSUMED           2U
 
 #define G_T20_BMI270_VERIFY_STATE_IDLE              0U
 #define G_T20_BMI270_VERIFY_STATE_READY             1U
@@ -116,7 +144,7 @@
 #define G_T20_BMI270_VERIFY_RESULT_OK               1U
 #define G_T20_BMI270_VERIFY_RESULT_FAIL             2U
 
-/* --- [Enums & Structs] --- */
+/* --- [Enums & Structures] --- */
 enum EM_T20_FilterType_t {
     EN_T20_FILTER_OFF = 0, EN_T20_FILTER_LPF, EN_T20_FILTER_HPF, EN_T20_FILTER_BPF
 };
@@ -172,4 +200,8 @@ typedef struct {
     float data[G_T20_SEQUENCE_FRAMES_MAX][G_T20_FEATURE_DIM_MAX];
     uint16_t frames; uint16_t feature_dim; uint16_t head; bool full;
 } ST_T20_FeatureRingBuffer_t;
+
+typedef struct {
+    uint8_t frame_index;
+} ST_T20_FrameMessage_t;
 
