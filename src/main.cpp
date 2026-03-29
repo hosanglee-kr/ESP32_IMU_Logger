@@ -26,6 +26,7 @@
 #endif
 
 
+/*
 #define T20_11
 #ifdef T20_11
     // 1. 버전 정의
@@ -38,14 +39,13 @@
     // 3. 최종 include (계산된 경로 적용)
     #include GET_PATH(VER)
 #endif
+*/
 
 
-/*
 #define T20_11
 #ifdef T20_11
 	#include "T20_MFCC_011/083/T20_Main_083.h"
 #endif
-*/
 
 
 void setup() {
