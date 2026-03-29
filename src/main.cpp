@@ -44,7 +44,7 @@
 
 #define T20_11
 #ifdef T20_11
-	#include "T20_MFCC_011/176/T20_Main_176.h"
+	#include "T20_MFCC_011/194/T20_Main_194.h"
 #endif
 
 
