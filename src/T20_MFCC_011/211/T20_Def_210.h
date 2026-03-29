@@ -16,7 +16,7 @@
 #include <Arduino.h>
 
 /* ============================================================================
- * File: T20_Mfcc_Def_210.h
+ * File: T20_Def_210.h  // T20_Mfcc_Def_210.h
  * Summary:
  *   T20 MFCC / Recorder / Viewer / Web 모듈의 공개 상수/열거형/구조체 정의
  *
