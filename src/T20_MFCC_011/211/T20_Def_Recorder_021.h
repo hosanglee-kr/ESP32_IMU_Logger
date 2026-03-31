@@ -7,6 +7,8 @@
 #pragma once
 
 #include "T20_Def_Comm_021.h"
+#include "T20_Def_SensDsp_021.h"
+
 
 /* --- [SDMMC Hardware Profile Constants] --- */
 #define G_T20_SDMMC_PROFILE_NAME_MAX			 32U /* 핵심 누락 상수 복구 */

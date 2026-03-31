@@ -8,8 +8,8 @@
 #pragma once
 
 #include "T20_Def_Comm_021.h"
-#include "T20_Def_Recorder_021.h"
 #include "T20_Def_SensDsp_021.h"
+#include "T20_Def_Recorder_021.h"
 #include "T20_Def_Viewer_021.h"
 
 
