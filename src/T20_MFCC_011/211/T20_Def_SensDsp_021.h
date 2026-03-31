@@ -21,8 +21,6 @@
 #define G_T20_PREPROCESS_STAGE_MAX					   8U
 #define G_T20_MFCC_HISTORY							   5U
 #define G_T20_NOISE_MIN_FRAMES						   8U
-#define G_T20_PI									   3.14159265358979323846f
-#define G_T20_EPSILON								   1.0e-12f
 
 /* --- [BMI270 Hardware & SPI Constants] --- */
 #define G_T20_SPI_FREQ_HZ							   10000000UL

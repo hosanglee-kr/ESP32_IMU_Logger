@@ -120,6 +120,8 @@
 #define G_T20_RECORDER_CLEANUP_STATE_READY		 1U
 #define G_T20_RECORDER_CLEANUP_STATE_DONE		 2U
 
+
+
 /* --- [Enums & Structures] --- */
 enum EM_T20_OutputMode_t {
 	EN_T20_OUTPUT_VECTOR = 0,
