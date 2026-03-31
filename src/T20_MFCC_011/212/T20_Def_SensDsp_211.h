@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "T20_Def_Comm_2111.h"
+#include "T20_Def_Comm_211.h"
 
 /* --- [DSP/MFCC Core Constants] --- */
 #define G_T20_FFT_SIZE								   256U
