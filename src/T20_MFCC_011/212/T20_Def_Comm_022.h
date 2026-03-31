@@ -116,5 +116,31 @@ typedef enum {
 } EM_T20_Result_t;
 
 /* ============================================================================
- *
- 
+ * Debug Helpers
+ * ========================================================================== */
+
+static inline const char* T20_StateToString(EM_T20_State_t s)
+{
+    switch (s) {
+        case EN_T20_STATE_IDLE: return "IDLE";
+        case EN_T20_STATE_READY: return "READY";
+        case EN_T20_STATE_RUNNING: return "RUNNING";
+        case EN_T20_STATE_DONE: return "DONE";
+        case EN_T20_STATE_ERROR: return "ERROR";
+        default: return "UNKNOWN";
+    }
+}
+
+/* ============================================================================
+ * Utility Helpers
+ * ========================================================================== */
+
+static inline float T20_ClampFloat(float v, float min, float max)
+{
+    return (v < min) ? min : (v > max) ? max : v;
+}
+
+static inline float T20_AbsFloat(float v)
+{
+    return (v < 0.0f) ? -v : v;
+}
