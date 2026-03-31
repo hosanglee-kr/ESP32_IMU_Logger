@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "T20_Def_Comm_022.h"
 
 /* ============================================================================
  * Global Constants (G_T20_)
@@ -43,20 +44,6 @@ static const uint8_t  G_T20_BMI270_CHIP_ID_EXPECTED = 0x24U;
  * Common Enums
  * ========================================================================== */
 
-/* --- Generic State --- */
-typedef enum {
-    EN_T20_STATE_IDLE = 0,
-    EN_T20_STATE_READY,
-    EN_T20_STATE_RUNNING,
-    EN_T20_STATE_DONE,
-    EN_T20_STATE_ERROR
-} EM_T20_State_t;
-
-/* --- Result --- */
-typedef enum {
-    EN_T20_RESULT_FAIL = 0,
-    EN_T20_RESULT_OK
-} EM_T20_Result_t;
 
 /* --- Filter --- */
 typedef enum {
@@ -73,21 +60,7 @@ typedef enum {
     EN_T20_AXIS_Z
 } EM_T20_AxisType_t;
 
-/* ============================================================================
- * State Debug String
- * ========================================================================== */
 
-static inline const char* T20_StateToString(EM_T20_State_t s)
-{
-    switch (s) {
-        case EN_T20_STATE_IDLE:    return "IDLE";
-        case EN_T20_STATE_READY:   return "READY";
-        case EN_T20_STATE_RUNNING: return "RUNNING";
-        case EN_T20_STATE_DONE:    return "DONE";
-        case EN_T20_STATE_ERROR:   return "ERROR";
-        default:                  return "UNKNOWN";
-    }
-}
 
 /* ============================================================================
  * ISR Queue

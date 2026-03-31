@@ -12,8 +12,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "T20_Def_Comm_021.h"
-#include "T20_Def_SensDsp_021.h"
+#include "T20_Def_Comm_022.h"
+#include "T20_Def_SensDsp_022.h"
 
 /* ============================================================================
  * Global Constants (G_T20_)
@@ -55,38 +55,9 @@ static const ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
 static const uint16_t G_T20_RECORDER_FILE_PATH_MAX = 192U;
 static const uint16_t G_T20_RECORDER_SESSION_NAME_MAX = 48U;
 
-/* ============================================================================
- * Common State / Result (공통화)
- * ========================================================================== */
 
-typedef enum {
-    EN_T20_STATE_IDLE = 0,
-    EN_T20_STATE_READY,
-    EN_T20_STATE_RUNNING,
-    EN_T20_STATE_DONE,
-    EN_T20_STATE_ERROR
-} EM_T20_State_t;
 
-typedef enum {
-    EN_T20_RESULT_FAIL = 0,
-    EN_T20_RESULT_OK
-} EM_T20_Result_t;
 
-/* ============================================================================
- * Debug String
- * ========================================================================== */
-
-static inline const char* T20_StateToString(EM_T20_State_t s)
-{
-    switch (s) {
-        case EN_T20_STATE_IDLE: return "IDLE";
-        case EN_T20_STATE_READY: return "READY";
-        case EN_T20_STATE_RUNNING: return "RUNNING";
-        case EN_T20_STATE_DONE: return "DONE";
-        case EN_T20_STATE_ERROR: return "ERROR";
-        default: return "UNKNOWN";
-    }
-}
 
 /* ============================================================================
  * Recorder State (매크로 → 구조체)
