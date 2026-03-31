@@ -8,7 +8,7 @@
 
 #include <math.h>
 
-#include "T20_Mfcc_Inter_210.h"
+#include "T20_Mfcc_Inter_211.h"
 
 bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
 	if (p == nullptr) return false;

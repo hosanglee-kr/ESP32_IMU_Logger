@@ -1,5 +1,5 @@
 /* ============================================================================
-[잔여 구현 계획 재점검 - Recorder v210]
+[잔여 구현 계획 재점검 - Recorder v211]
 
 현재 recorder는 finalize/sync/manifest/audit/report 계층이 충분히 준비되어 있다.
 이제부터의 최우선은 아래를 실제 코드로 치환하는 것이다.
@@ -43,7 +43,7 @@
 4. rotate/prune 실제 파일 처리
 ============================================================================ */
 
-#include "T20_Mfcc_Inter_210.h"
+#include "T20_Mfcc_Inter_211.h"
 
 bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
 	if (p == nullptr) return false;
