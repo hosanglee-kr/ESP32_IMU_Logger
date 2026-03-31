@@ -8,11 +8,10 @@
 #pragma once
 
 #include "T20_Def_Comm_021.h"
-#include "T20_Def_SensDsp_021.h"
 #include "T20_Def_Recorder_021.h"
+#include "T20_Def_SensDsp_021.h"
 #include "T20_Def_Viewer_021.h"
-
-
+#include "T20_Def_Web_211.h"
 
 /* ============================================================================
 [v210 기본 설정 생성 함수]
