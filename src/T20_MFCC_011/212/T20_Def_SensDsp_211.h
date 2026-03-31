@@ -1,12 +1,12 @@
 
 /* ============================================================================
- * File: T20_Def_SensDsp_021.h
+ * File: T20_Def_SensDsp_211.h
  * Summary: BMI270 Sensor Control & DSP/MFCC Pipeline Definitions (v210)
  * ========================================================================== */
 
 #pragma once
 
-#include "T20_Def_Comm_021.h"
+#include "T20_Def_Comm_2111.h"
 
 /* --- [DSP/MFCC Core Constants] --- */
 #define G_T20_FFT_SIZE								   256U

@@ -6,7 +6,7 @@
  * ========================================================================== */
 
 #pragma once
-#include "T20_Def_Comm_021.h"
+#include "T20_Def_Comm_211.h"
 
 // [UI/Viewer 설정]
 #define G_T20_VIEWER_EVENT_MAX			   16U
