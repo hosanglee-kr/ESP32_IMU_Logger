@@ -16,9 +16,16 @@
 #define G_T20_TEXT_PREVIEW_LINE_BUF_SIZE  256U
 
 // [미리보기 및 메타데이터]
+#define G_T20_TYPE_META_KIND_MAX			   24U
+#define G_T20_TYPE_META_AUTO_TEXT_MAX		   64U
+#define G_T20_TYPE_PREVIEW_SAMPLE_ROWS_MAX	   8U
+
 #define G_T20_TYPE_META_NAME_MAX		  32U
 #define G_T20_TYPE_PREVIEW_TEXT_BUF_MAX	  512U
 #define G_T20_VIEWER_SELECTION_POINTS_MAX 128U
+
+#define G_T20_TYPE_META_PREVIEW_LINK_MAX	   16U
+
 
 typedef struct {
 	uint32_t frame_id;
