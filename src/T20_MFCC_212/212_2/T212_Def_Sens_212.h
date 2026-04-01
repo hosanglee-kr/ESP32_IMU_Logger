@@ -197,12 +197,27 @@ typedef struct {
     uint16_t delta_window;
 } ST_T20_FeatureConfig_t;
 
+// [DSP 특징 벡터 구조체] 
+typedef struct {
+    uint32_t frame_id;
+    uint16_t mfcc_len;
+    uint16_t delta_len;
+    uint16_t delta2_len;
+    uint16_t vector_len; 
+    float    mfcc[G_T20_MFCC_COEFFS_MAX];
+    float    delta[G_T20_MFCC_COEFFS_MAX];
+    float    delta2[G_T20_MFCC_COEFFS_MAX];
+    float    vector[G_T20_FEATURE_DIM_MAX];
+} ST_T20_FeatureVector_t
+
+/*
 typedef struct {
     uint16_t mfcc_len;
     float mfcc[G_T20_MFCC_COEFFS_MAX];
     float delta[G_T20_MFCC_COEFFS_MAX];
     float delta2[G_T20_MFCC_COEFFS_MAX];
 } ST_T20_FeatureVector_t;
+*/
 
 /* ============================================================================
  * BMI270 State (통합 상태 관리)

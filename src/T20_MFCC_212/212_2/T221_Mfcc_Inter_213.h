@@ -61,6 +61,9 @@
  * Summary: v213 컴파일 오류 및 누락 멤버를 완벽히 보강한 ST_Impl 정의
  * ========================================================================== */
 
+
+
+
 struct CL_T20_Mfcc::ST_Impl {
 
     // [1] 시스템 및 RTOS 핸들 (System & RTOS Resources)
@@ -161,6 +164,17 @@ struct CL_T20_Mfcc::ST_Impl {
     char                recorder_session_name[G_T20_RECORDER_SESSION_NAME_MAX];
     uint32_t            recorder_session_open_ms;
     uint32_t            recorder_session_close_ms;
+    
+        // 레코더 인덱스 및 로테이션]
+    uint16_t            recorder_index_count;      // <--- 추가
+    uint16_t            recorder_rotate_keep_max;  // <--- 추가
+    struct ST_T20_IndexItem {
+        char     path[128];
+        uint32_t size_bytes;
+        uint32_t created_ms;
+        uint32_t record_count;
+    } recorder_index_items[G_T20_RECORDER_MAX_ROTATE_LIST]; // <--- 추가
+
 
     // [7] 뷰어 및 웹 인터페이스 (Viewer & Meta Data)
     uint32_t            viewer_last_frame_id;
@@ -905,3 +919,17 @@ bool				T20_recorderPrepareFinalIntegrationFlow(CL_T20_Mfcc::ST_Impl* p);
 bool				T20_recorderPrepareConnectExecFlow(CL_T20_Mfcc::ST_Impl* p);
 
 bool				T20_buildFinalIntegrationBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+
+
+// [함수 전방 선언 추가 - T230에서 호출 가능하도록]
+bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p);
+bool T20_bmi270ActualReadRegister(CL_T20_Mfcc::ST_Impl* p, uint8_t p_reg, uint8_t* p_out);
+
+
+
+
+
+
+
+
+

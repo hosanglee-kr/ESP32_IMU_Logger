@@ -128,9 +128,74 @@ bool T20_recorderFlushNow(CL_T20_Mfcc::ST_Impl* p) {
     return ok;
 }
 
+/* ============================================================================
+ * Function: T20_recorderRotateIfNeeded
+ * Summary: 파일 보관 개수를 초과할 경우 가장 오래된 데이터부터 자동 삭제
+ * [v213 수정 사항]
+ * 1. ST_Impl의 복구된 recorder_index_count 및 recorder_index_items 참조
+ * 2. 삭제된 파일에 대한 Event Logging 추가
+ * 3. 리스트 Shift 후 잔여 메모리 초기화(memset)로 무결성 확보
+ ============================================================================ */
+bool T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    // 1. 설정된 보관 개수(Keep Max) 확인 및 안전장치
+    uint16_t max_keep = p->recorder_rotate_keep_max;
+    if (max_keep == 0) max_keep = G_T20_RECORDER_ROTATE_KEEP_MAX; // 기본값(8) 적용
+
+    // 현재 저장된 파일 개수가 한계치 이하이면 즉시 종료
+    if (p->recorder_index_count <= max_keep) return true;
+
+    bool any_deleted = false;
+
+    // 2. 한계치를 초과하는 만큼 루프를 돌며 삭제
+    while (p->recorder_index_count > max_keep) {
+        // 가장 오래된 항목(인덱스 0)의 경로 확보
+        char old_path[128] = {0};
+        strlcpy(old_path, p->recorder_index_items[0].path, sizeof(old_path));
+
+        if (old_path[0] != 0 && old_path[0] != ' ') {
+            // 실제 스토리지(SDMMC 또는 LittleFS)에서 파일 제거
+            bool success = false;
+            if (p->recorder_storage_backend == EN_T20_STORAGE_SDMMC) {
+                success = SD_MMC.remove(old_path);
+            } else {
+                success = LittleFS.remove(old_path);
+            }
+
+            // 삭제 결과 기록 (디버깅 및 웹 UI 확인용)
+            if (success) {
+                char log_msg[160];
+                snprintf(log_msg, sizeof(log_msg), "rotate_del_ok:%s", old_path);
+                T20_recorderWriteEvent(p, log_msg);
+            } else {
+                T20_recorderSetLastError(p, "rotate_del_fail");
+            }
+        }
+
+        // 3. 인덱스 리스트를 한 칸씩 앞으로 당김 (Shift Left)
+        for (uint16_t i = 1; i < p->recorder_index_count; ++i) {
+            p->recorder_index_items[i - 1] = p->recorder_index_items[i];
+        }
+
+        // 4. 당겨지고 남은 마지막 칸 초기화
+        uint16_t last_idx = p->recorder_index_count - 1;
+        memset(&p->recorder_index_items[last_idx], 0, sizeof(p->recorder_index_items[0]));
+
+        p->recorder_index_count--;
+        any_deleted = true;
+    }
+
+    // 5. 변경사항이 있다면 인덱스 파일(JSON)을 즉시 갱신
+    if (any_deleted) {
+        return T20_saveRecorderIndex(p);
+    }
+
+    return true;
+}
 
 
-
+/*
 bool T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
     // 설정된 보관 개수를 초과하면 가장 오래된 인덱스 파일 삭제
@@ -150,7 +215,7 @@ bool T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
     }
     return T20_saveRecorderIndex(p);
 }
-
+*/
 
 
 bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
@@ -238,4 +303,9 @@ void T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p) {
         T20_saveRecorderIndex(p);
     }
 }
+
+
+
+
+
 
