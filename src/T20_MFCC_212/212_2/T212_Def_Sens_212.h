@@ -208,7 +208,7 @@ typedef struct {
     float    delta[G_T20_MFCC_COEFFS_MAX];
     float    delta2[G_T20_MFCC_COEFFS_MAX];
     float    vector[G_T20_FEATURE_DIM_MAX];
-} ST_T20_FeatureVector_t
+} ST_T20_FeatureVector_t;
 
 /*
 typedef struct {

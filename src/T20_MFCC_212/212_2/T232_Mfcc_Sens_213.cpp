@@ -36,30 +36,26 @@
 bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
-    // 1. SPI 통신 시작 (CS=10, 4MHz, SPI_MODE0)
-    // 라이브러리 내부에서 Bosch API 초기화 및 Config 로드(0x59)를 수행합니다.
+    // beginSPI가 내부적으로 Config Load(0x59)를 수행하므로 writeRegister 수동 호출 불필요
     int8_t status = p->bmi.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
-    if (status != BMI2_OK) {
+    if (status != 0) { // BMI2_OK is 0
         p->bmi_state.master = EN_T20_STATE_ERROR;
         return false;
     }
 
-    // 2. ODR 및 Range 설정 (라이브러리 전용 매크로 사용)
-    p->bmi.setAccelODR(BMI2_ACC_ODR_1600HZ);
-    p->bmi.setAccelPowerMode(BMI2_ACC_PERF_MODE); // 고성능 모드
-    
-    p->bmi.setGyroODR(BMI2_GYR_ODR_1600HZ);
-    p->bmi.setGyroPowerMode(BMI2_GYR_PERF_MODE, BMI2_GYR_NOISE_PERF);
+    // 라이브러리 매크로 확인: BMI2_POWER_OPTIMIZED 등 라이브러리 제공값 사용
+    p->bmi.setAccelPowerMode(1); // 1: Performance Mode (보통 라이브러리에 정의됨)
+    p->bmi.setGyroPowerMode(1, 1); 
 
-    // 3. 인터럽트 설정 (라이브러리 mapInterruptToPin 사용)
-    // 데이터 준비 완료(DRDY) 신호를 INT1 핀으로 출력
-    p->bmi.mapInterruptToPin(BMI2_ACC_DRDY_INT, BMI2_INT1);
-    p->bmi.mapInterruptToPin(BMI2_GYR_DRDY_INT, BMI2_INT1);
+    // 인터럽트 매핑 (라이브러리 함수 활용)
+    p->bmi.mapInterruptToPin(BMI2_DRDY_INT, BMI2_INT1); 
 
     p->bmi_state.init = EN_T20_STATE_DONE;
     p->bmi_state.spi = EN_T20_STATE_READY;
     return true;
 }
+
+
 
 bool T20_bmi270ActualReadBurst(CL_T20_Mfcc::ST_Impl* p, uint8_t* p_buf, uint16_t p_len) {
     if (p == nullptr || p_buf == nullptr || p_len < 6) return false;
