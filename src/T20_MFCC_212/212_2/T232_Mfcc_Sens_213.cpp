@@ -30,30 +30,34 @@
 #define REG_CMD           0x7E
 */
 
+
+
+// 라이브러리 함수를 사용하여 센서 초기화
 bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    
-    // 1. 센서 웨이크업 및 전원 설정
-    uint8_t dummy;
-    T20_bmi270ActualReadRegister(p, 0x00, &dummy); // Dummy read
-    delay(1);
-    
-    p->spi.writeRegister(BMI2_REG_PWR_CONF, 0x00); // Adv. Power Save Off
-    delay(1);
-    p->spi.writeRegister(BMI2_REG_PWR_CTRL, 0x0E); // Acc, Gyr, Temp On
-    delay(2);
 
-    // 2. ODR 및 Range 설정 (1600Hz / 8g / 2000dps)
-    p->spi.writeRegister(BMI2_REG_ACC_CONF, 0xAC);  // ODR 1600Hz, BW 2
-    p->spi.writeRegister(BMI2_REG_ACC_RANGE, 0x02); // +/- 8g
-    p->spi.writeRegister(BMI2_REG_GYR_CONF, 0xAC);  // ODR 1600Hz, BW 2
-    p->spi.writeRegister(BMI2_REG_GYR_RANGE, 0x00); // +/- 2000 dps
+    // 1. SPI 통신 시작 (CS=10, 4MHz, SPI_MODE0)
+    // 라이브러리 내부에서 Bosch API 초기화 및 Config 로드(0x59)를 수행합니다.
+    int8_t status = p->bmi.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
+    if (status != BMI2_OK) {
+        p->bmi_state.master = EN_T20_STATE_ERROR;
+        return false;
+    }
+
+    // 2. ODR 및 Range 설정 (라이브러리 전용 매크로 사용)
+    p->bmi.setAccelODR(BMI2_ACC_ODR_1600HZ);
+    p->bmi.setAccelPowerMode(BMI2_ACC_PERF_MODE); // 고성능 모드
     
-    // 3. INT1 핀에 데이터 준비(DRDY) 신호 매핑
-    p->spi.writeRegister(BMI2_REG_INT1_IO_CTRL, 0x0A); // Output, Active High
-    p->spi.writeRegister(BMI2_REG_INT_MAP_DATA, 0x01); // DRDY -> INT1
-    
+    p->bmi.setGyroODR(BMI2_GYR_ODR_1600HZ);
+    p->bmi.setGyroPowerMode(BMI2_GYR_PERF_MODE, BMI2_GYR_NOISE_PERF);
+
+    // 3. 인터럽트 설정 (라이브러리 mapInterruptToPin 사용)
+    // 데이터 준비 완료(DRDY) 신호를 INT1 핀으로 출력
+    p->bmi.mapInterruptToPin(BMI2_ACC_DRDY_INT, BMI2_INT1);
+    p->bmi.mapInterruptToPin(BMI2_GYR_DRDY_INT, BMI2_INT1);
+
     p->bmi_state.init = EN_T20_STATE_DONE;
+    p->bmi_state.spi = EN_T20_STATE_READY;
     return true;
 }
 
@@ -89,14 +93,32 @@ void IRAM_ATTR T20_onBmiDrdyISR() {
 }
 
 
+// 라이브러리 데이터 구조를 사용하여 샘플 읽기
 bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
-    if (!p || !p_out_sample) return false;
-    uint8_t buf[6];
-    if (T20_bmi270ActualReadBurst(p, buf, 6)) {
-        return T20_bmi270DecodeBurstToSample(p, buf, 6, p_out_sample);
+    if (p == nullptr || p_out_sample == nullptr) return false;
+
+    // 라이브러리 내부에서 SPI 버스트 읽기 및 float 변환 수행
+    if (p->bmi.getSensorData() != BMI2_OK) return false;
+
+    // 현재 설정된 축 모드에 따라 데이터 선택
+    switch (p->bmi270_axis_mode) {
+        case G_T20_BMI270_AXIS_MODE_ACC_Z:
+            *p_out_sample = p->bmi.data.accelZ;
+            break;
+        case G_T20_BMI270_AXIS_MODE_GYRO_Z:
+        default:
+            *p_out_sample = p->bmi.data.gyroZ;
+            break;
     }
-    return false;
+
+    // 뷰어용 실시간 값 업데이트
+    p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
+    p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
+    p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
+    
+    return true;
 }
+
 
 bool T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;

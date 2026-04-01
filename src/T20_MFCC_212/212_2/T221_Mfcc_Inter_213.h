@@ -41,6 +41,7 @@
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <SPI.h>
+#include "SparkFun_BMI270.h"
 
 #include <memory>
 #include <vector>
@@ -63,11 +64,11 @@
 
 
 
-
 struct CL_T20_Mfcc::ST_Impl {
 
     // [1] 시스템 및 RTOS 핸들 (System & RTOS Resources)
     SPIClass            spi;                    // 센서 통신용 SPI 인터페이스 (FSPI)
+    BMI270              bmi;
     TaskHandle_t        sensor_task_handle;     // 센서 데이터 수집 태스크
     TaskHandle_t        process_task_handle;    // DSP/MFCC 연산 태스크
     TaskHandle_t        recorder_task_handle;   // SD/MMC 저장 전용 태스크
@@ -212,7 +213,7 @@ struct CL_T20_Mfcc::ST_Impl {
     // ------------------------------------------------------------------------
     // 생성자: 자원 할당 및 초기화
     // ------------------------------------------------------------------------
-    ST_Impl() : spi(FSPI) {
+    ST_Impl() : spi(FSPI), bmi() {
         // [1] RTOS 초기화
         sensor_task_handle = process_task_handle = recorder_task_handle = nullptr;
         frame_queue = recorder_queue = nullptr;
