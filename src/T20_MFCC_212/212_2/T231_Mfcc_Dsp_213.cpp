@@ -17,6 +17,45 @@ static const uint8_t G_T20_FFT_BIT_REVERSE_256[256] = {
     0,128,64,192,32,160,96,224,16,144,80,208,48,176,112,240, // ... 중략 (컴파일러 최적화 위해 실제 코드 시 인라인 구현)
 };
 
+bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    // 윈도우 계수 생성
+    T20_buildHammingWindow(p);
+
+    // 버퍼 초기화
+    memset(p->noise_spectrum, 0, sizeof(p->noise_spectrum));
+    memset(p->log_mel, 0, sizeof(p->log_mel));
+    memset(p->mel_bank, 0, sizeof(p->mel_bank));
+    memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
+    memset(p->biquad_state, 0, sizeof(p->biquad_state));
+
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+
+    // Mel Filterbank 가중치 계산 루프
+    for (uint16_t m = 0; m < G_T20_MEL_FILTERS; ++m) {
+        uint16_t left   = (uint16_t)((m * bins) / (G_T20_MEL_FILTERS + 1U));
+        uint16_t center = (uint16_t)(((m + 1U) * bins) / (G_T20_MEL_FILTERS + 1U));
+        uint16_t right  = (uint16_t)(((m + 2U) * bins) / (G_T20_MEL_FILTERS + 1U));
+
+        // 인덱스 안전성 보장
+        if (center <= left) center = left + 1U;
+        if (right <= center) right = center + 1U;
+        if (right > bins) right = bins;
+
+        // 삼각형 오르막 (0 -> 1)
+        for (uint16_t k = left; k < center && k < bins; ++k) {
+            p->mel_bank[m][k] = (float)(k - left) / (float)(center - left);
+        }
+        // 삼각형 내리막 (1 -> 0)
+        for (uint16_t k = center; k < right && k < bins; ++k) {
+            p->mel_bank[m][k] = (float)(right - k) / (float)(right - center + G_T20_EPSILON);
+        }
+    }
+
+    return T20_configureRuntimeFilter(p);
+}
+
 /* [v212 추가] 기본적인 Radix-2 FFT (esp_dsp 미사용 시 대비) */
 void T20_performFFT256(float* p_real, float* p_imag) {
     // 256포인트 FFT 연산 (주파수 분석의 핵심)

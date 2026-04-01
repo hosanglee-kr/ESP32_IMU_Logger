@@ -15,6 +15,17 @@ void T20_sensorTask(void* p_arg);
 void T20_processTask(void* p_arg);
 void T20_recorderTask(void* p_arg);
 
+// 클래스 생성자 및 소멸자 구현 확인
+CL_T20_Mfcc::CL_T20_Mfcc() : _impl(new ST_Impl()) {
+    g_t20_instance = this;
+}
+
+CL_T20_Mfcc::~CL_T20_Mfcc() {
+    stop();
+    if (_impl) delete _impl;
+    if (g_t20_instance == this) g_t20_instance = nullptr;
+}
+
 
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (_impl == nullptr) return false;
@@ -51,6 +62,9 @@ bool CL_T20_Mfcc::start(void) {
     return true;
 }
 
+
+
+
 void T20_sensorTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     for (;;) {
@@ -86,3 +100,39 @@ void T20_sensorTask(void* p_arg) {
     }
 }
 
+// 시스템 자원 초기화 로직
+void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p) {
+    if (!p) return;
+    p->running = false;
+    p->recorder_record_count = 0;
+    p->dropped_frames = 0;
+    // 큐/세마포어 초기화는 begin()에서 수행하므로 여기선 상태값만 리셋
+}
+
+// 프로필 초기화
+void T20_initProfiles(CL_T20_Mfcc::ST_Impl* p) {
+    if (!p) return;
+    for (int i = 0; i < G_T20_CFG_PROFILE_COUNT; i++) {
+        p->profiles[i].used = false;
+        snprintf(p->profiles[i].name, sizeof(p->profiles[i].name), "Profile_%d", i);
+    }
+}
+
+
+
+void CL_T20_Mfcc::printConfig(Stream& p_out) const {
+	p_out.println(F("----------- T20_Mfcc Config -----------"));
+	p_out.printf("FrameSize   : %u\n", _impl->cfg.feature.frame_size);
+	p_out.printf("HopSize     : %u\n", _impl->cfg.feature.hop_size);
+	p_out.printf("MFCC Coeffs : %u\n", _impl->cfg.feature.mfcc_coeffs);
+	p_out.printf("Output Mode : %s\n", _impl->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR ? "VECTOR" : "SEQUENCE");
+	p_out.println(F("---------------------------------------"));
+}
+void CL_T20_Mfcc::printStatus(Stream& p_out) const {
+	p_out.println(F("----------- T20_Mfcc Status -----------"));
+	p_out.printf("Initialized  : %s\n", _impl->initialized ? "YES" : "NO");
+	p_out.printf("Running      : %s\n", _impl->running ? "YES" : "NO");
+	p_out.printf("Record Count : %lu\n", (unsigned long)_impl->recorder_record_count);
+	p_out.printf("Dropped      : %lu\n", (unsigned long)_impl->dropped_frames);
+	p_out.println(F("---------------------------------------"));
+}

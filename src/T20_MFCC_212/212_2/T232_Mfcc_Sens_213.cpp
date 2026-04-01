@@ -77,3 +77,11 @@ void IRAM_ATTR T20_onBmiDrdyISR() {
     }
 }
 
+bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
+    if (!p || !p_out_sample) return false;
+    uint8_t buf[6];
+    if (T20_bmi270ActualReadBurst(p, buf, 6)) {
+        return T20_bmi270DecodeBurstToSample(p, buf, 6, p_out_sample);
+    }
+    return false;
+}

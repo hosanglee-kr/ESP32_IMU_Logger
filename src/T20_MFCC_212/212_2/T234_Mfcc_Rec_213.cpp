@@ -99,3 +99,24 @@ void T20_recorderTask(void* p_arg) {
     }
 }
 
+
+
+bool T20_recorderBatchPush(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVectorMessage_t* p_msg) {
+    if (!p || !p_msg) return false;
+    if (p->recorder_batch_count < G_T20_RECORDER_BATCH_VECTOR_MAX) {
+        p->recorder_batch_vectors[p->recorder_batch_count++] = *p_msg;
+        p->recorder_batch_last_push_ms = millis();
+        return true;
+    }
+    return false;
+}
+
+bool T20_recorderFlushNow(CL_T20_Mfcc::ST_Impl* p) {
+    if (!p || p->recorder_batch_count == 0) return true;
+    // DMA 슬롯에 스테이징 후 파일 쓰기 실행
+    bool ok = T20_commitActiveDmaSlotToFile(p);
+    p->recorder_batch_count = 0;
+    p->recorder_last_flush_ms = millis();
+    return ok;
+}
+
