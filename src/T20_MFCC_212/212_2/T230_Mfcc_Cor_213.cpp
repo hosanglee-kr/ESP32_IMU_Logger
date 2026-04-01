@@ -30,6 +30,39 @@ CL_T20_Mfcc::~CL_T20_Mfcc() {
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (_impl == nullptr) return false;
 
+    // [Step 1] 메모리 및 기본 구조체 초기화
+    T20_resetRuntimeResources(_impl);
+    _impl->cfg = (p_cfg != nullptr) ? *p_cfg : T20_makeDefaultConfig();
+
+    // [Step 2] 동기화 객체 우선 생성 (Task 생성 전 필수)
+    _impl->mutex = xSemaphoreCreateMutex();
+    _impl->frame_queue = xQueueCreate(G_T20_QUEUE_LEN, sizeof(ST_T20_FrameMessage_t));
+    _impl->recorder_queue = xQueueCreate(32, sizeof(ST_T20_RecorderVectorMessage_t)); // 마진 확보
+
+    // [Step 3] 하드웨어 물리 연결 (SPI)
+    _impl->spi.begin(G_T20_PIN_SPI_SCK, G_T20_PIN_SPI_MISO, G_T20_PIN_SPI_MOSI, G_T20_PIN_BMI_CS);
+    
+    // [Step 4] 센서 펌웨어 설정 적용 (앞에서 만든 함수 호출)
+    if (!T20_bmi270_LoadProductionConfig(_impl)) {
+        strlcpy(_impl->bmi270_status_text, "hw_init_fail", 48);
+        return false;
+    }
+
+    // [Step 5] DSP 및 파일 시스템 준비
+    T20_initDSP(_impl);
+    T20_loadRuntimeConfigFile(_impl);
+    T20_tryMountSdmmcRecorderBackend(_impl); // SD카드 마운트 시도
+
+    _impl->initialized = true;
+    _impl->bmi_state.init = EN_T20_STATE_DONE;
+    return true;
+}
+
+
+/*
+bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
+    if (_impl == nullptr) return false;
+
     // 1. 자원 초기화 및 설정 복사
     T20_resetRuntimeResources(_impl);
     _impl->cfg = (p_cfg != nullptr) ? *p_cfg : T20_makeDefaultConfig();
@@ -48,6 +81,7 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     _impl->bmi_state.init = EN_T20_STATE_READY;
     return true;
 }
+*/
 
 bool CL_T20_Mfcc::start(void) {
     if (_impl == nullptr || !_impl->initialized || _impl->running) return false;
@@ -64,41 +98,39 @@ bool CL_T20_Mfcc::start(void) {
 
 
 
-
 void T20_sensorTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
+    T20_bmi270InstallDrdyHook(p);
+
     for (;;) {
-        if (p == nullptr || !p->running) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
+        // DRDY 인터럽트 대기
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
+        
+        if (!p->running) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
 
-        // 1. 실센서(BMI270) 또는 시뮬레이션 데이터 획득
         float sample = 0.0f;
-        if (p->live_source_mode == G_T20_LIVE_SOURCE_MODE_BMI270) {
-            if (p->bmi270_drdy_isr_flag) {
-                T20_bmi270ReadVectorSample(p, &sample);
-                p->bmi270_drdy_isr_flag = 0;
-            } else {
-                vTaskDelay(1); continue;
-            }
-        } else {
-            T20_fillSyntheticFrame(p, &sample, 1); // 시뮬레이션은 샘플 단위로
-            vTaskDelay(pdMS_TO_TICKS(1)); // 약 1000Hz 시뮬레이션
-        }
+        if (T20_bmi270ReadVectorSample(p, &sample)) {
+            p->bmi270_sample_counter++;
 
-        // 2. 핑퐁 버퍼링 로직
-        p->frame_buffer[p->active_fill_buffer][p->active_sample_index++] = sample;
+            // [v213 개선] 순환 버퍼(Circular Buffer) 방식으로 샘플 저장
+            // 256개 프레임 버퍼를 링버퍼처럼 활용
+            uint16_t idx = p->active_sample_index % G_T20_FFT_SIZE;
+            p->frame_buffer[0][idx] = sample; // 단일 대형 버퍼 모드로 운용 가능
+            p->active_sample_index++;
 
-        // 버퍼가 가득 차면 DSP 태스크로 전달
-        if (p->active_sample_index >= G_T20_FFT_SIZE) {
-            ST_T20_FrameMessage_t msg = { .frame_index = p->active_fill_buffer };
-            if (xQueueSend(p->frame_queue, &msg, 0) != pdTRUE) {
-                p->dropped_frames++;
+            // Hop Size(예: 128) 마다 분석 태스크 통지
+            // 50% Overlap 기준: 128샘플마다 256샘플 분석 수행
+            if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && p->active_sample_index >= G_T20_FFT_SIZE) {
+                ST_T20_FrameMessage_t msg;
+                // 현재 쓰기가 완료된 위치 정보를 전달
+                msg.frame_index = 0; 
+                xQueueSend(p->frame_queue, &msg, 0);
             }
-            // 버퍼 스위칭
-            p->active_fill_buffer = (p->active_fill_buffer + 1) % G_T20_RAW_FRAME_BUFFERS;
-            p->active_sample_index = 0;
         }
     }
 }
+
+
 
 // 시스템 자원 초기화 로직
 void T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p) {
@@ -136,3 +168,80 @@ void CL_T20_Mfcc::printStatus(Stream& p_out) const {
 	p_out.printf("Dropped      : %lu\n", (unsigned long)_impl->dropped_frames);
 	p_out.println(F("---------------------------------------"));
 }
+
+
+
+bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len) {
+    if (!p || !p_frame) return false;
+
+    float mfcc[G_T20_MFCC_COEFFS_MAX];
+    float delta[G_T20_MFCC_COEFFS_MAX];
+    float delta2[G_T20_MFCC_COEFFS_MAX];
+
+    // 1. 기본 MFCC 13차 추출
+    T20_computeMFCC(p, p_frame, mfcc);
+    
+    // 2. 이력 버퍼 갱신 (Delta 계산용)
+    T20_pushMfccHistory(p, mfcc, p->cfg.feature.mfcc_coeffs);
+    
+    // 3. Delta 및 Delta-Delta 연산
+    T20_computeDeltaFromHistory(p, p->cfg.feature.mfcc_coeffs, 2, delta);
+    T20_computeDeltaDeltaFromHistory(p, p->cfg.feature.mfcc_coeffs, delta2);
+
+    // 4. 39차 벡터 통합
+    T20_buildVector(mfcc, delta, delta2, p->cfg.feature.mfcc_coeffs, p->latest_feature.vector);
+
+    // 5. 로깅 및 뷰어 업데이트 (Part 1 연결)
+    if (p->recorder_enabled) {
+        ST_T20_RecorderVectorMessage_t msg;
+        msg.frame_id = p->viewer_last_frame_id;
+        msg.vector_len = 39; // 39차 고정
+        memcpy(msg.vector, p->latest_feature.vector, sizeof(msg.vector));
+        
+        // 더블 버퍼링 스테이지 투입
+        T20_stageVectorToDmaSlot(p, &msg);
+    }
+    
+    return true;
+}
+
+
+
+
+
+
+
+
+// [4-1] 39차 특징 벡터 Web 전송용 JSON 빌더
+bool T20_buildViewerDataJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
+    if (p == nullptr || !p->latest_vector_valid) return false;
+
+    JsonDocument doc;
+    doc["frame_id"] = p->viewer_last_frame_id;
+    doc["vector_len"] = p->latest_feature.vector_len; // 39
+
+    // MFCC (0~12), Delta (13~25), Delta2 (26~38)를 분리하여 전송 (UI 시각화 용이성)
+    JsonArray mfcc = doc["mfcc"].to<JsonArray>();
+    for (int i = 0; i < 13; i++) mfcc.add(p->latest_feature.vector[i]);
+
+    JsonArray delta = doc["delta"].to<JsonArray>();
+    for (int i = 13; i < 26; i++) delta.add(p->latest_feature.vector[i]);
+
+    JsonArray delta2 = doc["delta2"].to<JsonArray>();
+    for (int i = 26; i < 39; i++) delta2.add(p->latest_feature.vector[i]);
+
+    return T20_jsonWriteDoc(doc, p_out_buf, p_len);
+}
+
+// [4-2] 세션 종료 리포트 빌더 (바이너리 무결성 확인용)
+bool T20_buildRecorderFinalizeJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
+    JsonDocument doc;
+    doc["session_id"] = p->recorder_session_id;
+    doc["final_count"] = p->recorder_record_count;
+    doc["duration_ms"] = p->recorder_session_close_ms - p->recorder_session_open_ms;
+    doc["status"] = (p->rec_state.write == EN_T20_STATE_ERROR) ? "fail" : "success";
+    doc["last_error"] = p->recorder_last_error;
+
+    return T20_jsonWriteDoc(doc, p_out_buf, p_len);
+}
+

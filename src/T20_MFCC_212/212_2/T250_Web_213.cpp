@@ -80,6 +80,8 @@ void T20_registerSensorDiagHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_s
         serializeJson(doc, json, sizeof(json));
         request->send(200, "application/json", json);
     });
+    
+    
 }
 
 /* ----------------------------------------------------------------------------
@@ -109,6 +111,24 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         bool ok = T20_buildRecorderCsvTableAdvancedJsonText(p, json, sizeof(json), path, 4096, nullptr, nullptr, 0, 0, page, 20);
         T20_sendJsonText(request, ok, json);
     });
+    
+    // 진단 정보 보강 
+    v_server->on((base + "/live_debug").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        doc["sample_count"] = p->bmi270_sample_counter;
+        doc["frame_id"] = p->viewer_last_frame_id;
+        doc["hop_size"] = p->cfg.feature.hop_size;
+        doc["fft_size"] = G_T20_FFT_SIZE;
+        
+        // 분석 주기에 따른 처리율 계산 (1600Hz / 128Hop = 약 12.5 FPS)
+        doc["process_hz"] = (p->viewer_last_frame_id > 0) ? 
+                            (1000.0f / (millis() - p->last_frame_process_ms + 1)) : 0;
+        
+        char json[G_T20_WEB_JSON_BUF_SIZE];
+        serializeJson(doc, json, sizeof(json));
+        request->send(200, "application/json", json);
+    });
+
 }
 
 /* ----------------------------------------------------------------------------
@@ -134,3 +154,39 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
 }
 
 
+
+
+
+
+void T20_registerFileStreamingHandler(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, const String& base) {
+    v_server->on((base + "/recorder/download").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
+        char path[128];
+        if (!T20_getQueryParamPath(request, "path", path, sizeof(path))) {
+            request->send(400, "text/plain", "path_required"); return;
+        }
+
+        File file = p->recorder_storage_backend == EN_T20_STORAGE_SDMMC ? SD_MMC.open(path, "r") : LittleFS.open(path, "r");
+        if (!file) {
+            request->send(404, "text/plain", "file_not_found"); return;
+        }
+
+        // AsyncWebServer의 내장 스트리밍 기능을 활용하여 Range 처리 위임
+        AsyncWebServerResponse *response = request->beginResponse(file, path, "application/octet-stream");
+        response->addHeader("Access-Control-Allow-Origin", "*");
+        request->send(response);
+    });
+}
+
+
+
+
+uint32_t T20_calcStatusHash(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return 0;
+    
+    // 이 해시값이 바뀌면 웹 프론트엔드에서 그래프를 다시 그립니다.
+    uint32_t h = 2166136261UL;
+    h ^= p->viewer_last_frame_id;      h *= 16777619UL; // 연산 완료 프레임 번호
+    h ^= p->recorder_record_count;     h *= 16777619UL; // 저장된 레코드 수
+    h ^= (uint32_t)(p->bmi270_last_axis_values[2] * 1000); // 센서 값의 미세 변화 감지
+    return h;
+}
