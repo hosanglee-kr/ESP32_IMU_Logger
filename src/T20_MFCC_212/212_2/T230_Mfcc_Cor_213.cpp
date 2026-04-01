@@ -8,7 +8,13 @@
  * 4. Alias Accessor를 통한 v210 상태 로직의 v212 구조체 매핑
  ============================================================================ */
 
-#include "T221_Mfcc_Inter_212.h"
+#include "T221_Mfcc_Inter_213.h"
+
+// --- 전방 선언(Forward Declaration) 추가 ---
+void T20_sensorTask(void* p_arg);
+void T20_processTask(void* p_arg);
+void T20_recorderTask(void* p_arg);
+
 
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (_impl == nullptr) return false;
@@ -26,7 +32,7 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     _impl->spi.begin(G_T20_PIN_SPI_SCK, G_T20_PIN_SPI_MISO, G_T20_PIN_SPI_MOSI, G_T20_PIN_BMI_CS);
     T20_initProfiles(_impl);
     T20_initDSP(_impl);
-    
+
     _impl->initialized = true;
     _impl->bmi_state.init = EN_T20_STATE_READY;
     return true;
@@ -57,7 +63,7 @@ void T20_sensorTask(void* p_arg) {
                 T20_bmi270ReadVectorSample(p, &sample);
                 p->bmi270_drdy_isr_flag = 0;
             } else {
-                vTaskDelay(1); continue; 
+                vTaskDelay(1); continue;
             }
         } else {
             T20_fillSyntheticFrame(p, &sample, 1); // 시뮬레이션은 샘플 단위로

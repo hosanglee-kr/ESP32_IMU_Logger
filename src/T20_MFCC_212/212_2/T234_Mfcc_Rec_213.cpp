@@ -23,7 +23,7 @@ bool T20_recorderOpenIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
 
     // v210 로직: 파일 존재 여부 확인 후 'a'(Append) 또는 'w'(Write) 결정
     bool exists = p->recorder_storage_backend == EN_T20_STORAGE_SDMMC ? SD_MMC.exists(active_path) : LittleFS.exists(active_path);
-    
+
     File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, active_path, exists ? "a" : "w");
     if (!file) {
         T20_recorderSetLastError(p, "file_open_failed");
@@ -84,7 +84,7 @@ void T20_recorderTask(void* p_arg) {
 
             // 실시간 상태 업데이트 (v210 호환)
             p->recorder_record_count++;
-            
+
             // 워터마크 또는 명시적 플러시 요청 시 파일 저장
             if (p->recorder_flush_requested || p->recorder_batch_count >= p->recorder_batch_watermark_high) {
                 T20_recorderFlushNow(p);

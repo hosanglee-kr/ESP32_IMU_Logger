@@ -10,7 +10,7 @@
 
 #include <math.h>
 #include <string.h>
-#include "T221_Mfcc_Inter_212.h"
+#include "T221_Mfcc_Inter_213.h"
 
 /* [내부 헬퍼] 256-point FFT용 Bit-Reversal Index (v210 복구) */
 static const uint8_t G_T20_FFT_BIT_REVERSE_256[256] = {

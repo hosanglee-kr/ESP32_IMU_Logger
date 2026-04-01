@@ -8,7 +8,7 @@
  * 4. DRDY ISR에서 Queue를 통한 데이터 전달 레이턴시 최소화
  ============================================================================ */
 
-#include "T221_Mfcc_Inter_212.h"
+#include "T221_Mfcc_Inter_213.h"
 
 /* BMI270 설정 레지스터 상수 (v210 완전 복구) */
 #define REG_ACC_CONF      0x40
@@ -25,7 +25,7 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
 
     // 1. SPI 버스 시작
     p->spi.beginTransaction(SPISettings(G_T20_SPI_FREQ_HZ, MSBFIRST, SPI_MODE0));
-    
+
     // 2. 칩 아이디 확인 (0x24)
     uint8_t chip_id = 0;
     if (!T20_bmi270ActualReadRegister(p, G_T20_BMI270_REG_CHIP_ID, &chip_id) || chip_id != G_T20_BMI270_CHIP_ID_EXPECTED) {
@@ -37,10 +37,10 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     // 3. BMI270 전원 및 ODR 설정 (1600Hz ODR 반영)
     // [v210 로직] PWR_CONF -> PWR_CTRL -> ACC/GYR CONF
     p->bmi_runtime.burst_flow = EN_T20_STATE_READY;
-    
+
     // 더미 쓰기로 센서 웨이크업
     uint8_t dummy = 0;
-    T20_bmi270ActualReadRegister(p, 0x00, &dummy); 
+    T20_bmi270ActualReadRegister(p, 0x00, &dummy);
 
     // 레지스터 설정 (v210 설정값 기반)
     // Acc: ODR 1600Hz, Normal Mode, Filter BWP 2

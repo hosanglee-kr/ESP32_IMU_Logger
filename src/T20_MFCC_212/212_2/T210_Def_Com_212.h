@@ -17,12 +17,44 @@ static const float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
 
 
 
-// --- v210 대비 누락된 시스템 경로 보강 --- 
+
+
+// 태스크 설정 (v210에서 복구)
+#define G_T20_SENSOR_TASK_STACK               6144U
+#define G_T20_PROCESS_TASK_STACK              12288U
+#define G_T20_RECORDER_TASK_STACK             8192U
+#define G_T20_SENSOR_TASK_PRIO                4U
+#define G_T20_PROCESS_TASK_PRIO               3U
+#define G_T20_RECORDER_TASK_PRIO              2U
+
+// 핀 맵 매크로 (Core.cpp 호환용)
+#define G_T20_PIN_SPI_SCK                     12
+#define G_T20_PIN_SPI_MISO                    13
+#define G_T20_PIN_SPI_MOSI                    11
+#define G_T20_PIN_BMI_CS                      10
+#define G_T20_PIN_BMI_INT1                    14
+
+#define G_T20_QUEUE_LEN                       4U
+#define G_T20_SELECTION_SYNC_NAME_MAX         32U
+
+
+static const uint8_t 	G_T20_CFG_PROFILE_COUNT               = 4U;
+static const uint8_t 	G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    = 32U;
+static const uint8_t 	G_T20_RAW_FRAME_BUFFERS               = 4U;
+static const uint16_t 	G_T20_SYSTEM_JSON_BUF_MAX             = 1536U;
+
+// #define G_T20_CFG_PROFILE_COUNT               4U
+// #define G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    32U
+// #define G_T20_RAW_FRAME_BUFFERS               4U
+// #define G_T20_SYSTEM_JSON_BUF_MAX             1536U
+
+
+// --- v210 대비 누락된 시스템 경로 보강 ---
 static const char* G_T20_RECORDER_DEFAULT_FILE_PATH  = "/t20_rec.bin";
 static const char* G_T20_RECORDER_INDEX_FILE_PATH    = "/t20_rec_index.json";
 static const char* G_T20_RECORDER_RUNTIME_CFG_PATH   = "/t20_runtime_cfg.json";
 
-// 시뮬레이션 및 실제 소스 모드 정의 
+// 시뮬레이션 및 실제 소스 모드 정의
 typedef enum {
     EN_T20_SOURCE_OFF       = 255,
     EN_T20_SOURCE_SYNTHETIC = 0,
@@ -105,13 +137,13 @@ typedef struct {
     uint16_t preview_text_max;
 
     uint16_t csv_page_size_max;
-    
-    
+
+
     uint16_t noise_min_frames;
     uint8_t  csv_sort_asc;
     uint8_t  csv_sort_desc;
-    
-    
+
+
 } ST_T20_SystemLimits_t;
 
 static const ST_T20_SystemLimits_t G_T20_SYSTEM_LIMITS = {
@@ -124,9 +156,9 @@ static const ST_T20_SystemLimits_t G_T20_SYSTEM_LIMITS = {
     .preview_text_default      = 4096U,
     .preview_text_max          = 16384U,
     .csv_page_size_max         = 100U,
-    
+
     .noise_min_frames = 8U,
-    .csv_sort_asc = 0, 
+    .csv_sort_asc = 0,
     .csv_sort_desc = 1
 };
 
@@ -135,7 +167,7 @@ static const ST_T20_SystemLimits_t G_T20_SYSTEM_LIMITS = {
  * ========================================================================== */
 
 typedef enum {
-    
+
     EN_T20_STATE_IDLE = 0,
     EN_T20_STATE_READY,     // 준비 완료 (v210의 READY)
     EN_T20_STATE_RUNNING,   // 실행 중 (v210의 EXEC/PENDING)
@@ -143,7 +175,7 @@ typedef enum {
     EN_T20_STATE_ERROR,     // 오류 발생 (v210의 FAIL)
     EN_T20_STATE_BUSY,      // 작업 중 대기
     EN_T20_STATE_TIMEOUT    // 시간 초과
-    
+
 } EM_T20_State_t;
 
 typedef enum {

@@ -11,14 +11,21 @@
 #include "T210_Def_Com_212.h"
 
 
-#define G_T20_PREPROCESS_STAGE_MAX    8U   
-#define G_T20_MFCC_HISTORY            5U 
+#define G_T20_LIVE_SOURCE_MODE_BMI270         1U
+#define G_T20_SEQUENCE_FRAMES_MAX             16U
+
+
+
+#define G_T20_PREPROCESS_STAGE_MAX    8U
+#define G_T20_MFCC_HISTORY            5U
 
 // 센서 데이터 해석 모드
 #define G_T20_BMI270_AXIS_MODE_GYRO_Z    0U
 #define G_T20_BMI270_AXIS_MODE_ACC_Z     1U
 #define G_T20_BMI270_AXIS_MODE_GYRO_NORM 2U
 
+#define G_T20_BMI270_BURST_AXIS_COUNT         3U
+#define G_T20_BMI270_STATUS_TEXT_MAX          48U
 
 
 #define G_T20_SEQUENCE_FRAMES_DEFAULT		   16U  // 1600Hz 샘플링에서 16프레임은 약 10ms 단위의 데이터 윈도우
@@ -47,6 +54,24 @@ static const uint16_t G_T20_MFCC_COEFFS_MAX        = 32U;
 static const uint16_t G_T20_MFCC_COEFFS_DEFAULT    = 13U;
 
 #define G_T20_FEATURE_DIM_MAX   (G_T20_MFCC_COEFFS_MAX * 3U)
+
+
+
+// 메시지 타입 정의
+typedef struct {
+    uint8_t frame_index;
+} ST_T20_FrameMessage_t;
+
+// 링버퍼 타입 정의 (에러 해결 핵심)
+typedef struct {
+    float    data[G_T20_SEQUENCE_FRAMES_MAX][G_T20_FEATURE_DIM_MAX];
+    uint16_t frames;
+    uint16_t feature_dim;
+    uint16_t head;
+    bool     full;
+} ST_T20_FeatureRingBuffer_t;
+
+
 
 /* --- Runtime Limits --- */
 typedef struct {
@@ -164,12 +189,12 @@ typedef struct {
 /* --- Feature Config --- */
 typedef struct {
     uint16_t fft_size;
-    uint16_t frame_size;      
+    uint16_t frame_size;
     uint16_t hop_size;
     float    sample_rate_hz;  // sample_rate -> sample_rate_hz 로 이름 변경
-    uint16_t mel_filters;     
+    uint16_t mel_filters;
     uint16_t mfcc_coeffs;
-    uint16_t delta_window;    
+    uint16_t delta_window;
 } ST_T20_FeatureConfig_t;
 
 typedef struct {
@@ -184,6 +209,7 @@ typedef struct {
  * ========================================================================== */
 
 typedef struct {
+	EM_T20_State_t master;     // 전체 드라이버 마스터 상태
     EM_T20_State_t spi;        // SPI 통신 개시/세션 상태
     EM_T20_State_t boot;       // BMI270 칩 인식 및 부팅 (v210 복구)
     EM_T20_State_t irq;        // IRQ Pin/Route 설정 (v210 복구)
@@ -265,7 +291,7 @@ typedef struct {
     ST_T20_PreEmphasisConfig_t preemphasis;
     ST_T20_FilterConfig_t      filter;
     ST_T20_NoiseConfig_t       noise;
-    
+
     struct {
         uint8_t                stage_count;
         ST_T20_PipelineStage_t stages[G_T20_PREPROCESS_STAGE_MAX]; // 스테이지를 초기화함

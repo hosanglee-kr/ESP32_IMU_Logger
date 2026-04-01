@@ -10,6 +10,14 @@
 
 #include "T250_Web_213.h"
 
+static void T20_sendJsonText(AsyncWebServerRequest* request, bool ok, const char* json_ok) {
+	if (request == nullptr) return;
+	if (ok && json_ok != nullptr)
+		request->send(200, "application/json; charset=utf-8", json_ok);
+	else
+		request->send(500, "application/json; charset=utf-8", "{\"ok\":false}");
+}
+
 /* ----------------------------------------------------------------------------
  * 1. Recorder 제어 및 세션 관리 엔드포인트
  * ---------------------------------------------------------------------------- */
@@ -96,7 +104,7 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         char path[128] = {0};
         T20_getQueryParamPath(request, "path", path, sizeof(path));
         uint16_t page = (uint16_t)T20_getQueryParamUint32(request, "page", 0, 0, 1000);
-        
+
         char json[G_T20_WEB_LARGE_JSON_BUF_SIZE] = {0};
         bool ok = T20_buildRecorderCsvTableAdvancedJsonText(p, json, sizeof(json), path, 4096, nullptr, nullptr, 0, 0, page, 20);
         T20_sendJsonText(request, ok, json);

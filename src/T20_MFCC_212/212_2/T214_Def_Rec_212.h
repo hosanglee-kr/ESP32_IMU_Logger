@@ -14,21 +14,30 @@
 #include "T210_Def_Com_212.h"
 #include "T212_Def_Sens_212.h"
 
+#define G_T20_RECORDER_BATCH_WATERMARK_LOW    2U
+#define G_T20_RECORDER_BATCH_WATERMARK_HIGH   8U
+#define G_T20_RECORDER_BATCH_IDLE_FLUSH_MS    250U
+
+#define G_T20_RECORDER_LAST_ERROR_MAX         128U
+#define G_T20_ZERO_COPY_DMA_SLOT_COUNT        2U
+#define G_T20_ZERO_COPY_DMA_SLOT_BYTES        1024U
+#define G_T20_RECORDER_BATCH_VECTOR_MAX       16U
 
 
-/* --- Recorder 전용 상수 --- */
+
+// --- Recorder 전용 상수 ---
 static const uint8_t  G_T20_RECORDER_ROTATE_MAX = 8U;
 static const uint32_t G_T20_RECORDER_FLUSH_MS   = 1000U;
 
 
-/* --- File Rotation Settings --- */
+// --- File Rotation Settings ---
 static const uint8_t G_T20_RECORDER_ROTATE_KEEP_MAX = 8U;
 static const char* G_T20_RECORDER_ROTATE_PREFIX     = "/rec_";
 static const char* G_T20_RECORDER_ROTATE_EXT        = ".bin";
 static const char* G_T20_RECORDER_FALLBACK_PATH     = "/rec_fallback.bin";
 
 
-/* --- Recorder 상세 상태 관리 (v210 상태 매핑) --- */
+// --- Recorder 상세 상태 관리 (v210 상태 매핑) ---
 typedef struct {
     EM_T20_State_t file_io;      // v210: FILE_WRITE, WRITE_COMMIT 등
     EM_T20_State_t bundle_map;   // v210: BUNDLE_MAP, STORE_BUNDLE 등
@@ -40,7 +49,7 @@ typedef struct {
 
 
 
-/* --- DMA / Zero-Copy (성능 최적화용) --- */
+// --- DMA / Zero-Copy (성능 최적화용) ---
 typedef struct {
     uint16_t dma_align_bytes;
     uint16_t zero_copy_slot_max;
@@ -61,7 +70,7 @@ static const ST_T20_DmaConfig_t G_T20_DMA_CONFIG = {
  * Global Constants (G_T20_)
  * ========================================================================== */
 
-/* --- SDMMC --- */
+// --- SDMMC ---
 #define G_T20_SDMMC_PIN_UNASSIGNED 0xFFU
 
 static const uint16_t G_T20_SDMMC_BOARD_HINT_MAX      = 32U;
@@ -70,13 +79,13 @@ static const uint16_t G_T20_SDMMC_PROFILE_NAME_MAX    = 32U;
 
 static const char* G_T20_SDMMC_MOUNT_PATH_DEFAULT = "/sdcard";
 
-/* --- Binary --- */
+// --- Binary ---
 static const uint32_t G_T20_BINARY_MAGIC   = 0x54323042UL;
 static const uint16_t G_T20_BINARY_VERSION = 1U;
 
 static const uint16_t G_T20_BINARY_HEADER_RESERVED_BYTES = 8U;
 
-/* --- Recorder Limits (Magic Number 제거) --- */
+// --- Recorder Limits (Magic Number 제거) ---
 typedef struct {
     uint16_t batch_count;
     uint16_t watermark_low;
@@ -96,7 +105,7 @@ static const ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
 };
 
 
-/* --- File System --- */
+// --- File System ---
 static const uint16_t G_T20_RECORDER_FILE_PATH_MAX = 192U;
 static const uint16_t G_T20_RECORDER_SESSION_NAME_MAX = 48U;
 
@@ -108,7 +117,7 @@ static const uint16_t G_T20_RECORDER_SESSION_NAME_MAX = 48U;
  * Recorder State (매크로 → 구조체)
  * ========================================================================== */
 
-/* 통합 제안: ST_T20_RecorderState_t */
+// 통합 제안: ST_T20_RecorderState_t
 typedef struct {
     EM_T20_State_t storage;    // SD 카드 마운트/준비
     EM_T20_State_t file_io;    // Open/Close 세션
@@ -244,14 +253,16 @@ typedef struct {
 /* ============================================================================
  * Debug Helper
  * ========================================================================== */
-
 static inline void T20_Recorder_DebugState(ST_T20_RecorderState_t* s)
 {
-    printf("[WRITE:%s STORE:%s FINAL:%s PIPE:%s SYNC:%s RUN:%s]\n",
-        T20_StateToString(s->file_write),
-        T20_StateToString(s->store),
-        T20_StateToString(s->finalize),
-        T20_StateToString(s->pipeline),
-        T20_StateToString(s->sync),
-        T20_StateToString(s->runtime));
+    if (s == nullptr) return;
+
+    printf("[STORAGE:%s IO:%s WRITE:%s SYNC:%s AUDIT:%s PIPE:%s]\n",
+        T20_StateToString(s->storage),   // store -> storage
+        T20_StateToString(s->file_io),   // file_write -> file_io
+        T20_StateToString(s->write),     // write 유지
+        T20_StateToString(s->sync),      // sync 유지
+        T20_StateToString(s->audit),     // audit 유지
+        T20_StateToString(s->pipeline)   // finalize -> pipeline
+    );
 }
