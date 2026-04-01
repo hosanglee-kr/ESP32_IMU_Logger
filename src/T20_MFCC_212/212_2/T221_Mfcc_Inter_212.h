@@ -1,4 +1,8 @@
-/* File: T221_Mfcc_Inter_212.h */
+/* ============================================================================
+ * File: T221_Mfcc_Inter_212.h
+ * Summary: CL_T20_Mfcc 내부 구현체 (ST_Impl) Full 버전
+ * ========================================================================== */
+
 
 
 /* ============================================================================
@@ -48,7 +52,197 @@
 
 #include "T220_Mfcc_212.h"
 
+/* ----------------------------------------------------------------------------
+ * CL_T20_Mfcc::ST_Impl 정의
+ * ---------------------------------------------------------------------------- */
+struct CL_T20_Mfcc::ST_Impl {
+	
+	/* [1] 시스템 및 RTOS 핸들 (System & RTOS Resources) */
+	SPIClass            spi;                    // 센서 통신용 SPI 인터페이스 (FSPI)
+	TaskHandle_t        sensor_task_handle;     // 센서 데이터 수집 태스크
+	TaskHandle_t        process_task_handle;    // DSP/MFCC 연산 태스크
+	TaskHandle_t        recorder_task_handle;   // SD/MMC 저장 전용 태스크
+	QueueHandle_t       frame_queue;            // 원시 데이터(Raw Frame) 전달 큐
+	QueueHandle_t       recorder_queue;         // 특징량(Feature) 저장용 큐
+	SemaphoreHandle_t   mutex;                  // 공유 자원 보호용 세마포어
+	
+	bool                initialized;            // 시스템 초기화 완료 여부
+	bool                running;                // 전체 루프 동작 중 여부
+	bool                measurement_active;     // 실제 데이터 측정 활성화 상태
 
+	/* [2] 설정 및 프로필 (Configuration & Profiles) */
+	ST_T20_Config_t     cfg;                    // 현재 동작 중인 시스템 설정
+	ST_T20_ProfileInfo_t profiles[G_T20_CFG_PROFILE_COUNT]; // 가용 프로필 리스트
+	uint8_t             current_profile_index;  // 현재 선택된 프로필 인덱스
+	char                runtime_cfg_profile_name[G_T20_RUNTIME_CFG_PROFILE_NAME_MAX]; // 활성 프로필 이름
+
+	/* [3] 센서(BMI270) 상태 머신 (Sensor State Machine - v210 통합) */
+	ST_T20_BMI270_State_t        bmi_state;     // v212 표준 상태 (SPI, INIT, READ, PIPE, RUN)
+	ST_T20_BMI270_RuntimeState_t bmi_runtime;   // v210 상세 상태 (BurstFlow, ISR_Hook, DSP_Ingress 등)
+	
+	uint8_t             bmi270_chip_id;         // 읽어온 칩 ID (Expected: 0x24)
+	bool                bmi270_spi_ok;          // SPI 통신 건전성 상태
+	volatile uint8_t    bmi270_drdy_isr_flag;   // 데이터 준비 인터럽트 플래그 (volatile)
+	uint32_t            bmi270_sample_counter;  // 누적 샘플 카운트
+	uint32_t            bmi270_last_drdy_ms;    // 마지막 DRDY 수신 시점 (ms)
+	float               bmi270_last_axis_values[G_T20_BMI270_BURST_AXIS_COUNT]; // X, Y, Z 최종값
+	uint8_t             bmi270_axis_mode;       // 현재 해석 중인 축 모드 (Gyro/Acc/Norm)
+	char                bmi270_status_text[G_T20_BMI270_STATUS_TEXT_MAX]; // 인간 가독성용 상태 텍스트
+
+	/* [4] DSP 및 MFCC 연산 버퍼 (DSP Pipeline Buffers) */
+	float               frame_buffer[G_T20_RAW_FRAME_BUFFERS][G_T20_FFT_SIZE]; // 핑퐁 수집 버퍼
+	float               work_frame[G_T20_FFT_SIZE];     // 연산용 작업 프레임
+	float               temp_frame[G_T20_FFT_SIZE];     // 임시 저장용 (필터 적용 등)
+	float               window[G_T20_FFT_SIZE];         // 해밍/한 윈도우 계수
+	float               power[(G_T20_FFT_SIZE/2)+1];    // 파워 스펙트럼 (Magnitude)
+	float               noise_spectrum[(G_T20_FFT_SIZE/2)+1]; // 노이즈 학습 데이터
+	float               log_mel[G_T20_MEL_FILTERS];      // 로그 멜 필터뱅크 결과
+	float               mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE/2)+1]; // 멜 필터뱅크 가중치 매트릭스
+	float               mfcc_history[G_T20_MFCC_HISTORY][G_T20_MFCC_COEFFS_MAX]; // 델타 계산용 이력
+	float               biquad_coeffs[5];               // 바이쿼드 필터 계수 (b0,b1,b2,a1,a2)
+	float               biquad_state[2];                // 필터 상태 유지 변수 (z1, z2)
+
+	uint8_t             active_fill_buffer;     // 현재 데이터를 채우고 있는 버퍼 인덱스
+	uint16_t            active_sample_index;    // 현재 프레임 내 샘플 저장 위치
+	uint32_t            dropped_frames;         // 처리 지연으로 누락된 프레임 수
+	uint16_t            noise_learned_frames;   // 현재까지 학습된 노이즈 프레임 수
+	float               prev_raw_sample;        // Pre-emphasis용 이전 샘플 저장
+
+	/* [5] 특징량 및 시퀀스 결과 (Feature & Sequence Output) */
+	ST_T20_FeatureVector_t     latest_feature;  // 가장 최근 추출된 특징량 (MFCC+Delta+Delta2)
+	ST_T20_FeatureRingBuffer_t seq_rb;          // 시퀀스 데이터 구성을 위한 링버퍼
+	bool                       latest_vector_valid;   // 단일 벡터 유효 여부
+	bool                       latest_sequence_valid; // 시퀀스 데이터 준비 완료 여부
+
+	/* [6] 레코더 및 저장 장치 (Recorder & Storage - v210 파일 로테이션 반영) */
+	ST_T20_RecorderState_t        rec_state;    // 레코더 표준 상태 (Storage, IO, Write, Sync)
+	ST_T20_RecorderRuntimeState_t rec_runtime;  // v210 파일 커밋/번들/오딧 상세 상태
+	
+	EM_T20_StorageBackend_t recorder_storage_backend; // 저장소 종류 (LittleFS/SDMMC)
+	bool                recorder_enabled;       // 레코딩 활성화 상태
+	bool                recorder_sdmmc_mounted; // SD카드 마운트 성공 여부
+	char                recorder_active_path[128]; // 현재 실제 쓰기 중인 파일 경로
+	char                recorder_last_error[G_T20_RECORDER_LAST_ERROR_MAX]; // 마지막 에러 메시지
+	uint32_t            recorder_record_count;  // 현재 세션 누적 레코드 수
+	uint32_t            recorder_last_flush_ms; // 마지막 파일 Flush 시점
+
+	// DMA 및 Zero-Copy 버퍼 (성능 최적화용)
+	uint8_t             recorder_dma_slots[G_T20_ZERO_COPY_DMA_SLOT_COUNT][G_T20_ZERO_COPY_DMA_SLOT_BYTES];
+	uint16_t            recorder_dma_slot_used[G_T20_ZERO_COPY_DMA_SLOT_COUNT];
+	uint8_t             recorder_dma_active_slot;
+	ST_T20_RecorderVectorMessage_t recorder_batch_vectors[G_T20_RECORDER_BATCH_VECTOR_MAX]; // 일괄 처리 버퍼
+	uint16_t            recorder_batch_count;   // 현재 배치에 쌓인 데이터 수
+
+	// 세션 관리 (v210 복구)
+	bool                recorder_session_open;  // 세션 시작 여부
+	uint32_t            recorder_session_id;    // 세션 고유 ID
+	char                recorder_session_name[G_T20_RECORDER_SESSION_NAME_MAX];
+
+	/* [7] 뷰어 및 웹 인터페이스 (Viewer & Web Interface Data) */
+	float               viewer_last_waveform[G_T20_FFT_SIZE];   // 웹 실시간 파형 표시용
+	float               viewer_last_spectrum[(G_T20_FFT_SIZE/2)+1]; // 웹 실시간 스펙트럼 표시용
+	float               viewer_last_mfcc[G_T20_MFCC_COEFFS_MAX]; // 웹 실시간 MFCC 바 차트용
+	uint32_t            viewer_last_frame_id;   // 마지막으로 뷰어에 전달된 프레임 ID
+	
+	ST_T20_ViewerEvent_t viewer_events[G_T20_VIEWER_EVENT_MAX]; // 실시간 이벤트 로그 버퍼
+	uint16_t            viewer_event_count;     // 현재 쌓인 이벤트 수
+	
+	// 데이터 동기화 및 메타데이터 (v210 분류 기능)
+	char                type_meta_name[G_T20_TYPE_META_NAME_MAX]; // 분류명 (ex: "Normal_Motor")
+	char                type_meta_auto_text[G_T20_TYPE_META_AUTO_TEXT_MAX]; // 자동 감지된 상태 텍스트
+	bool                selection_sync_enabled; // 특정 구간 데이터 동기화 활성화 여부
+	uint32_t            selection_sync_frame_from; // 동기화 시작 프레임
+	uint32_t            selection_sync_frame_to;   // 동기화 끝 프레임
+
+	/* ------------------------------------------------------------------------
+	 * 생성자: 모든 멤버를 안전하게 초기화
+	 * ------------------------------------------------------------------------ */
+	ST_Impl() : spi(FSPI) {
+		/* [1] 시스템 초기화 */
+		sensor_task_handle = nullptr;
+		process_task_handle = nullptr;
+		recorder_task_handle = nullptr;
+		frame_queue = nullptr;
+		recorder_queue = nullptr;
+		mutex = nullptr;
+		initialized = running = measurement_active = false;
+
+		/* [2] 설정 초기화 */
+		cfg = T20_makeDefaultConfig();
+		memset(profiles, 0, sizeof(profiles));
+		current_profile_index = 0;
+		memset(runtime_cfg_profile_name, 0, sizeof(runtime_cfg_profile_name));
+
+		/* [3] 센서 상태 초기화 (v212/v210 구조체 단위) */
+		memset(&bmi_state, 0, sizeof(bmi_state));
+		memset(&bmi_runtime, 0, sizeof(bmi_runtime));
+		bmi270_chip_id = 0;
+		bmi270_spi_ok = false;
+		bmi270_drdy_isr_flag = 0;
+		bmi270_sample_counter = 0;
+		bmi270_last_drdy_ms = 0;
+		memset(bmi270_last_axis_values, 0, sizeof(bmi270_last_axis_values));
+		bmi270_axis_mode = G_T20_BMI270_AXIS_MODE_GYRO_Z;
+		strlcpy(bmi270_status_text, "idle", sizeof(bmi270_status_text));
+
+		/* [4] DSP 버퍼 초기화 */
+		memset(frame_buffer, 0, sizeof(frame_buffer));
+		memset(work_frame, 0, sizeof(work_frame));
+		memset(temp_frame, 0, sizeof(temp_frame));
+		memset(window, 0, sizeof(window));
+		memset(power, 0, sizeof(power));
+		memset(noise_spectrum, 0, sizeof(noise_spectrum));
+		memset(log_mel, 0, sizeof(log_mel));
+		memset(mel_bank, 0, sizeof(mel_bank));
+		memset(mfcc_history, 0, sizeof(mfcc_history));
+		memset(biquad_coeffs, 0, sizeof(biquad_coeffs));
+		memset(biquad_state, 0, sizeof(biquad_state));
+		active_fill_buffer = 0;
+		active_sample_index = 0;
+		dropped_frames = 0;
+		noise_learned_frames = 0;
+		prev_raw_sample = 0.0f;
+
+		/* [5] 특징량 초기화 */
+		memset(&latest_feature, 0, sizeof(latest_feature));
+		memset(&seq_rb, 0, sizeof(seq_rb));
+		latest_vector_valid = latest_sequence_valid = false;
+
+		/* [6] 레코더 초기화 */
+		memset(&rec_state, 0, sizeof(rec_state));
+		memset(&rec_runtime, 0, sizeof(rec_runtime));
+		recorder_storage_backend = EN_T20_STORAGE_LITTLEFS;
+		recorder_enabled = false;
+		recorder_sdmmc_mounted = false;
+		memset(recorder_active_path, 0, sizeof(recorder_active_path));
+		memset(recorder_last_error, 0, sizeof(recorder_last_error));
+		recorder_record_count = 0;
+		recorder_last_flush_ms = 0;
+		memset(recorder_dma_slots, 0, sizeof(recorder_dma_slots));
+		memset(recorder_dma_slot_used, 0, sizeof(recorder_dma_slot_used));
+		recorder_dma_active_slot = 0;
+		memset(recorder_batch_vectors, 0, sizeof(recorder_batch_vectors));
+		recorder_batch_count = 0;
+		recorder_session_open = false;
+		recorder_session_id = 0;
+		strlcpy(recorder_session_name, "default", sizeof(recorder_session_name));
+
+		/* [7] 뷰어 초기화 */
+		memset(viewer_last_waveform, 0, sizeof(viewer_last_waveform));
+		memset(viewer_last_spectrum, 0, sizeof(viewer_last_spectrum));
+		memset(viewer_last_mfcc, 0, sizeof(viewer_last_mfcc));
+		viewer_last_frame_id = 0;
+		memset(viewer_events, 0, sizeof(viewer_events));
+		viewer_event_count = 0;
+		strlcpy(type_meta_name, "none", sizeof(type_meta_name));
+		strlcpy(type_meta_auto_text, "waiting", sizeof(type_meta_auto_text));
+		selection_sync_enabled = false;
+	}
+};
+
+
+
+/*
 struct CL_T20_Mfcc::ST_Impl {
 	SPIClass					   spi;
 	TaskHandle_t				   sensor_task_handle;
@@ -522,6 +716,8 @@ struct CL_T20_Mfcc::ST_Impl {
 		runtime_sim_phase			  = 0.0f;
 	}
 };
+
+*/
 
 extern CL_T20_Mfcc* g_t20_instance;
 
