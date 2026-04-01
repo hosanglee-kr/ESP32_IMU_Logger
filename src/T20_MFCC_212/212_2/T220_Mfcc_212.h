@@ -1,10 +1,10 @@
-// T20_Mfcc_212.h
-/* File: xxx.h */
+/* File: T220_Mfcc_212.h */
+
 #pragma once
 
 #include <Arduino.h>
 
-#include "T20_Def_Main_212.h"
+#include "T218_Def_Main_212.h"
 
 class CL_T20_Mfcc {
    public:

@@ -1,8 +1,7 @@
-// T20_Def_Recorder_212.h
 
 
 /* ============================================================================
- * File: T20_Def_Recorder_212.h
+ * File: T214_Def_Rec_212.h
  * Summary: SD_MMC Data Logging & Storage Backend Definitions (v210)
  * ========================================================================== */
 
@@ -12,8 +11,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "T20_Def_Comm_212.h"
-#include "T20_Def_SensDsp_212.h"
+#include "T210_Def_Com_212.h"
+#include "T212_Def_Sens_212.h"
 
 
 /* --- Recorder 전용 상수 (v210 복구) --- */

@@ -1,8 +1,8 @@
-/* File: T20_Mfcc_Inter_211.h */
+/* File: T20_Mfcc_Inter_212.h */
 
 
 /* ============================================================================
-[잔여 구현 계획 재점검 - Inter v211]
+[잔여 구현 계획 재점검 - Inter v212]
 
 원칙
 - 헤더에는 선언만 유지
@@ -41,7 +41,7 @@
 #include <memory>
 #include <vector>
 
-#include "T20_Mfcc_211.h"
+#include "T20_Mfcc_212.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"

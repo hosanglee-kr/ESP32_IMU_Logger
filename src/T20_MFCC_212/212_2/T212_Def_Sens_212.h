@@ -1,6 +1,6 @@
 
 /* ============================================================================
- * File: T20_Def_SensDsp_212.h
+ * File: T212_Def_Sens_212.h
  * Summary: BMI270 Sensor Control & DSP/MFCC Pipeline Definitions (v210)
  * ========================================================================== */
 
@@ -8,10 +8,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "T20_Def_Comm_212.h"
+#include "T210_Def_Com_212.h"
 
 
-
+#define G_T20_SEQUENCE_FRAMES_DEFAULT		   16U
 
 
 /* --- BMI270 Register Map (v210 복구) --- */
@@ -133,11 +133,11 @@ typedef struct {
 } ST_T20_PreEmphasisConfig_t;
 
 typedef struct {
-    bool enable;
+    bool				enable;
     EM_T20_FilterType_t type;
-    float cutoff1;
-    float cutoff2;
-    float q;
+    float				cutoff_hz_1;
+    float				cutoff_hz_2;
+    float				q_factor;
 } ST_T20_FilterConfig_t;
 
 typedef struct {

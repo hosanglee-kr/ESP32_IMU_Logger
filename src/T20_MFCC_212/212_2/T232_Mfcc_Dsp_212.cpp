@@ -1,4 +1,4 @@
-/* File: T20_Mfcc_Dsp_211.cpp */
+/* File: T20_Mfcc_Dsp_212.cpp */
 
 
 /* ============================================================================
@@ -11,7 +11,7 @@
 
 #include <math.h>
 
-#include "T20_Mfcc_Inter_211.h"
+#include "T221_Mfcc_Inter_212.h"
 
 bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
 	if (p == nullptr) return false;

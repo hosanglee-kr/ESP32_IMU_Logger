@@ -1,17 +1,18 @@
 
 
 /* ============================================================================
- * File: T20_Def_Main_212.h
+ * File: T218_Def_Main_212.h
 
  * ========================================================================== */
 
 #pragma once
 
-#include "T20_Def_Comm_212.h"
-#include "T20_Def_Recorder_212.h"
-#include "T20_Def_SensDsp_212.h"
-#include "T20_Def_Viewer_212.h"
-#include "T20_Def_Web_212.h"
+#include <string.h>
+
+#include "T210_Def_Com_212.h"
+#include "T212_Def_Sens_212.h"
+#include "T214_Def_Rec_212.h"
+#include "T216_Def_View_212.h"
 
 /* ============================================================================
 [v210 기본 설정 생성 함수]
