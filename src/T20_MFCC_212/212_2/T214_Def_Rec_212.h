@@ -15,7 +15,8 @@
 #include "T212_Def_Sens_212.h"
 
 
-/* --- Recorder 전용 상수 (v210 복구) --- */
+
+/* --- Recorder 전용 상수 --- */
 static const uint8_t  G_T20_RECORDER_ROTATE_MAX = 8U;
 static const uint32_t G_T20_RECORDER_FLUSH_MS   = 1000U;
 
@@ -78,19 +79,22 @@ static const uint16_t G_T20_BINARY_HEADER_RESERVED_BYTES = 8U;
 /* --- Recorder Limits (Magic Number 제거) --- */
 typedef struct {
     uint16_t batch_count;
-    uint16_t batch_watermark_low;
-    uint16_t batch_watermark_high;
+    uint16_t watermark_low;
+    uint16_t watermark_high;
+    uint16_t accum_watermark;      // v210 복구 (8U)
+    uint16_t accum_timeout_ms;    // v210 복구 (300ms)
     uint16_t flush_interval_ms;
-    uint16_t idle_flush_ms;
 } ST_T20_RecorderLimits_t;
 
 static const ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
-    .batch_count = 16U,
-    .batch_watermark_low = 2U,
-    .batch_watermark_high = 8U,
-    .flush_interval_ms = 1000U,
-    .idle_flush_ms = 250U
+    .batch_count      = 16U,
+    .watermark_low    = 2U,
+    .watermark_high   = 8U,
+    .accum_watermark  = 8U,
+    .accum_timeout_ms = 300U,
+    .flush_interval_ms = 1000U
 };
+
 
 /* --- File System --- */
 static const uint16_t G_T20_RECORDER_FILE_PATH_MAX = 192U;

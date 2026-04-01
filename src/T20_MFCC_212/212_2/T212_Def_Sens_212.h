@@ -11,7 +11,17 @@
 #include "T210_Def_Com_212.h"
 
 
-#define G_T20_SEQUENCE_FRAMES_DEFAULT		   16U
+#define G_T20_PREPROCESS_STAGE_MAX    8U   
+#define G_T20_MFCC_HISTORY            5U 
+
+// 센서 데이터 해석 모드
+#define G_T20_BMI270_AXIS_MODE_GYRO_Z    0U
+#define G_T20_BMI270_AXIS_MODE_ACC_Z     1U
+#define G_T20_BMI270_AXIS_MODE_GYRO_NORM 2U
+
+
+
+#define G_T20_SEQUENCE_FRAMES_DEFAULT		   16U  // 1600Hz 샘플링에서 16프레임은 약 10ms 단위의 데이터 윈도우
 
 
 /* --- BMI270 Register Map (v210 복구) --- */
@@ -151,12 +161,15 @@ typedef struct {
 /* ============================================================================
  * Feature Config / Vector
  * ========================================================================== */
-
+/* --- Feature Config --- */
 typedef struct {
     uint16_t fft_size;
+    uint16_t frame_size;      
     uint16_t hop_size;
-    float sample_rate;
+    float    sample_rate_hz;  // sample_rate -> sample_rate_hz 로 이름 변경
+    uint16_t mel_filters;     
     uint16_t mfcc_coeffs;
+    uint16_t delta_window;    
 } ST_T20_FeatureConfig_t;
 
 typedef struct {
@@ -224,3 +237,37 @@ static inline void T20_Debug_PrintState(ST_T20_BMI270_State_t* s)
         T20_StateToString(s->pipeline),
         T20_StateToString(s->runtime));
 }
+
+
+
+
+
+/* --- Pipeline Stage Definitions --- */
+typedef enum {
+    EN_T20_STAGE_DC_REMOVE = 0,
+    EN_T20_STAGE_PREEMPHASIS,
+    EN_T20_STAGE_GATE,
+    EN_T20_STAGE_FILTER
+} EM_T20_PipelineStageType_t;
+
+typedef struct {
+    bool                       enable;
+    EM_T20_PipelineStageType_t stage_type;
+    float                      param_1;  // preemphasis.alpha 또는 filter.cutoff1 등
+    float                      param_2;  // filter.cutoff2 등
+    float                      q_factor; // filter.q
+} ST_T20_PipelineStage_t;
+
+/* --- Preprocess Unified Config --- */
+typedef struct {
+    EM_T20_AxisType_t          axis;
+    bool                       remove_dc;
+    ST_T20_PreEmphasisConfig_t preemphasis;
+    ST_T20_FilterConfig_t      filter;
+    ST_T20_NoiseConfig_t       noise;
+    
+    struct {
+        uint8_t                stage_count;
+        ST_T20_PipelineStage_t stages[G_T20_PREPROCESS_STAGE_MAX]; // 스테이지를 초기화함
+    } pipeline;
+} ST_T20_PreprocessConfig_t;

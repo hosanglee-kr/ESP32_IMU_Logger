@@ -8,19 +8,16 @@
 #include "T210_Def_Com_212.h"
 
 
-static const uint16_t G_T20_CSV_SERVER_MAX_COL_FILTERS = 8U;
 
 
-/* --- Web/CSV Filter Constants --- */
-static const uint16_t G_T20_CSV_MAX_COL_FILTERS = 8U;
+static const uint16_t G_T20_RECORDER_RENDER_SYNC_SERIES_MAX = 4U;
+
 static const uint16_t G_T20_RECORDER_META_TEXT_MAX = 96U; // v210 기준
-
-/* v210의 ST_T20_ViewerEvent_t 보강 (v212에서는 text가 80 고정이었음) */
 
 typedef struct {
     uint32_t frame_id;
     char     kind[16];
-    char     text[96]; // v212(80)보다 v210(96)이 더 넉넉함
+    char     text[G_T20_RECORDER_META_TEXT_MAX]; // v212(80)보다 v210(96)이 더 넉넉함
 } ST_T20_ViewerEvent_t;
 
 
@@ -36,6 +33,12 @@ static const uint16_t G_T20_VIEWER_SELECTION_POINTS_MAX = 128U;
 /* --- CSV / Table --- */
 static const uint16_t G_T20_CSV_SERVER_MAX_ROWS          = 128U;
 static const uint16_t G_T20_CSV_TABLE_PAGE_SIZE_DEFAULT  = 20U;
+static const uint8_t  G_T20_CSV_SORT_ASC  = 0U;
+static const uint8_t  G_T20_CSV_SORT_DESC = 1U;
+static const uint16_t G_T20_CSV_SERVER_MAX_COL_FILTERS = 8U;
+static const uint16_t G_T20_CSV_MAX_COL_FILTERS = 8U;
+
+
 
 /* --- Text Buffer --- */
 static const uint16_t G_T20_TEXT_PREVIEW_LINE_BUF_SIZE = 256U;

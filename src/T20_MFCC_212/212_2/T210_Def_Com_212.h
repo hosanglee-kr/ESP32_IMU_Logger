@@ -11,6 +11,11 @@
 #include <stdbool.h>
 
 
+// 시스템 동작 타이밍 및 시뮬레이션 (v210 복구)
+static const uint16_t G_T20_RUNTIME_SIM_FRAME_INTERVAL_MS = 160U;
+static const float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
+
+
 
 // --- v210 대비 누락된 시스템 경로 보강 --- 
 static const char* G_T20_RECORDER_DEFAULT_FILE_PATH  = "/t20_rec.bin";
