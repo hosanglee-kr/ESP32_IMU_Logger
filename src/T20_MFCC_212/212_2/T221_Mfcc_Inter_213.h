@@ -41,7 +41,7 @@
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <SPI.h>
-#include "SparkFun_BMI270.h"
+#include "SparkFun_BMI270_Arduino_Library.h"
 
 #include <memory>
 #include <vector>
