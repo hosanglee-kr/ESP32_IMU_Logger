@@ -396,6 +396,56 @@ void T20_updateTypeMetaAutoClassify(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 
+bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
+    if (p == nullptr || p_out_buf == nullptr || p_len == 0) return false;
 
+    JsonDocument doc;
+    
+    // [1] 시스템 기본 및 특징 추출 설정
+    doc["version"]                         = G_T20_VERSION_STR;
+    doc["profile_name"]                    = p->runtime_cfg_profile_name;
+    doc["frame_size"]                      = p->cfg.feature.frame_size;
+    doc["hop_size"]                        = p->cfg.feature.hop_size;
+    doc["sample_rate_hz"]                  = p->cfg.feature.sample_rate_hz;
+    doc["mfcc_coeffs"]                     = p->cfg.feature.mfcc_coeffs;
+    doc["sequence_frames"]                 = p->cfg.output.sequence_frames;
+    doc["output_mode"]                     = (p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence";
 
+    // [2] 레코더 및 스토리지 상태
+    doc["recorder_backend"]                = (p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc";
+    doc["recorder_enabled"]                = p->recorder_enabled;
+    doc["sdmmc_profile"]                   = p->sdmmc_profile.profile_name;
+    doc["sdmmc_profile_applied"]           = p->sdmmc_profile_applied;
+    doc["sdmmc_last_apply_reason"]         = p->sdmmc_last_apply_reason;
 
+    // [3] 뷰어 및 데이터 동기화 설정
+    doc["selection_sync_enabled"]          = p->selection_sync_enabled;
+    doc["selection_sync_frame_from"]       = p->selection_sync_frame_from;
+    doc["selection_sync_frame_to"]         = p->selection_sync_frame_to;
+    doc["selection_sync_name"]             = p->selection_sync_name;
+    doc["selection_sync_range_valid"]      = p->selection_sync_range_valid;
+    doc["selection_sync_effective_from"]   = p->selection_sync_effective_from;
+    doc["selection_sync_effective_to"]     = p->selection_sync_effective_to;
+
+    // [4] 메타데이터 및 분류 정보
+    doc["type_meta_enabled"]               = p->type_meta_enabled;
+    doc["type_meta_name"]                  = p->type_meta_name;
+    doc["type_meta_kind"]                  = p->type_meta_kind;
+    doc["type_meta_auto_text"]             = p->type_meta_auto_text;
+
+    // [5] 로우레벨 레코더 파라미터 (디버깅용)
+    doc["batch_flush_records"]             = G_T20_RECORDER_BATCH_FLUSH_RECORDS;
+    doc["batch_flush_timeout_ms"]          = G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS;
+    doc["batch_watermark_low"]             = p->recorder_batch_watermark_low;
+    doc["batch_watermark_high"]            = p->recorder_batch_watermark_high;
+    doc["batch_idle_flush_ms"]             = p->recorder_batch_idle_flush_ms;
+    doc["dma_slot_count"]                  = G_T20_ZERO_COPY_DMA_SLOT_COUNT;
+    doc["dma_slot_bytes"]                  = G_T20_ZERO_COPY_DMA_SLOT_BYTES;
+
+    // [6] 버퍼 크기 검증 및 직렬화
+    size_t need = measureJson(doc) + 1U;
+    if (need > p_len) return false;
+    
+    serializeJson(doc, p_out_buf, p_len);
+    return true;
+}

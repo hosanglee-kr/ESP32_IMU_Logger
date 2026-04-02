@@ -43,6 +43,8 @@ static const uint8_t 	G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    = 32U;
 static const uint8_t 	G_T20_RAW_FRAME_BUFFERS               = 4U;
 static const uint16_t 	G_T20_SYSTEM_JSON_BUF_MAX             = 1536U;
 
+#define G_T20_RUNTIME_CFG_JSON_BUF_SIZE	   1536U
+
 // #define G_T20_CFG_PROFILE_COUNT               4U
 // #define G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    32U
 // #define G_T20_RAW_FRAME_BUFFERS               4U
