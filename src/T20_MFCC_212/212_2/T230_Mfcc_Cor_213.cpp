@@ -318,3 +318,11 @@ bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_
     return true;
 }
 
+
+void T20_syncDerivedViewState(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return;
+    
+    // 설정 변경에 따른 파생 상태 동기화 (예: 뷰어 필터 재설정 등)
+    T20_updateSelectionSyncState(p);
+    T20_updateTypeMetaAutoClassify(p);
+}

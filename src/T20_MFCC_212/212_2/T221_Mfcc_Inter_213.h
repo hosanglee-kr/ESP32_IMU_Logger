@@ -59,6 +59,7 @@
 
 
 
+
 struct CL_T20_Mfcc::ST_Impl {
 
     // [1] 시스템 및 RTOS 핸들 (System & RTOS Resources)
@@ -207,6 +208,22 @@ struct CL_T20_Mfcc::ST_Impl {
     uint16_t            viewer_overlay_accum_count;
     uint16_t            viewer_overlay_subset_count;
 
+    // [8] SDMMC 프로필 및 상태 (v212 로직 대응을 위해 추가)
+    struct ST_T20_SdmmcProfile {
+        char     profile_name[32];
+        bool     enabled;
+        bool     use_1bit_mode;
+        int8_t   clk_pin;
+        int8_t   cmd_pin;
+        int8_t   d0_pin;
+        int8_t   d1_pin;
+        int8_t   d2_pin;
+        int8_t   d3_pin;
+    } sdmmc_profile, sdmmc_profiles[G_T20_SDMMC_PROFILE_PRESET_COUNT];
+
+    bool     sdmmc_profile_applied;
+    char     sdmmc_last_apply_reason[64];
+    
     // ------------------------------------------------------------------------
     // 생성자: 자원 할당 및 초기화
     // ------------------------------------------------------------------------
@@ -288,6 +305,16 @@ struct CL_T20_Mfcc::ST_Impl {
         strlcpy(type_meta_kind, "feature_vector", sizeof(type_meta_kind));
         type_meta_enabled = true; selection_sync_enabled = false;
         selection_sync_range_valid = false;
+        
+        // SDMMC 관련 초기화 추가
+        memset(&sdmmc_profile, 0, sizeof(sdmmc_profile));
+        memset(sdmmc_profiles, 0, sizeof(sdmmc_profiles));
+        sdmmc_profile_applied = false;
+        strlcpy(sdmmc_last_apply_reason, "init", sizeof(sdmmc_last_apply_reason));
+        
+        // (필요 시) 기본 프로필 이름 설정
+        strlcpy(sdmmc_profile.profile_name, "default", sizeof(sdmmc_profile.profile_name));
+        
     }
 };
 
