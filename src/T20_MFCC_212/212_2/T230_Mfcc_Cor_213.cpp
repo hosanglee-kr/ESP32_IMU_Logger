@@ -10,6 +10,8 @@
 
 #include "T221_Mfcc_Inter_213.h"
 
+CL_T20_Mfcc* g_t20_instance = nullptr;
+
 // --- 전방 선언(Forward Declaration) 추가 ---
 void T20_sensorTask(void* p_arg);
 void T20_processTask(void* p_arg);
@@ -243,5 +245,21 @@ bool T20_buildRecorderFinalizeJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf,
     doc["last_error"] = p->recorder_last_error;
 
     return T20_jsonWriteDoc(doc, p_out_buf, p_len);
+}
+
+
+/* CL_T20_Mfcc 클래스 메서드 구현 */
+void CL_T20_Mfcc::stop(void) {
+    if (_impl != nullptr) {
+        _impl->running = false;
+        T20_stopTasks(_impl);
+    }
+}
+
+// 링커 에러: T20_stopTasks 구현
+void T20_stopTasks(CL_T20_Mfcc::ST_Impl* p) {
+    if (p->sensor_task_handle) { vTaskDelete(p->sensor_task_handle); p->sensor_task_handle = nullptr; }
+    if (p->process_task_handle) { vTaskDelete(p->process_task_handle); p->process_task_handle = nullptr; }
+    if (p->recorder_task_handle) { vTaskDelete(p->recorder_task_handle); p->recorder_task_handle = nullptr; }
 }
 

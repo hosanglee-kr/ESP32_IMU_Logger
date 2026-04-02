@@ -193,3 +193,176 @@ void T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_d
     for (uint16_t i = 0; i < p_dim; i++) p_out_vec[i + (p_dim * 2)] = p_delta2[i]; // 26~38
 }
 
+
+
+
+
+
+
+void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p) {
+    for (uint16_t i = 0; i < G_T20_FFT_SIZE; ++i) {
+        p->window[i] = 0.54f - 0.46f * cosf((2.0f * G_T20_PI * i) / (G_T20_FFT_SIZE - 1U));
+    }
+}
+
+void T20_applyDCRemove(float* p_data, uint16_t p_len) {
+    float sum = 0;
+    for (uint16_t i = 0; i < p_len; i++) sum += p_data[i];
+    float mean = sum / p_len;
+    for (uint16_t i = 0; i < p_len; i++) p_data[i] -= mean;
+}
+
+void T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha) {
+    float prev = p->prev_raw_sample;
+    for (uint16_t i = 0; i < p_len; i++) {
+        float cur = p_data[i];
+        p_data[i] = cur - (p_alpha * prev);
+        prev = cur;
+    }
+    p->prev_raw_sample = prev;
+}
+
+void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs) {
+    for (uint16_t i = 0; i < p_len; i++) {
+        if (fabsf(p_data[i]) < p_threshold_abs) p_data[i] = 0.0f;
+    }
+}
+
+// [1] 노이즈 패턴 학습 (학습 프레임 수 동안 실행)
+void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
+    if (p == nullptr || p_power == nullptr) return;
+    if (!p->cfg.preprocess.noise.enable_spectral_subtract) return;
+    if (p->noise_learned_frames >= p->cfg.preprocess.noise.noise_learn_frames) return;
+
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+    uint16_t count = p->noise_learned_frames;
+
+    for (uint16_t i = 0; i < bins; ++i) {
+        // 이동 평균을 이용한 노이즈 프로파일 생성
+        p->noise_spectrum[i] = ((p->noise_spectrum[i] * (float)count) + p_power[i]) / (float)(count + 1U);
+    }
+    p->noise_learned_frames++;
+}
+
+
+// [2] 스펙트럼 차감 (학습된 노이즈 제거)
+void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
+    if (p == nullptr || p_power == nullptr) return;
+    if (!p->cfg.preprocess.noise.enable_spectral_subtract) return;
+    if (p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames) return;
+
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+    float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
+
+    for (uint16_t i = 0; i < bins; ++i) {
+        float v = p_power[i] - (strength * p->noise_spectrum[i]);
+        // 로그 연산 안정성을 위한 최소값(EPSILON) 제한
+        if (v < G_T20_EPSILON) v = G_T20_EPSILON;
+        p_power[i] = v;
+    }
+}
+
+// [3] 멜 필터뱅크 적용 (에너지 맵핑 및 로그 변환)
+void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out) {
+    if (p == nullptr || p_power == nullptr || p_log_mel_out == nullptr) return;
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+
+    for (uint16_t m = 0; m < G_T20_MEL_FILTERS; ++m) {
+        float sum = 0.0f;
+        for (uint16_t k = 0; k < bins; ++k) {
+            sum += p_power[k] * p->mel_bank[m][k];
+        }
+        if (sum < G_T20_EPSILON) sum = G_T20_EPSILON;
+        p_log_mel_out[m] = logf(sum); // 로그 멜 스펙트럼
+    }
+}
+
+// [4] DCT-II 연산 (최종 MFCC 계수 추출)
+void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len) {
+    if (p_in == nullptr || p_out == nullptr) return;
+
+    for (uint16_t n = 0; n < p_out_len; ++n) {
+        float sum = 0.0f;
+        for (uint16_t k = 0; k < p_in_len; ++k) {
+            sum += p_in[k] * cosf((G_T20_PI / (float)p_in_len) * ((float)k + 0.5f) * (float)n);
+        }
+        p_out[n] = sum;
+    }
+}
+
+void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc, uint16_t p_dim) {
+    if (p->mfcc_history_count < G_T20_MFCC_HISTORY) {
+        memcpy(p->mfcc_history[p->mfcc_history_count++], p_mfcc, sizeof(float) * p_dim);
+    } else {
+        for (int i = 1; i < G_T20_MFCC_HISTORY; i++) memcpy(p->mfcc_history[i-1], p->mfcc_history[i], sizeof(float) * p_dim);
+        memcpy(p->mfcc_history[G_T20_MFCC_HISTORY-1], p_mfcc, sizeof(float) * p_dim);
+    }
+}
+
+void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, uint16_t p_dim, float* p_delta2_out) {
+    // Delta-Delta (가속도) 단순 계산: t+1 - 2*t + t-1
+    if (p->mfcc_history_count < 3) return;
+    int t = p->mfcc_history_count - 2;
+    for (int i = 0; i < p_dim; i++) {
+        p_delta2_out[i] = p->mfcc_history[t+1][i] - 2 * p->mfcc_history[t][i] + p->mfcc_history[t-1][i];
+    }
+}
+
+// [5] 런타임 필터 설정 (HPF/LPF 계수 계산)
+bool T20_configureRuntimeFilter(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+    memset(p->biquad_coeffs, 0, sizeof(p->biquad_coeffs));
+    memset(p->biquad_state, 0, sizeof(p->biquad_state));
+
+    if (!p->cfg.preprocess.filter.enable || p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
+        return true;
+    }
+
+    float fs = p->cfg.feature.sample_rate_hz;
+    float fc = p->cfg.preprocess.filter.cutoff_hz_1;
+    if (fs <= 0.0f) return false;
+    if (fc <= 0.0f) fc = 1.0f;
+
+    float x = expf(-2.0f * G_T20_PI * fc / fs);
+
+    if (p->cfg.preprocess.filter.type == EN_T20_FILTER_LPF) {
+        p->biquad_coeffs[0] = 1.0f - x;
+        p->biquad_coeffs[1] = x;
+    } else { // HPF 등
+        p->biquad_coeffs[0] = (1.0f + x) * 0.5f;
+        p->biquad_coeffs[1] = x;
+    }
+    return true;
+}
+
+
+// [6] 실시간 샘플 필터링 수행
+void T20_applyRuntimeFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len) {
+    if (p == nullptr || p_in == nullptr || p_out == nullptr) return;
+
+    if (!p->cfg.preprocess.filter.enable || p->cfg.preprocess.filter.type == EN_T20_FILTER_OFF) {
+        memcpy(p_out, p_in, sizeof(float) * p_len);
+        return;
+    }
+
+    float s0 = p->biquad_state[0];
+    float s1 = p->biquad_state[1];
+    float a0 = p->biquad_coeffs[0];
+    float a1 = p->biquad_coeffs[1];
+
+    if (p->cfg.preprocess.filter.type == EN_T20_FILTER_LPF) {
+        for (uint16_t i = 0; i < p_len; ++i) {
+            s0 = (a0 * p_in[i]) + (a1 * s0);
+            p_out[i] = s0;
+        }
+    } else { // HPF 로직
+        for (uint16_t i = 0; i < p_len; ++i) {
+            float y = a0 * (p_in[i] - s1) + (a1 * s0);
+            s1 = p_in[i];
+            s0 = y;
+            p_out[i] = y;
+        }
+    }
+    p->biquad_state[0] = s0;
+    p->biquad_state[1] = s1;
+}

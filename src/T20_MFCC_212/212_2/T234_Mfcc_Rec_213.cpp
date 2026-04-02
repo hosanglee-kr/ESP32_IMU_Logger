@@ -195,29 +195,6 @@ bool T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 
-/*
-bool T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
-    if (p == nullptr) return false;
-    // 설정된 보관 개수를 초과하면 가장 오래된 인덱스 파일 삭제
-    if (p->recorder_index_count <= p->recorder_rotate_keep_max) return true;
-
-    while (p->recorder_index_count > p->recorder_rotate_keep_max) {
-        // 실제 파일 삭제 (예전 버전 기능 복구)
-        const char* old_path = p->recorder_index_items[0].path;
-        if (p->recorder_storage_backend == EN_T20_STORAGE_SDMMC) SD_MMC.remove(old_path);
-        else LittleFS.remove(old_path);
-
-        // 인덱스 리스트 한 칸씩 당기기
-        for (uint16_t i = 1; i < p->recorder_index_count; ++i) {
-            p->recorder_index_items[i - 1] = p->recorder_index_items[i];
-        }
-        p->recorder_index_count--;
-    }
-    return T20_saveRecorderIndex(p);
-}
-*/
-
-
 bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr || !p->recorder_session_open) return false;
 
@@ -308,4 +285,62 @@ void T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
+
+
+
+bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
+    if (!LittleFS.exists(G_T20_RECORDER_RUNTIME_CFG_FILE_PATH)) return false;
+    File f = LittleFS.open(G_T20_RECORDER_RUNTIME_CFG_FILE_PATH, "r");
+    // JSON 로드 로직...
+    f.close();
+    return true;
+}
+
+bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
+    if (SD_MMC.begin("/sdcard", true)) { // 1-bit mode
+        p->recorder_sdmmc_mounted = true;
+        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+        return true;
+    }
+    return false;
+}
+
+void T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t p_len) {
+    snprintf(p_out, p_len, "/sdcard/rec_%lu.bin", p->recorder_session_id);
+    strlcpy(p->recorder_active_path, p_out, sizeof(p->recorder_active_path));
+}
+
+File T20_openRecorderFileByBackend(EM_T20_StorageBackend_t p_backend, const char* p_path, const char* p_mode) {
+    if (p_backend == EN_T20_STORAGE_SDMMC) return SD_MMC.open(p_path, p_mode);
+    return LittleFS.open(p_path, p_mode);
+}
+
+void T20_recorderWriteEvent(CL_T20_Mfcc::ST_Impl* p, const char* p_text) {
+    strlcpy(p->recorder_last_error, p_text, sizeof(p->recorder_last_error));
+}
+
+void T20_recorderSetLastError(CL_T20_Mfcc::ST_Impl* p, const char* p_text) {
+    strlcpy(p->recorder_last_error, p_text, sizeof(p->recorder_last_error));
+}
+
+bool T20_saveRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
+    File f = LittleFS.open(G_T20_RECORDER_INDEX_FILE_PATH, "w");
+    if (!f) return false;
+    // 인덱스 JSON 저장 로직...
+    f.close();
+    return true;
+}
+
+bool T20_recorderBatchFlush(CL_T20_Mfcc::ST_Impl* p) {
+    return T20_commitActiveDmaSlotToFile(p);
+}
+
+void T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p) {
+    p->recorder_last_flush_ms = millis();
+}
+
+bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
+    ST_T20_RecorderBinaryHeader_t hdr = { .magic = G_T20_BINARY_MAGIC, .version = G_T20_BINARY_VERSION };
+    return p_file.write((uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
+}
 
