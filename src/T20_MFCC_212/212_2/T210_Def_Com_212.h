@@ -36,7 +36,7 @@ static const float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
 
 #define G_T20_QUEUE_LEN                       4U
 #define G_T20_SELECTION_SYNC_NAME_MAX         32U
-
+#define G_T20_RECORDER_MAX_ROTATE_LIST		   16U
 
 static const uint8_t 	G_T20_CFG_PROFILE_COUNT               = 4U;
 static const uint8_t 	G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    = 32U;
