@@ -57,10 +57,18 @@
  * CL_T20_Mfcc::ST_Impl 정의
  * ---------------------------------------------------------------------------- */
 
- /* ============================================================================
- * File: T221_Mfcc_Inter_213.h (Internal Implementation)
- * Summary: v213 컴파일 오류 및 누락 멤버를 완벽히 보강한 ST_Impl 정의
- * ========================================================================== */
+
+    
+    uint32_t last_frame_process_ms; // <--- 이 라인 추가 (마지막 프레임 처리 시각)
+    
+    // ... 나머지 멤버들 ...
+    
+    ST_Impl() : spi(FSPI), bmi() {
+        // ... 생략 ...
+        last_frame_process_ms = 0; // 생성자에서도 초기화 권장
+    }
+};
+
 
 
 
@@ -122,6 +130,8 @@ struct CL_T20_Mfcc::ST_Impl {
     uint16_t            noise_learned_frames;   // 학습된 노이즈 프레임 수
     float               prev_raw_sample;        // Pre-emphasis용 직전 샘플값
     float               runtime_sim_phase;      // 시뮬레이션용 페이즈 변수
+    
+    uint32_t last_frame_process_ms; 
 
     // [5] 특징량 및 시퀀스 결과 (Feature & Sequence Output)
     ST_T20_FeatureVector_t     latest_feature;  // 최신 특징량 (MFCC+Delta+Delta2)
@@ -252,6 +262,9 @@ struct CL_T20_Mfcc::ST_Impl {
         noise_learned_frames = 0; prev_raw_sample = 0.0f;
         runtime_sim_phase = 0.0f;
 
+        last_frame_process_ms = 0;
+        
+        
         // [5] 특징량 초기화
         memset(&latest_feature, 0, sizeof(latest_feature));
         memset(&seq_rb, 0, sizeof(seq_rb));

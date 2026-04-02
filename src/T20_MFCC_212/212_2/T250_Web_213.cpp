@@ -153,11 +153,6 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
     });
 }
 
-
-
-
-
-
 void T20_registerFileStreamingHandler(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, const String& base) {
     v_server->on((base + "/recorder/download").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         char path[128];
@@ -165,20 +160,25 @@ void T20_registerFileStreamingHandler(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v
             request->send(400, "text/plain", "path_required"); return;
         }
 
-        File file = p->recorder_storage_backend == EN_T20_STORAGE_SDMMC ? SD_MMC.open(path, "r") : LittleFS.open(path, "r");
+        // 스토리지 백엔드에 따른 파일 열기
+        File file = (p->recorder_storage_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(path, "r") : LittleFS.open(path, "r");
+        
         if (!file) {
             request->send(404, "text/plain", "file_not_found"); return;
         }
 
-        // AsyncWebServer의 내장 스트리밍 기능을 활용하여 Range 처리 위임
-        AsyncWebServerResponse *response = request->beginResponse(file, path, "application/octet-stream");
+        // [해결] 인자들을 String()으로 감싸서 모호성을 제거합니다.
+        // 세 번째 인자도 명시적으로 String을 지정해주는 것이 좋습니다.
+        AsyncWebServerResponse *response = request->beginResponse(
+            file, 
+            String(path), 
+            String("application/octet-stream")
+        );
+        
         response->addHeader("Access-Control-Allow-Origin", "*");
         request->send(response);
     });
 }
-
-
-
 
 uint32_t T20_calcStatusHash(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return 0;
@@ -190,3 +190,4 @@ uint32_t T20_calcStatusHash(CL_T20_Mfcc::ST_Impl* p) {
     h ^= (uint32_t)(p->bmi270_last_axis_values[2] * 1000); // 센서 값의 미세 변화 감지
     return h;
 }
+
