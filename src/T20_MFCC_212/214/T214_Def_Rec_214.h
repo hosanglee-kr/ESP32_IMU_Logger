@@ -26,15 +26,20 @@
 
 
 // --- Recorder 전용 상수 ---
-static const uint8_t  G_T20_RECORDER_ROTATE_MAX = 8U;
-static const uint32_t G_T20_RECORDER_FLUSH_MS   = 1000U;
+inline constexpr uint8_t  G_T20_RECORDER_ROTATE_MAX = 8U;
+inline constexpr uint32_t G_T20_RECORDER_FLUSH_MS   = 1000U;
+// 한 파일에 기록할 배치 레코드 수 (기본값: 32개)
+inline constexpr uint32_t G_T20_RECORDER_BATCH_FLUSH_RECORDS = 32U;
+// 배치 플러시 타임아웃 (기본값: 2000ms = 2초)
+inline constexpr uint32_t G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS = 2000U;
+
 
 
 // --- File Rotation Settings ---
-static const uint8_t G_T20_RECORDER_ROTATE_KEEP_MAX = 8U;
-static const char* G_T20_RECORDER_ROTATE_PREFIX     = "/rec_";
-static const char* G_T20_RECORDER_ROTATE_EXT        = ".bin";
-static const char* G_T20_RECORDER_FALLBACK_PATH     = "/rec_fallback.bin";
+inline constexpr uint8_t G_T20_RECORDER_ROTATE_KEEP_MAX = 8U;
+inline constexpr char const* G_T20_RECORDER_ROTATE_PREFIX     = "/rec_";
+inline constexpr char const* G_T20_RECORDER_ROTATE_EXT        = ".bin";
+// static const char* G_T20_RECORDER_FALLBACK_PATH     = "/rec_fallback.bin";
 
 
 // --- Recorder 상세 상태 관리 (v210 상태 매핑) ---
@@ -73,17 +78,17 @@ static const ST_T20_DmaConfig_t G_T20_DMA_CONFIG = {
 // --- SDMMC ---
 #define G_T20_SDMMC_PIN_UNASSIGNED 0xFFU
 
-static const uint16_t G_T20_SDMMC_BOARD_HINT_MAX      = 32U;
-static const uint16_t G_T20_SDMMC_PROFILE_PRESET_COUNT= 3U;
-static const uint16_t G_T20_SDMMC_PROFILE_NAME_MAX    = 32U;
+inline constexpr uint16_t G_T20_SDMMC_BOARD_HINT_MAX      = 32U;
+inline constexpr uint16_t G_T20_SDMMC_PROFILE_PRESET_COUNT= 3U;
+inline constexpr uint16_t G_T20_SDMMC_PROFILE_NAME_MAX    = 32U;
 
-static const char* G_T20_SDMMC_MOUNT_PATH_DEFAULT = "/sdcard";
+inline constexpr char const* G_T20_SDMMC_MOUNT_PATH_DEFAULT = "/sdcard";
 
 // --- Binary ---
-static const uint32_t G_T20_BINARY_MAGIC   = 0x54323042UL;
-static const uint16_t G_T20_BINARY_VERSION = 1U;
+inline constexpr uint32_t G_T20_BINARY_MAGIC   = 0x54323042UL;
+inline constexpr uint16_t G_T20_BINARY_VERSION = 1U;
 
-static const uint16_t G_T20_BINARY_HEADER_RESERVED_BYTES = 8U;
+inline constexpr uint16_t G_T20_BINARY_HEADER_RESERVED_BYTES = 8U;
 
 // --- Recorder Limits (Magic Number 제거) ---
 typedef struct {
@@ -106,8 +111,8 @@ static const ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
 
 
 // --- File System ---
-static const uint16_t G_T20_RECORDER_FILE_PATH_MAX = 192U;
-static const uint16_t G_T20_RECORDER_SESSION_NAME_MAX = 48U;
+inline constexpr uint16_t G_T20_RECORDER_FILE_PATH_MAX = 192U;
+inline constexpr uint16_t G_T20_RECORDER_SESSION_NAME_MAX = 48U;
 
 
 
