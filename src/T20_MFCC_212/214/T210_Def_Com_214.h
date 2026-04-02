@@ -1,7 +1,8 @@
-
 /* ============================================================================
  * File: T210_Def_Com_214.h
-
+ * Version: v214_Final (2026-04-02)
+ * Summary: 시스템 전역 공통 정의, RTOS 설정 및 하드웨어 핀 맵
+ * Compiler: gnu++17 (C++17) 
  * ========================================================================== */
 
 #pragma once
@@ -9,217 +10,113 @@
 #include <Arduino.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string_view> // gnu++17 활용
 
+/* ============================================================================
+ * 1. 시스템 메타데이터 및 버전 정보
+ * ========================================================================== */
+inline constexpr std::string_view G_T20_VERSION_STR = "T20_Mfcc_v214_Final";
+inline constexpr uint32_t G_T20_BUILD_TIMESTAMP     = 20260402UL;
 
-// 시스템 동작 타이밍 및 시뮬레이션 (v210 복구)
-static const uint16_t G_T20_RUNTIME_SIM_FRAME_INTERVAL_MS = 160U;
-static const float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
+/* ============================================================================
+ * 2. 시스템 동작 타이밍 및 샘플링 (1600Hz 고정)
+ * ========================================================================== */
+// BMI270 ODR(Output Data Rate)과 동기화된 샘플링 주파수
+inline constexpr float    G_T20_SAMPLE_RATE_HZ         = 1600.0f; 
+// 시뮬레이션 모드에서 프레임 간격 (160ms = 약 6.25Hz 분석 주기)
+inline constexpr uint16_t G_T20_RUNTIME_SIM_INTERVAL_MS = 160U; 
 
+/* ============================================================================
+ * 3. RTOS 태스크 설정 (ESP32-S3 Dual Core 최적화)
+ * ========================================================================== */
+// [튜닝 가이드] 스택 메모리 부족 시 0x400 단위로 증설할 것
+inline constexpr uint16_t G_T20_SENSOR_TASK_STACK    = 6144U;  // Core 0: SPI/FIFO 데이터 취득 전용
+inline constexpr uint16_t G_T20_PROCESS_TASK_STACK   = 12288U; // Core 1: DSP/SIMD/MFCC 고부하 연산
+inline constexpr uint16_t G_T20_RECORDER_TASK_STACK  = 8192U;  // Core 1: SDMMC 파일 쓰기 및 관리
 
+// 태스크 우선순위 (숫자가 높을수록 우선순위가 높음)
+inline constexpr uint8_t  G_T20_SENSOR_TASK_PRIO     = 4U;     // 최상위: 데이터 유실 방지
+inline constexpr uint8_t  G_T20_PROCESS_TASK_PRIO    = 3U;     // 중위: 실시간 분석 유지
+inline constexpr uint8_t  G_T20_RECORDER_TASK_PRIO   = 2U;     // 하위: I/O 대기 가능
 
-
-
-// 태스크 설정 (v210에서 복구)
-#define G_T20_SENSOR_TASK_STACK               6144U
-#define G_T20_PROCESS_TASK_STACK              12288U
-#define G_T20_RECORDER_TASK_STACK             8192U
-#define G_T20_SENSOR_TASK_PRIO                4U
-#define G_T20_PROCESS_TASK_PRIO               3U
-#define G_T20_RECORDER_TASK_PRIO              2U
-
-// 핀 맵 매크로 (Core.cpp 호환용)
+/* ============================================================================
+ * 4. 하드웨어 핀 맵 (ESP32-S3 기반)
+ * ========================================================================== */
+// SPI 버스 (FSPI) 설정
 #define G_T20_PIN_SPI_SCK                     12
 #define G_T20_PIN_SPI_MISO                    13
 #define G_T20_PIN_SPI_MOSI                    11
-#define G_T20_PIN_BMI_CS                      10
-#define G_T20_PIN_BMI_INT1                    14
+#define G_T20_PIN_BMI_CS                      10 // 센서 Chip Select
+#define G_T20_PIN_BMI_INT1                    14 // FIFO Watermark 인터럽트
 
-#define G_T20_QUEUE_LEN                       4U
-#define G_T20_SELECTION_SYNC_NAME_MAX         32U
-#define G_T20_RECORDER_MAX_ROTATE_LIST		   16U
+// 시스템 제어 인터페이스
+#define G_T20_PIN_CTRL_BUTTON                 0  // 수동 측정 시작/종료 버튼 (GPIO 0)
 
-static const uint8_t 	G_T20_CFG_PROFILE_COUNT               = 4U;
-static const uint8_t 	G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    = 32U;
-static const uint8_t 	G_T20_RAW_FRAME_BUFFERS               = 4U;
-static const uint16_t 	G_T20_SYSTEM_JSON_BUF_MAX             = 1536U;
+/* ============================================================================
+ * 5. 데이터 큐 및 스토리지 버퍼 (Triple Buffering 반영)
+ * ========================================================================== */
+// RTOS 메시지 큐 길이
+inline constexpr uint8_t  G_T20_QUEUE_LEN             = 4U;    // Raw Frame 전달용
+inline constexpr uint8_t  G_T20_REC_QUEUE_LEN         = 32U;   // 특징량 저장용 마진 확보
 
-#define G_T20_RUNTIME_CFG_JSON_BUF_SIZE	   1536U
+// SDMMC 쓰기 지연 대응용 Triple Buffering
+inline constexpr uint8_t  G_T20_ZERO_COPY_DMA_SLOTS   = 3U;    
+inline constexpr uint16_t G_T20_DMA_SLOT_BYTES        = 1024U; // 32-byte 정렬 권장
 
+// 레코딩 배치 설정
+inline constexpr uint16_t G_T20_RECORDER_BATCH_FLUSH_RECORDS  = 32U;
+inline constexpr uint16_t G_T20_RECORDER_BATCH_TIMEOUT_MS     = 2000U;
 
+/* ============================================================================
+ * 6. 시스템 한도 및 버퍼 크기
+ * ========================================================================== */
+inline constexpr uint8_t  G_T20_CFG_PROFILE_COUNT           = 4U;    // 최대 프로필 저장 개수
+inline constexpr uint8_t  G_T20_PROFILE_NAME_MAX            = 32U;   // 프로필 이름 최대 길이
+inline constexpr uint16_t G_T20_SYSTEM_JSON_BUF_MAX         = 2048U; // JSON 직렬화 버퍼
 
-// 한 파일에 기록할 배치 레코드 수 (기본값: 32개)
-#define G_T20_RECORDER_BATCH_FLUSH_RECORDS 32U
-// 배치 플러시 타임아웃 (기본값: 2000ms = 2초)
-#define G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS 2000U
-
-
-
-// #define G_T20_CFG_PROFILE_COUNT               4U
-// #define G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    32U
-// #define G_T20_RAW_FRAME_BUFFERS               4U
-// #define G_T20_SYSTEM_JSON_BUF_MAX             1536U
-
-
-// --- v210 대비 누락된 시스템 경로 보강 ---
-static const char* G_T20_RECORDER_DEFAULT_FILE_PATH  = "/t20_rec.bin";
-static const char* G_T20_RECORDER_INDEX_FILE_PATH    = "/t20_rec_index.json";
-static const char* G_T20_RECORDER_RUNTIME_CFG_PATH   = "/t20_runtime_cfg.json";
-
-// 시뮬레이션 및 실제 소스 모드 정의
+/* ============================================================================
+ * 7. 공통 상태 및 열거형 (Enums)
+ * ========================================================================== */
+// 시스템 전체 마스터 상태
 typedef enum {
-    EN_T20_SOURCE_OFF       = 255,
-    EN_T20_SOURCE_SYNTHETIC = 0,
-    EN_T20_SOURCE_BMI270    = 1
-} EM_T20_SourceMode_t;
-
-
-
-/* ============================================================================
- * Global Constants (G_T20_)
- * ========================================================================== */
-
-/* --- Version --- */
-static const char* G_T20_VERSION_STR = "T20_Mfcc_212";
-
-/* --- Hardware Pin Map (ESP32-S3) --- */
-typedef struct {
-    uint8_t spi_sck;
-    uint8_t spi_miso;
-    uint8_t spi_mosi;
-    uint8_t bmi_cs;
-    uint8_t bmi_int1;
-} ST_T20_PinMap_t;
-
-static const ST_T20_PinMap_t G_T20_PINMAP = {
-    .spi_sck  = 12,
-    .spi_miso = 13,
-    .spi_mosi = 11,
-    .bmi_cs   = 10,
-    .bmi_int1 = 14
-};
-
-/* ============================================================================
- * RTOS Configuration (Magic Number 그룹화)
- * ========================================================================== */
-
-typedef struct {
-    uint16_t queue_len;
-
-    uint16_t sensor_stack;
-    uint16_t process_stack;
-    uint16_t recorder_stack;
-
-    uint8_t sensor_prio;
-    uint8_t process_prio;
-    uint8_t recorder_prio;
-} ST_T20_RTOSConfig_t;
-
-static const ST_T20_RTOSConfig_t G_T20_RTOS_CONFIG = {
-    .queue_len      = 4U,
-    .sensor_stack   = 6144U,
-    .process_stack  = 12288U,
-    .recorder_stack = 8192U,
-    .sensor_prio    = 4U,
-    .process_prio   = 3U,
-    .recorder_prio  = 2U
-};
-
-/* ============================================================================
- * Math Constants
- * ========================================================================== */
-
-static const float G_T20_PI      = 3.14159265358979323846f;
-static const float G_T20_EPSILON = 1.0e-12f;
-
-/* ============================================================================
- * System Limits / Buffers
- * ========================================================================== */
-
-typedef struct {
-    uint16_t runtime_json_buf;
-    uint16_t profile_count;
-    uint16_t raw_frame_buffers;
-
-    uint16_t selection_sync_name_max;
-    uint16_t runtime_profile_name_max;
-    uint16_t render_selection_sync_max;
-
-    uint16_t preview_text_default;
-    uint16_t preview_text_max;
-
-    uint16_t csv_page_size_max;
-
-
-    uint16_t noise_min_frames;
-    uint8_t  csv_sort_asc;
-    uint8_t  csv_sort_desc;
-
-
-} ST_T20_SystemLimits_t;
-
-static const ST_T20_SystemLimits_t G_T20_SYSTEM_LIMITS = {
-    .runtime_json_buf          = 1536U,
-    .profile_count             = 4U,
-    .raw_frame_buffers         = 4U,
-    .selection_sync_name_max   = 32U,
-    .runtime_profile_name_max  = 32U,
-    .render_selection_sync_max = 4U,
-    .preview_text_default      = 4096U,
-    .preview_text_max          = 16384U,
-    .csv_page_size_max         = 100U,
-
-    .noise_min_frames = 8U,
-    .csv_sort_asc = 0,
-    .csv_sort_desc = 1
-};
-
-/* ============================================================================
- * Common State / Result (전 시스템 공통)
- * ========================================================================== */
-
-typedef enum {
-
-    EN_T20_STATE_IDLE = 0,
-    EN_T20_STATE_READY,     // 준비 완료 (v210의 READY)
-    EN_T20_STATE_RUNNING,   // 실행 중 (v210의 EXEC/PENDING)
-    EN_T20_STATE_DONE,      // 정상 종료 (v210의 DONE/SUCCESS)
-    EN_T20_STATE_ERROR,     // 오류 발생 (v210의 FAIL)
-    EN_T20_STATE_BUSY,      // 작업 중 대기
-    EN_T20_STATE_TIMEOUT    // 시간 초과
-
+    EN_T20_STATE_IDLE = 0,      // 초기 상태
+    EN_T20_STATE_READY,         // 하드웨어 준비 완료
+    EN_T20_STATE_RUNNING,       // 측정 및 분석 중
+    EN_T20_STATE_BUSY,          // 노이즈 학습 또는 파일 정리 중
+    EN_T20_STATE_ERROR          // 치명적 오류 발생
 } EM_T20_State_t;
 
+// 데이터 소스 선택
+typedef enum {
+    EN_T20_SOURCE_OFF       = 255,
+    EN_T20_SOURCE_SYNTHETIC = 0, // 가상 사인파 생성
+    EN_T20_SOURCE_BMI270    = 1  // 실제 하드웨어 센서
+} EM_T20_SourceMode_t;
+
+// 결과 보고용
 typedef enum {
     EN_T20_RESULT_FAIL = 0,
-    EN_T20_RESULT_OK
+    EN_T20_RESULT_OK = 1
 } EM_T20_Result_t;
 
 /* ============================================================================
- * Debug Helpers
+ * 8. 유틸리티 함수 (Inline)
  * ========================================================================== */
-
+// 상태값을 문자열로 변환 (Web API 및 시리얼 로그용)
 static inline const char* T20_StateToString(EM_T20_State_t s)
 {
     switch (s) {
-        case EN_T20_STATE_IDLE: return "IDLE";
-        case EN_T20_STATE_READY: return "READY";
+        case EN_T20_STATE_IDLE:    return "IDLE";
+        case EN_T20_STATE_READY:   return "READY";
         case EN_T20_STATE_RUNNING: return "RUNNING";
-        case EN_T20_STATE_DONE: return "DONE";
-        case EN_T20_STATE_ERROR: return "ERROR";
-        default: return "UNKNOWN";
+        case EN_T20_STATE_BUSY:    return "BUSY";
+        case EN_T20_STATE_ERROR:   return "ERROR";
+        default:                   return "UNKNOWN";
     }
 }
 
-/* ============================================================================
- * Utility Helpers
- * ========================================================================== */
-
-static inline float T20_ClampFloat(float v, float min, float max)
-{
-    return (v < min) ? min : (v > max) ? max : v;
-}
-
-static inline float T20_AbsFloat(float v)
-{
-    return (v < 0.0f) ? -v : v;
-}
+/**
+ * [v214 잔여 가능 주석 / TO-DO]
+ * 1. SDMMC 4-bit 모드 전환 시 D1~D3 핀 정의를 본 파일의 Pin Mapping 섹션에 추가할 것.
+ * 2. 부팅 시 버튼을 길게 누를 경우 'Safe Mode'로 진입하는 로직을 T230_handleControlInputs에 구현 고려.
+ */
