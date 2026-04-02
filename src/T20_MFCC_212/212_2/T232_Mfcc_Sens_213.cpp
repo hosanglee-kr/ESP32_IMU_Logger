@@ -10,77 +10,70 @@
 
 #include "T221_Mfcc_Inter_213.h"
 
-/*
-// BMI270 핵심 레지스터 정의 (v210 복구)
-#define BMI2_REG_ACC_CONF      0x40
-#define BMI2_REG_ACC_RANGE     0x41
-#define BMI2_REG_GYR_CONF      0x42
-#define BMI2_REG_GYR_RANGE     0x43
-#define BMI2_REG_INT1_IO_CTRL  0x53
-#define BMI2_REG_INT_MAP_DATA  0x58
-#define BMI2_REG_PWR_CONF      0x7C
-#define BMI2_REG_PWR_CTRL      0x7D
-*/
-
-/* 
-#define REG_ACC_CONF      0x40
-#define REG_ACC_RANGE     0x41
-#define REG_GYR_CONF      0x42
-#define REG_GYR_RANGE     0x43
-#define REG_PWR_CONF      0x7C
-#define REG_PWR_CTRL      0x7D
-#define REG_CMD           0x7E
-*/
-
 
 
 // 라이브러리 함수를 사용하여 센서 초기화
 // [라이브러리 기반 초기화] 
+//   공식 예제 4(Filtering) 및 5(FIFO)의 방식을 결합하여 구현 */
 bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
-    // 1. SPI 통신 시작 및 Config Load (0x59 과정 포함)
-    // 라이브러리의 beginSPI는 내부적으로 칩 아이디 확인 및 마이크로코드 로드를 수행합니다.
+    // 1. SPI 통신 시작 (내부적으로 Config Load 0x59 수행)
     int8_t status = p->bmi.beginSPI(G_T20_PIN_BMI_CS, G_T20_SPI_FREQ_HZ, p->spi);
     if (status != BMI2_OK) {
         p->bmi_state.master = EN_T20_STATE_ERROR;
-        strlcpy(p->bmi270_status_text, "Library_Init_Fail", 48);
+        strlcpy(p->bmi270_status_text, "Init_Fail", 48);
         return false;
     }
 
-    // 2. 가속도계/자이로스코프 설정 (라이브러리 매크로 및 고수준 함수 사용)
-    p->bmi.setAccelODR(BMI2_ACC_ODR_1600HZ);
-    p->bmi.setAccelRange(BMI2_ACC_RANGE_8G);
-    p->bmi.setAccelPowerMode(BMI2_ACC_PERF_MODE); // 고성능 모드
+    // 2. 가속도계 설정 (bmi2_sens_config 구조체 사용 - 예제 4 방식)
+    bmi2_sens_config accelConfig;
+    accelConfig.type = BMI2_ACCEL;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
+    accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
+    accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE; // 에러 수정: PERF_OPT_MODE
+    accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
+    p->bmi.setConfig(accelConfig);
 
-    p->bmi.setGyroODR(BMI2_GYR_ODR_1600HZ);
-    p->bmi.setGyroRange(BMI2_GYR_RANGE_2000);
-    p->bmi.setGyroPowerMode(BMI2_GYR_PERF_MODE, BMI2_GYR_NOISE_PERF);
+    // 3. 자이로스코프 설정
+    bmi2_sens_config gyroConfig;
+    gyroConfig.type = BMI2_GYRO;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_1600HZ;
+    gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
+    gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
+    gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
+    gyroConfig.cfg.gyr.range = BMI2_GYR_RANGE_2000;
+    p->bmi.setConfig(gyroConfig);
 
-    // 3. FIFO 설정 (1600Hz 대응을 위한 검토 반영)
-    // 매 샘플마다 인터럽트를 거는 것보다 FIFO에 쌓아두고 읽는 것이 CPU 효율과 SD 쓰기 안정성에 유리합니다.
+    // 4. FIFO 설정 (예제 5 방식)
+    // 1600Hz 고속 샘플링 시 인터럽트 부하를 줄이기 위해 FIFO 사용
     BMI270_FIFOConfig fifoConfig;
-    fifoConfig.flags = BMI2_FIFO_GYR_EN | BMI2_FIFO_ACC_EN; // 가속도/자이로 모두 FIFO 저장
-    fifoConfig.watermark = 16;                             // 16개 샘플이 쌓이면 인터럽트 발생
-    fifoConfig.accelFilter = true;
-    fifoConfig.gyroFilter = true;
+    fifoConfig.flags = BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN;
+    fifoConfig.watermark = 16; // 16개 샘플마다 인터럽트 발생
+    fifoConfig.accelFilter = BMI2_ENABLE;
+    fifoConfig.gyroFilter = BMI2_ENABLE;
+    fifoConfig.selfWakeUp = BMI2_ENABLE;
     p->bmi.setFIFOConfig(fifoConfig);
 
-    // 4. 인터럽트 매핑: FIFO Watermark 도달 시 INT1 핀 신호 발생
-    p->bmi.mapInterruptToPin(BMI2_FIFO_WM_INT, BMI2_INT1);
+    // 5. 인터럽트 핀 설정 (예제 3 방식)
+    // FIFO 워터마크 인터럽트를 INT1 핀에 매핑
+    p->bmi.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1); // 에러 수정: BMI2_FWM_INT
+
+    bmi2_int_pin_config intPinConfig;
+    intPinConfig.pin_type = BMI2_INT1;
+    intPinConfig.int_latch = BMI2_INT_NON_LATCH;
+    intPinConfig.pin_cfg[0].lvl = BMI2_INT_ACTIVE_HIGH;
+    intPinConfig.pin_cfg[0].od = BMI2_INT_PUSH_PULL;
+    intPinConfig.pin_cfg[0].output_en = BMI2_INT_OUTPUT_ENABLE;
+    intPinConfig.pin_cfg[0].input_en = BMI2_INT_INPUT_DISABLE;
+    p->bmi.setInterruptPinConfig(intPinConfig);
 
     p->bmi_state.init = EN_T20_STATE_DONE;
-    p->bmi_state.spi = EN_T20_STATE_READY;
-    strlcpy(p->bmi270_status_text, "1600Hz_FIFO_Ready", 48);
+    strlcpy(p->bmi270_status_text, "1600Hz_FIFO_Active", 48);
     return true;
 }
 
 
-// 라이브러리가 내부적으로 처리하므로 제거 권장 (빌드 유지를 위해 껍데기만 유지)
-bool T20_bmi270ActualReadBurst(CL_T20_Mfcc::ST_Impl* p, uint8_t* p_buf, uint16_t p_len) {
-    (void)p; (void)p_buf; (void)p_len;
-    return true; 
-}
 
 
 void IRAM_ATTR T20_onBmiDrdyISR() {
@@ -101,30 +94,29 @@ void IRAM_ATTR T20_onBmiDrdyISR() {
 // 라이브러리 데이터 구조를 사용하여 샘플 읽기
 // [최적화된 데이터 읽기] 
 //   FIFO를 사용할 경우 단일 샘플이 아닌 배치 단위로 읽어 링버퍼에 채웁니다. 
+/* [데이터 읽기] 
+   sensorTask에서 호출됨. 라이브러리의 getSensorData를 통해 float 변환된 데이터 획득 */
 bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
     if (p == nullptr || p_out_sample == nullptr) return false;
 
-    // FIFO를 사용하지 않는 일반 모드일 경우:
+    // 라이브러리가 내부적으로 SPI Burst Read 및 float 스케일링 수행
     if (p->bmi.getSensorData() != BMI2_OK) return false;
 
-    // 현재 설정된 축 모드에 따라 데이터 선택 (v210 로직 유지)
-    switch (p->bmi270_axis_mode) {
-        case G_T20_BMI270_AXIS_MODE_ACC_Z:
-            *p_out_sample = p->bmi.data.accelZ;
-            break;
-        case G_T20_BMI270_AXIS_MODE_GYRO_Z:
-        default:
-            *p_out_sample = p->bmi.data.gyroZ;
-            break;
+    // 설정된 축 모드에 따라 분석용 샘플 선택
+    if (p->bmi270_axis_mode == G_T20_BMI270_AXIS_MODE_ACC_Z) {
+        *p_out_sample = p->bmi.data.accelZ;
+    } else {
+        *p_out_sample = p->bmi.data.gyroZ; // 기본값: Gyro Z
     }
 
-    // 웹 뷰어 모니터링용 최신값 갱신
+    // 웹 모니터링용 실시간 값 갱신
     p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
     p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
     p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
     
     return true;
 }
+
 
 
 bool T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p) {
@@ -142,27 +134,29 @@ bool T20_tryBMI270Reinit(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
     p->bmi_state.master = EN_T20_STATE_BUSY;
-    T20_recorderWriteEvent(p, "sensor_reinit_attempt");
-
-    // 라이브러리 제공 소프트 리셋
     if (p->bmi.reset() == BMI2_OK) {
         delay(50);
-        if (T20_initBMI270_SPI(p)) {
-            T20_recorderWriteEvent(p, "sensor_recovered");
-            p->bmi_state.master = EN_T20_STATE_RUNNING;
-            return true;
-        }
+        return T20_initBMI270_SPI(p);
     }
-
-    p->bmi_state.master = EN_T20_STATE_ERROR;
     return false;
 }
 
 
-// BMI270 가속도/자이로 고정밀 보정 및 설정값
-// 불필요해진 구형 수동 설정 함수는 제거하거나 
-//   위의 라이브러리 기반 함수(T20_initBMI270_SPI)를 호출하도록 리다이렉트합니다.
+
+// 빌드 호환성을 위한 래퍼 함수
 bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
     return T20_initBMI270_SPI(p);
 }
+
+
+
+
+
+
+
+
+
+
+
+// 라이브러리 미사용 항목 제거: T20_bmi270ActualReadBurst 등은 이제 불필요함
 
