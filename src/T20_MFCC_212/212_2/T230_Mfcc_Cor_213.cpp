@@ -263,3 +263,58 @@ void T20_stopTasks(CL_T20_Mfcc::ST_Impl* p) {
     if (p->recorder_task_handle) { vTaskDelete(p->recorder_task_handle); p->recorder_task_handle = nullptr; }
 }
 
+
+
+bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_text) {
+    if (p == nullptr || p_json_text == nullptr) return false;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, p_json_text);
+    if (err) return false;
+
+    const char* profile_name        = doc["profile_name"] | p->runtime_cfg_profile_name;
+    const char* backend             = doc["recorder_backend"] | ((p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc");
+    const char* sdmmc_profile       = doc["sdmmc_profile"] | p->sdmmc_profile.profile_name;
+    const char* output_mode         = doc["output_mode"] | ((p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence");
+    const char* selection_sync_name = doc["selection_sync_name"] | p->selection_sync_name;
+    const char* type_meta_name      = doc["type_meta_name"] | p->type_meta_name;
+    const char* type_meta_kind      = doc["type_meta_kind"] | p->type_meta_kind;
+
+    strlcpy(p->runtime_cfg_profile_name, profile_name, sizeof(p->runtime_cfg_profile_name));
+    strlcpy(p->selection_sync_name, selection_sync_name, sizeof(p->selection_sync_name));
+    strlcpy(p->type_meta_name, type_meta_name, sizeof(p->type_meta_name));
+    strlcpy(p->type_meta_kind, type_meta_kind, sizeof(p->type_meta_kind));
+    p->type_meta_enabled             = (bool)(doc["type_meta_enabled"] | p->type_meta_enabled);
+    p->cfg.feature.hop_size          = (uint16_t)(doc["hop_size"] | p->cfg.feature.hop_size);
+    p->cfg.feature.mfcc_coeffs       = (uint16_t)(doc["mfcc_coeffs"] | p->cfg.feature.mfcc_coeffs);
+    p->cfg.output.sequence_frames    = (uint16_t)(doc["sequence_frames"] | p->cfg.output.sequence_frames);
+    p->recorder_enabled              = (bool)(doc["recorder_enabled"] | p->recorder_enabled);
+    p->selection_sync_enabled        = (bool)(doc["selection_sync_enabled"] | p->selection_sync_enabled);
+    p->selection_sync_frame_from     = (uint32_t)(doc["selection_sync_frame_from"] | p->selection_sync_frame_from);
+    p->selection_sync_frame_to       = (uint32_t)(doc["selection_sync_frame_to"] | p->selection_sync_frame_to);
+    p->recorder_batch_watermark_low  = (uint16_t)(doc["batch_watermark_low"] | p->recorder_batch_watermark_low);
+    p->recorder_batch_watermark_high = (uint16_t)(doc["batch_watermark_high"] | p->recorder_batch_watermark_high);
+    p->recorder_batch_idle_flush_ms  = (uint32_t)(doc["batch_idle_flush_ms"] | p->recorder_batch_idle_flush_ms);
+    
+    if (p->recorder_batch_watermark_low == 0) p->recorder_batch_watermark_low = 1;
+    if (p->recorder_batch_watermark_high < p->recorder_batch_watermark_low) {
+        p->recorder_batch_watermark_high = p->recorder_batch_watermark_low;
+    }
+
+    if (strcmp(backend, "sdmmc") == 0)
+        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+    else
+        p->recorder_storage_backend = EN_T20_STORAGE_LITTLEFS;
+
+    if (strcmp(output_mode, "sequence") == 0)
+        p->cfg.output.output_mode = EN_T20_OUTPUT_SEQUENCE;
+    else
+        p->cfg.output.output_mode = EN_T20_OUTPUT_VECTOR;
+
+    T20_applySdmmcProfileByName(p, sdmmc_profile);
+    T20_seqInit(&p->seq_rb, p->cfg.output.sequence_frames, (uint16_t)(p->cfg.feature.mfcc_coeffs * 3U));
+    T20_configureRuntimeFilter(p);
+    T20_syncDerivedViewState(p);
+    return true;
+}
+

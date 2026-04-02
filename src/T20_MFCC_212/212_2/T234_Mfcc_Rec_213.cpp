@@ -43,28 +43,32 @@ bool T20_recorderOpenIfNeeded(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 bool T20_commitDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p, uint8_t p_slot_index) {
-    if (p == nullptr || p_slot_index >= G_T20_ZERO_COPY_DMA_SLOT_COUNT) return false;
+    if (p == nullptr) return false;
+    if (p_slot_index >= G_T20_ZERO_COPY_DMA_SLOT_COUNT) return false;
 
     uint16_t used = p->recorder_dma_slot_used[p_slot_index];
     if (used == 0) return true;
 
     if (!T20_recorderOpenIfNeeded(p)) return false;
 
-    File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, p->recorder_active_path, "a");
-    if (!file) return false;
+    // 경로 선택 로직 보강
+    const char* path = p->recorder_active_path[0] ? p->recorder_active_path : p->recorder_file_path;
+    File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, path, "a");
+    if (!file) {
+        T20_recorderSetLastError(p, "dma commit open failed");
+        p->recorder_file_opened = false;
+        return false;
+    }
 
-    // v212 핵심: DMA 정렬된 버퍼를 통째로 쓰기 (성능 극대화)
-    p->rec_state.write = EN_T20_STATE_RUNNING;
-    size_t written = file.write(p->recorder_dma_slots[p_slot_index], used);
+    size_t written = file.write((const uint8_t*)p->recorder_dma_slots[p_slot_index], used);
     file.close();
 
     if (written != used) {
-        T20_recorderSetLastError(p, "dma_write_incomplete");
+        T20_recorderSetLastError(p, "dma commit write failed");
         return false;
     }
 
     p->recorder_dma_slot_used[p_slot_index] = 0;
-    p->rec_state.write = EN_T20_STATE_READY;
     return true;
 }
 
@@ -393,8 +397,12 @@ bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
 
 
 
-
-
+bool T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+    // 현재 쓰고 있는 슬롯의 직전 슬롯(이미 다 찬 슬롯)을 flush
+    uint8_t last_filled = (uint8_t)((p->recorder_dma_active_slot + G_T20_ZERO_COPY_DMA_SLOT_COUNT - 1U) % G_T20_ZERO_COPY_DMA_SLOT_COUNT);
+    return T20_commitDmaSlotToFile(p, last_filled);
+}
 
 
 
