@@ -1,7 +1,7 @@
 /* ============================================================================
  * File: T210_Def_Com_214.h
- * Summary: 시스템 전역 공통 정의, 상태 코드 및 하드웨어 구성
- * Standard: gnu++17 (C++17 with GNU extensions)
+ * Summary: 시스템 전역 공통 정의 및 전역 상수 (v214 통합본)
+ * Compiler: gnu++17 기준 최적화
  * ========================================================================== */
 
 #pragma once
@@ -11,118 +11,110 @@
 #include <stdbool.h>
 
 /* ============================================================================
- * [REMIND / TO-DO LIST] - 시스템 안정화를 위한 잔여 업무
- * 1. [ ] 1600Hz ODR에서 SDMMC 1-bit 쓰기 대역폭 실측 (Jitter 발생 시 Triple Buffering 점검)
- * 2. [ ] GPIO 0(Button) 입력 시 외부 풀업 저항 유무에 따른 내부 Pull-up 설정 검증
- * 3. [ ] gnu++17의 constexpr을 활용한 부동소수점 상수 최적화 적용 확인
- * 4. [ ] 하드웨어 Watchdog 타임아웃 주기를 1600Hz Batch 처리 시간에 맞춰 재조정
+ * [TO-DO LIST / 잔여 업무]
+ * 1. [ ] EN_T20_STATE_DONE 상태가 모든 태스크 상태 머신에서 정상 작동하는지 검증
+ * 2. [ ] G_T20_SYSTEM_JSON_BUF_MAX 크기가 복잡한 JSON 생성 시 충분한지 힙 모니터링
+ * 3. [ ] inline constexpr 변수들이 gnu++17 환경에서 중복 정의 없이 링크되는지 확인
+ * 4. [ ] 하드웨어 Watchdog 주기를 Batch Flush 시간(2s)보다 길게 설정 확인
  * ========================================================================== */
 
-/* --- Version Control --- */
-inline constexpr char const* G_T20_VERSION_STR = "T20_Mfcc_v214_gnu17";
+/* --- Version --- */
+inline constexpr char const* G_T20_VERSION_STR = "T20_Mfcc_v214_Final";
 
 /* ============================================================================
  * 1. 시스템 동작 타이밍 및 시뮬레이션
  * ========================================================================== */
-// v210 복구: 실제 센서가 없을 때 데이터 흐름을 시뮬레이션하기 위한 주기
 inline constexpr uint16_t G_T20_RUNTIME_SIM_FRAME_INTERVAL_MS = 160U;
 inline constexpr float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
 
 /* ============================================================================
- * 2. RTOS 태스크 구성 (ESP32-S3 듀얼 코어 분산)
+ * 2. RTOS 태스크 설정
  * ========================================================================== */
-// 스택 사이즈는 SIMD(ESP-DSP) 연산 부하를 고려하여 넉넉히 할당
-#define G_T20_SENSOR_TASK_STACK               6144U    // Core 0: SPI/FIFO 데이터 수집
-#define G_T20_PROCESS_TASK_STACK              12288U   // Core 1: MFCC/SIMD 가속 연산
-#define G_T20_RECORDER_TASK_STACK             8192U    // Core 1: SDMMC 파일 로깅
-
+#define G_T20_SENSOR_TASK_STACK               6144U
+#define G_T20_PROCESS_TASK_STACK              12288U
+#define G_T20_RECORDER_TASK_STACK             8192U
 #define G_T20_SENSOR_TASK_PRIO                4U
 #define G_T20_PROCESS_TASK_PRIO               3U
 #define G_T20_RECORDER_TASK_PRIO              2U
 
 /* ============================================================================
- * 3. 하드웨어 핀 맵 (ESP32-S3 기반)
+ * 3. 하드웨어 핀 맵 (ESP32-S3)
  * ========================================================================== */
-// SPI1(FSPI) 인터페이스 구성
 #define G_T20_PIN_SPI_SCK                     12
 #define G_T20_PIN_SPI_MISO                    13
 #define G_T20_PIN_SPI_MOSI                    11
 #define G_T20_PIN_BMI_CS                      10
 #define G_T20_PIN_BMI_INT1                    14
 
-// [v214] 수동 제어 버튼 및 상태 LED (GPIO 0은 S3 Zero 보드 기본 버튼)
-#define G_T20_PIN_CTRL_BUTTON                 0
-#define G_T20_PIN_STATUS_LED                  21
-
 /* ============================================================================
- * 4. 시스템 제한 및 버퍼 구성
+ * 4. 공통 상태 및 결과 정의 (Enum)
  * ========================================================================== */
-// 큐 길이는 지터 방지를 위해 v210 대비 상향 조정 검토 가능
-inline constexpr uint8_t  G_T20_QUEUE_LEN             = 8U; 
-inline constexpr uint16_t G_T20_SYSTEM_JSON_BUF_MAX   = 2048U; // API 정교화로 인한 확장
-
-// [v214] SDMMC 1-bit 고정 설정
-inline constexpr bool     G_T20_SDMMC_FORCE_1BIT      = true;
-
-// 로깅 배치 설정
-#define G_T20_RECORDER_BATCH_FLUSH_RECORDS    32U
-#define G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS 2000U
-#define G_T20_RECORDER_MAX_ROTATE_LIST        16U
-
-/* ============================================================================
- * 5. 공통 열거형 (Enums) - 상태 및 모드 제어
- * ========================================================================== */
-
-// 시스템 마스터 상태
 typedef enum {
-    EN_T20_STATE_IDLE = 0,      // 초기 상태
-    EN_T20_STATE_READY,         // 하드웨어 초기화 완료
-    EN_T20_STATE_RUNNING,       // 측정 및 분석 동작 중
-    EN_T20_STATE_BUSY,          // 노이즈 학습 등 특정 작업 점유 중
-    EN_T20_STATE_ERROR,         // 시스템 치명적 오류
-    EN_T20_STATE_TIMEOUT,       // 통신/데이터 수집 시간 초과
-    EN_T20_STATE_MAINTENANCE    // 펌웨어 업데이트 등 대기 모드
+    EN_T20_STATE_IDLE = 0,
+    EN_T20_STATE_READY,     // 장치 준비 완료
+    EN_T20_STATE_RUNNING,   // 태스크/루프 실행 중
+    EN_T20_STATE_DONE,      // [핵심] 작업 정상 종료 (에러 해결용 복구)
+    EN_T20_STATE_ERROR,     // 오류 발생
+    EN_T20_STATE_BUSY,      // 작업 중 대기
+    EN_T20_STATE_TIMEOUT    // 시간 초과
 } EM_T20_State_t;
 
-// [v214] 측정 시작 모드 선택
-typedef enum {
-    EN_T20_START_AUTO = 0,      // 부팅 즉시 활성화
-    EN_T20_START_MANUAL         // 버튼/Web API 대기
-} EM_T20_StartMode_t;
-
-// 결과 리포트
 typedef enum {
     EN_T20_RESULT_FAIL = 0,
     EN_T20_RESULT_OK
 } EM_T20_Result_t;
 
 /* ============================================================================
- * 6. 시스템 전역 설정 구조체 (Config Group)
+ * 5. 시스템 제한 및 버퍼 설정 (누락된 상수 대거 복구)
  * ========================================================================== */
-typedef struct {
-    EM_T20_StartMode_t start_mode;     // 시작 시 자동 실행 여부
-    uint8_t            button_pin;     // 제어 버튼 핀 번호
-    bool               sd_1bit_mode;   // SDMMC 1-bit 강제 여부
-    uint16_t           watchdog_ms;    // 데이터 흐름 감시 주기
-} ST_T20_SystemConfig_t;
+#define G_T20_QUEUE_LEN                       8U
+#define G_T20_SELECTION_SYNC_NAME_MAX         32U  // T221 에러 해결
+#define G_T20_RECORDER_MAX_ROTATE_LIST        16U
+#define G_T20_CFG_PROFILE_COUNT               4U   // T221/T230 에러 해결
+#define G_T20_RUNTIME_CFG_PROFILE_NAME_MAX    32U  // T221 에러 해결
+#define G_T20_RAW_FRAME_BUFFERS               4U   // T221 에러 해결
+#define G_T20_SYSTEM_JSON_BUF_MAX             2048U
+#define G_T20_RUNTIME_CFG_JSON_BUF_SIZE       2048U // T234 에러 해결
 
 /* ============================================================================
- * 7. 유틸리티 헬퍼 (Utility Inlines)
+ * 6. 수학적 상수 (DSP 최적화)
  * ========================================================================== */
-/**
- * @brief 시스템 상태를 문자열로 변환 (Web API/Serial 출력용)
- */
-static inline const char* T20_StateToString(EM_T20_State_t s) {
+inline constexpr float G_T20_PI      = 3.14159265358979323846f;
+inline constexpr float G_T20_EPSILON = 1.0e-12f; // T231 로그 연산 에러 해결
+
+/* ============================================================================
+ * 7. 파일 시스템 경로 (Rec/Storage)
+ * ========================================================================== */
+inline constexpr char const* G_T20_RECORDER_DEFAULT_FILE_PATH  = "/t20_rec.bin";
+inline constexpr char const* G_T20_RECORDER_INDEX_FILE_PATH    = "/t20_rec_index.json";
+inline constexpr char const* G_T20_RECORDER_RUNTIME_CFG_PATH   = "/t20_runtime_cfg.json";
+inline constexpr char const* G_T20_RECORDER_FALLBACK_PATH      = "/rec_fallback.bin";
+
+/* ============================================================================
+ * 8. 시스템 리미트 구조체 (T218 에러 해결)
+ * ========================================================================== */
+typedef struct {
+    uint16_t noise_min_frames;
+    uint16_t csv_page_size_max;
+} ST_T20_SystemLimits_t;
+
+// T218_Def_Main_214.h 에서 참조하는 실제 데이터
+inline constexpr ST_T20_SystemLimits_t G_T20_SYSTEM_LIMITS = {
+    .noise_min_frames = 8U,
+    .csv_page_size_max = 100U
+};
+
+/* ============================================================================
+ * 9. 디버그 및 유틸리티 헬퍼
+ * ========================================================================== */
+static inline const char* T20_StateToString(EM_T20_State_t s)
+{
     switch (s) {
         case EN_T20_STATE_IDLE:    return "IDLE";
         case EN_T20_STATE_READY:   return "READY";
         case EN_T20_STATE_RUNNING: return "RUNNING";
-        case EN_T20_STATE_BUSY:    return "BUSY";
+        case EN_T20_STATE_DONE:    return "DONE";
         case EN_T20_STATE_ERROR:   return "ERROR";
         default:                   return "UNKNOWN";
     }
-}
-
-static inline float T20_Clamp(float v, float min, float max) {
-    return (v < min) ? min : (v > max) ? max : v;
 }
