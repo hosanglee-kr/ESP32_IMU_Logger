@@ -395,8 +395,6 @@ bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     return p_file.write((uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
 }
 
-
-
 bool T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
     // 현재 쓰고 있는 슬롯의 직전 슬롯(이미 다 찬 슬롯)을 flush
@@ -404,15 +402,70 @@ bool T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p) {
     return T20_commitDmaSlotToFile(p, last_filled);
 }
 
+// [4] 프로필 이름으로 SDMMC 핀 설정 적용
+// [3] 프로필 이름으로 SDMMC 설정 적용
+bool T20_applySdmmcProfileByName(CL_T20_Mfcc::ST_Impl* p, const char* p_name) {
+    if (p == nullptr || p_name == nullptr) return false;
+    for (uint16_t i = 0; i < G_T20_SDMMC_PROFILE_PRESET_COUNT; ++i) {
+        if (p->sdmmc_profiles[i].enabled && strcmp(p->sdmmc_profiles[i].profile_name, p_name) == 0) {
+            p->sdmmc_profile = p->sdmmc_profiles[i];
+            bool ok = T20_applySdmmcProfilePins(p);
+            T20_saveRuntimeConfigFile(p);
+            return ok;
+        }
+    }
+    p->sdmmc_profile_applied = false;
+    strlcpy(p->sdmmc_last_apply_reason, "profile not found", sizeof(p->sdmmc_last_apply_reason));
+    return false;
+}
+
+// [4] 실제 SDMMC 핀 유효성 검사 및 적용 상태 기록
+bool T20_applySdmmcProfilePins(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    bool valid_basic =
+        (p->sdmmc_profile.clk_pin == G_T20_SDMMC_PIN_UNASSIGNED &&
+         p->sdmmc_profile.cmd_pin == G_T20_SDMMC_PIN_UNASSIGNED &&
+         p->sdmmc_profile.d0_pin == G_T20_SDMMC_PIN_UNASSIGNED) ||
+        (p->sdmmc_profile.clk_pin != G_T20_SDMMC_PIN_UNASSIGNED &&
+         p->sdmmc_profile.cmd_pin != G_T20_SDMMC_PIN_UNASSIGNED &&
+         p->sdmmc_profile.d0_pin != G_T20_SDMMC_PIN_UNASSIGNED);
+
+    if (!valid_basic) {
+        p->sdmmc_profile_applied = false;
+        strlcpy(p->sdmmc_last_apply_reason, "invalid basic pin trio", sizeof(p->sdmmc_last_apply_reason));
+        return false;
+    }
+
+    if (!p->sdmmc_profile.use_1bit_mode) {
+        bool valid_4bit =
+            (p->sdmmc_profile.d1_pin != G_T20_SDMMC_PIN_UNASSIGNED) &&
+            (p->sdmmc_profile.d2_pin != G_T20_SDMMC_PIN_UNASSIGNED) &&
+            (p->sdmmc_profile.d3_pin != G_T20_SDMMC_PIN_UNASSIGNED);
+        if (!valid_4bit) {
+            p->sdmmc_profile_applied = false;
+            strlcpy(p->sdmmc_last_apply_reason, "4bit pins incomplete", sizeof(p->sdmmc_last_apply_reason));
+            return false;
+        }
+    }
+
+    p->sdmmc_profile_applied = true;
+    strlcpy(p->sdmmc_last_apply_reason, "profile accepted", sizeof(p->sdmmc_last_apply_reason));
+    return true;
+}
 
 
+// [5] 런타임 설정을 LittleFS에 저장 (상수명 보정)
+bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
 
+    char json[G_T20_RUNTIME_CFG_JSON_BUF_SIZE] = {0};
+    if (!T20_buildRuntimeConfigJsonText(p, json, sizeof(json))) return false;
 
-
-
-
-
-
-
-
-
+    // v213 상수명 G_T20_RECORDER_RUNTIME_CFG_PATH 로 매칭 확인 필요
+    File file = LittleFS.open(G_T20_RECORDER_RUNTIME_CFG_PATH, "w");
+    if (!file) return false;
+    file.print(json);
+    file.close();
+    return true;
+}

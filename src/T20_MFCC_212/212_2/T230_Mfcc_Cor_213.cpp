@@ -326,3 +326,76 @@ void T20_syncDerivedViewState(CL_T20_Mfcc::ST_Impl* p) {
     T20_updateSelectionSyncState(p);
     T20_updateTypeMetaAutoClassify(p);
 }
+
+
+
+
+// [1] 시퀀스 링버퍼 초기화
+void T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames, uint16_t p_feature_dim) {
+    if (p_rb == nullptr) return;
+    memset(p_rb, 0, sizeof(ST_T20_FeatureRingBuffer_t));
+    p_rb->frames = p_frames;
+    p_rb->feature_dim = p_feature_dim;
+}
+
+// 선택 영역 동기화 상태 업데이트
+void T20_updateSelectionSyncState(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return;
+
+    if (!p->selection_sync_enabled) {
+        p->selection_sync_range_valid     = false;
+        p->selection_sync_effective_from = 0;
+        p->selection_sync_effective_to     = 0;
+        return;
+    }
+
+    if (p->selection_sync_frame_to < p->selection_sync_frame_from) {
+        p->selection_sync_range_valid     = false;
+        p->selection_sync_effective_from = p->selection_sync_frame_from;
+        p->selection_sync_effective_to     = p->selection_sync_frame_to;
+        return;
+    }
+
+    p->selection_sync_range_valid     = true;
+    p->selection_sync_effective_from = p->selection_sync_frame_from;
+    p->selection_sync_effective_to     = p->selection_sync_frame_to;
+}
+
+
+
+
+// [3] 데이터 타입 메타 자동 분류
+// [2] 데이터 타입 메타 자동 분류 (39차 벡터 대응)
+void T20_updateTypeMetaAutoClassify(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return;
+
+    if (!p->type_meta_enabled) {
+        strlcpy(p->type_meta_auto_text, "disabled", sizeof(p->type_meta_auto_text));
+        return;
+    }
+
+    if (strcmp(p->type_meta_kind, "feature_vector") == 0) {
+        if (p->viewer_last_vector_len >= 39U) {
+            strlcpy(p->type_meta_auto_text, "mfcc_39d_vector", sizeof(p->type_meta_auto_text));
+        } else if (p->viewer_last_vector_len > 0U) {
+            strlcpy(p->type_meta_auto_text, "compact_feature_vector", sizeof(p->type_meta_auto_text));
+        } else {
+            strlcpy(p->type_meta_auto_text, "empty_feature_vector", sizeof(p->type_meta_auto_text));
+        }
+    } else if (strcmp(p->type_meta_kind, "sequence") == 0) {
+        if (p->latest_sequence_valid) {
+            strlcpy(p->type_meta_auto_text, "sequence_ready", sizeof(p->type_meta_auto_text));
+        } else {
+            strlcpy(p->type_meta_auto_text, "sequence_warming_up", sizeof(p->type_meta_auto_text));
+        }
+    } else if (strcmp(p->type_meta_kind, "waveform") == 0) {
+        strlcpy(p->type_meta_auto_text, "waveform_frame", sizeof(p->type_meta_auto_text));
+    } else {
+        strlcpy(p->type_meta_auto_text, "generic_meta", sizeof(p->type_meta_auto_text));
+    }
+}
+
+
+
+
+
