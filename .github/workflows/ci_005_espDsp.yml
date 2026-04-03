@@ -117,6 +117,8 @@ jobs:
           if [ -d "$DSP_DIR" ]; then
             # 1. 모든 테스트 및 예제 폴더 삭제
             find "$DSP_DIR" -type d -name "test" -exec rm -rf {} +
+            find "$DSP_DIR" -type d -name "test_sim" -exec rm -rf {} +
+            find "$DSP_DIR" -type d -name "test_app" -exec rm -rf {} +
             rm -rf "$DSP_DIR/examples"
             rm -rf "$DSP_DIR/applications"
             
