@@ -109,6 +109,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
+          
+      # 추가된 부분: esp-dsp 라이브러리 내부의 예제 및 테스트 폴더 강제 삭제
+      - name: Clean up esp-dsp unwanted folders
+        run: |
+          # 라이브러리가 설치될 경로 정의 (matrix 환경에 맞춤)
+          DSP_DIR=".pio/libdeps/${{ matrix.environments }}/esp-dsp"
+          
+          # 라이브러리 설치를 강제하기 위해 pio lib install 실행 (이미 있으면 건너뜀)
+          pio lib install
+          
+          if [ -d "$DSP_DIR" ]; then
+            echo "Removing unwanted folders from $DSP_DIR"
+            rm -rf "$DSP_DIR/examples"
+            rm -rf "$DSP_DIR/test"
+            rm -rf "$DSP_DIR/applications"
+            echo "esp-dsp Cleanup complete."
+          else
+            echo "esp-dsp directory not found, skipping cleanup."
+          fi
+        shell: bash
 
       - name: Run PlatformIO build for ${{ matrix.environments }}
         run: pio run -e ${{ matrix.environments }}
