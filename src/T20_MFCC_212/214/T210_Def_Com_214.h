@@ -19,7 +19,7 @@
  * ========================================================================== */
 
 /* --- Version --- */
-inline constexpr char const* G_T20_VERSION_STR = "T20_Mfcc_v214_Final";
+inline constexpr char const* G_T20_VERSION_STR = "T20_Mfcc_v214";
 
 /* ============================================================================
  * 1. 시스템 동작 타이밍 및 시뮬레이션
@@ -45,6 +45,9 @@ inline constexpr float    G_T20_RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
 #define G_T20_PIN_SPI_MOSI                    11
 #define G_T20_PIN_BMI_CS                      10
 #define G_T20_PIN_BMI_INT1                    14
+
+
+#define G_T20_PIN_BTN_CONTROL                 0
 
 /* ============================================================================
  * 4. 공통 상태 및 결과 정의 (Enum)

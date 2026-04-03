@@ -87,6 +87,11 @@ void T20_registerSensorDiagHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_s
 /* ----------------------------------------------------------------------------
  * 3. 데이터 프리뷰 및 메타데이터 관리
  * ---------------------------------------------------------------------------- */
+ /**
+ * [v214 API 정교화 요약]
+ * 1. /live_debug: jitter_ms, process_hz 등 실시간 지표 추가.
+ * 2. /dsp/noise: 시각화를 위한 129개 float 배열(Spectrum) 직접 노출.
+ */
 
 void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, const String& base) {
     // 프리뷰 데이터 로드 (LittleFS의 CSV 등)
@@ -112,9 +117,28 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         T20_sendJsonText(request, ok, json);
     });
     
+        // 노이즈 프로파일 조회 (Front-end 차트용)
+    v_server->on((base + "/dsp/noise").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        doc["is_learning"] = p->noise_learning_active;
+        doc["learned_frames"] = p->noise_learned_frames;
+        JsonArray spectrum = doc["spectrum"].to<JsonArray>();
+        for(int i=0; i<129; i++) spectrum.add(p->noise_spectrum[i]);
+        
+        char json[G_T20_WEB_LARGE_JSON_BUF_SIZE];
+        serializeJson(doc, json, sizeof(json));
+        request->send(200, "application/json", json);
+    });
+
+    
     // 진단 정보 보강 
     v_server->on((base + "/live_debug").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         JsonDocument doc;
+        
+        doc["timing"]["process_hz"] = (1000.0f / (millis() - p->last_frame_process_ms + 1));
+        doc["integrity"]["dropped_frames"] = p->dropped_frames;
+        doc["integrity"]["dma_overflows"] = p->recorder_last_error[0] == 'd' ? 1 : 0;
+        
         doc["sample_count"] = p->bmi270_sample_counter;
         doc["frame_id"] = p->viewer_last_frame_id;
         doc["hop_size"] = p->cfg.feature.hop_size;
@@ -190,4 +214,23 @@ uint32_t T20_calcStatusHash(CL_T20_Mfcc::ST_Impl* p) {
     h ^= (uint32_t)(p->bmi270_last_axis_values[2] * 1000); // 센서 값의 미세 변화 감지
     return h;
 }
+
+
+
+void T20_registerNoiseControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, const String& base) {
+    // 실시간 노이즈 학습 시작/종료
+    v_server->on((base + "/noise_learn").c_str(), HTTP_POST, [p](AsyncWebServerRequest* request) {
+        if (request->hasParam("active")) {
+            p->noise_learning_active = (request->getParam("active")->value() == "true");
+            T20_sendJsonText(request, true, "{\"ok\":true}");
+        } else {
+            T20_sendJsonText(request, false, nullptr);
+        }
+    });
+}
+
+
+
+
+
 

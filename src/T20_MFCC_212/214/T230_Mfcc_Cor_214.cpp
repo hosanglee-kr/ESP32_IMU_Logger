@@ -61,32 +61,15 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
 }
 
 
-/*
-bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
-    if (_impl == nullptr) return false;
-
-    // 1. 자원 초기화 및 설정 복사
-    T20_resetRuntimeResources(_impl);
-    _impl->cfg = (p_cfg != nullptr) ? *p_cfg : T20_makeDefaultConfig();
-
-    // 2. 동기화 객체 생성 (Mutex & Queues)
-    _impl->mutex = xSemaphoreCreateMutex();
-    _impl->frame_queue = xQueueCreate(G_T20_QUEUE_LEN, sizeof(ST_T20_FrameMessage_t));
-    _impl->recorder_queue = xQueueCreate(16, sizeof(ST_T20_RecorderVectorMessage_t)); // 큐 크기 확장
-
-    // 3. 하드웨어 초기화 (SPI/SDMMC)
-    _impl->spi.begin(G_T20_PIN_SPI_SCK, G_T20_PIN_SPI_MISO, G_T20_PIN_SPI_MOSI, G_T20_PIN_BMI_CS);
-    T20_initProfiles(_impl);
-    T20_initDSP(_impl);
-
-    _impl->initialized = true;
-    _impl->bmi_state.init = EN_T20_STATE_READY;
-    return true;
-}
-*/
 
 bool CL_T20_Mfcc::start(void) {
     if (_impl == nullptr || !_impl->initialized || _impl->running) return false;
+
+    // 버튼 핀 초기화
+    pinMode(_impl->cfg.system.button_pin, INPUT_PULLUP);
+
+    // 설정에 따른 초기 측정 상태 결정
+    _impl->measurement_active = _impl->cfg.system.auto_start;
 
     // Core 분산 배치: 센서는 0번 코어, 연산 및 저장은 1번 코어
     xTaskCreatePinnedToCore(T20_sensorTask, "T20_Sens", G_T20_SENSOR_TASK_STACK, _impl, G_T20_SENSOR_TASK_PRIO, &_impl->sensor_task_handle, 0);
@@ -449,3 +432,44 @@ bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     serializeJson(doc, p_out_buf, p_len);
     return true;
 }
+
+
+
+
+
+/* [v214] 시작/종료 제어 및 버튼 핸들링 */
+void T20_handleControlInputs(CL_T20_Mfcc::ST_Impl* p) {
+    if (!p) return;
+
+    // 1. 수동 버튼 처리 (Active Low - GPIO 0)
+    static uint32_t last_btn_ms = 0;
+    if (digitalRead(p->cfg.system.button_pin) == LOW) {
+        if (millis() - last_btn_ms > 500) { // 디바운스 500ms
+            p->measurement_active = !p->measurement_active;
+            last_btn_ms = millis();
+            
+            // 상태 변경 이벤트 기록
+            T20_recorderWriteEvent(p, p->measurement_active ? "btn_start" : "btn_stop");
+        }
+    }
+}
+
+
+
+
+// [v214] 데이터 흐름 감시 
+void T20_checkDataFlowWatchdog(CL_T20_Mfcc::ST_Impl* p) {
+    static uint32_t last_counter = 0;
+    static uint32_t last_check_ms = 0;
+
+    if (millis() - last_check_ms > 1000) { // 1초마다 체크
+        // 1초 동안 샘플 카운터가 변하지 않았다면 센서 인터페이스 정지로 판단
+        if (p->measurement_active && p->bmi270_sample_counter == last_counter) {
+            T20_recorderWriteEvent(p, "wdog_stall_reinit");
+            T20_tryBMI270Reinit(p); // 센서 재초기화 시도
+        }
+        last_counter = p->bmi270_sample_counter;
+        last_check_ms = millis();
+    }
+}
+

@@ -303,13 +303,21 @@ bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
-    if (SD_MMC.begin("/sdcard", true)) { // 1-bit mode
+    // [v214] 1-bit 모드 고정 (안정성 우선)
+    // ESP32-S3: 1-bit 모드 사용 시 D1, D2, D3 핀을 다른 용도로 사용 가능
+    if (SD_MMC.begin("/sdcard", true)) { 
         p->recorder_sdmmc_mounted = true;
         p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+        T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
         return true;
     }
+    
+    p->recorder_fallback_active = true;
+    T20_recorderWriteEvent(p, "sd_mount_fail_fallback_fs");
     return false;
 }
+
+
 
 // [2] 활성 경로 선택 (반환 타입 수정: void -> bool)
 bool T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t p_len) {
@@ -469,3 +477,6 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     file.close();
     return true;
 }
+
+
+

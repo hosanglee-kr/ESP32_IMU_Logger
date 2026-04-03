@@ -175,13 +175,22 @@ typedef struct {
     float				q_factor;
 } ST_T20_FilterConfig_t;
 
+
+typedef enum {
+    EN_T20_NOISE_OFF = 0,
+    EN_T20_NOISE_FIXED,      // 기존 학습된 프로필 고정 사용
+    EN_T20_NOISE_ADAPTIVE    // 실시간 지수 이동 평균(EMA) 반영
+} EM_T20_NoiseMode_t;
+
 typedef struct {
-    bool     enable_gate;
-    float    gate_threshold_abs;
-    bool     enable_spectral_subtract;   // v210 복구
-    float    spectral_subtract_strength; // v210 복구
-    uint16_t noise_learn_frames;
+    bool                enable_gate;
+    float               gate_threshold_abs;
+    EM_T20_NoiseMode_t  mode;               // [v214 추가]
+    float               spectral_subtract_strength;
+    float               adaptive_alpha;     // [v214 추가] 적응형 학습 계수
+    uint16_t            noise_learn_frames;
 } ST_T20_NoiseConfig_t;
+
 
 /* ============================================================================
  * Feature Config / Vector
@@ -210,14 +219,6 @@ typedef struct {
     float    vector[G_T20_FEATURE_DIM_MAX];
 } ST_T20_FeatureVector_t;
 
-/*
-typedef struct {
-    uint16_t mfcc_len;
-    float mfcc[G_T20_MFCC_COEFFS_MAX];
-    float delta[G_T20_MFCC_COEFFS_MAX];
-    float delta2[G_T20_MFCC_COEFFS_MAX];
-} ST_T20_FeatureVector_t;
-*/
 
 /* ============================================================================
  * BMI270 State (통합 상태 관리)
@@ -280,9 +281,6 @@ static inline void T20_Debug_PrintState(ST_T20_BMI270_State_t* s)
 }
 
 
-
-
-
 /* --- Pipeline Stage Definitions --- */
 typedef enum {
     EN_T20_STAGE_DC_REMOVE = 0,
@@ -312,3 +310,5 @@ typedef struct {
         ST_T20_PipelineStage_t stages[G_T20_PREPROCESS_STAGE_MAX]; // 스테이지를 초기화함
     } pipeline;
 } ST_T20_PreprocessConfig_t;
+
+

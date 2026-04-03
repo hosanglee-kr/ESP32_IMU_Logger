@@ -19,7 +19,11 @@
 #define G_T20_RECORDER_BATCH_IDLE_FLUSH_MS    250U
 
 #define G_T20_RECORDER_LAST_ERROR_MAX         128U
-#define G_T20_ZERO_COPY_DMA_SLOT_COUNT        2U
+
+// 기존 2개에서 3개로 확장하여 SD카드 쓰기 지연(최대 100ms 이상) 대응
+#define G_T20_ZERO_COPY_DMA_SLOT_COUNT        3U 
+
+
 #define G_T20_ZERO_COPY_DMA_SLOT_BYTES        1024U
 #define G_T20_RECORDER_BATCH_VECTOR_MAX       16U
 
@@ -188,6 +192,13 @@ typedef struct {
     bool sequence_flatten;
 } ST_T20_OutputConfig_t;
 
+
+typedef struct {
+    bool auto_start;        // true: 부팅 즉시 측정, false: 버튼/Web 대기
+    uint8_t button_pin;     // 수동 제어용 GPIO (Default: 0)
+} ST_T20_SystemConfig_t; // ST_T20_Config_t 내부에 통합 권장
+
+
 /* ============================================================================
  * Unified Config (핵심 유지)
  * ========================================================================== */
@@ -196,6 +207,7 @@ typedef struct {
     ST_T20_PreprocessConfig_t preprocess;
     ST_T20_FeatureConfig_t feature;
     ST_T20_OutputConfig_t output;
+    ST_T20_SystemConfig_t system;
 } ST_T20_Config_t;
 
 /* ============================================================================
@@ -271,3 +283,8 @@ static inline void T20_Recorder_DebugState(ST_T20_RecorderState_t* s)
         T20_StateToString(s->pipeline)   // finalize -> pipeline
     );
 }
+
+
+
+
+

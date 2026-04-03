@@ -7,9 +7,21 @@
  * 3. Delta/Delta-Delta (39차 벡터) 계산 이력 관리 완벽 매핑
  * 4. EPSILON 처리를 통한 로그 연산 수치 안정성 확보
  ============================================================================ */
+ 
+ /**
+ * [v214 튜닝 가이드 - DSP]
+ * 1. Adaptive Alpha: 값이 클수록 환경 변화에 빨리 대응하지만 신호의 저주파 성분을 노이즈로 오인할 수 있음.
+ * 2. SIMD 가속: 반드시 dsps_fft2r_fc32_ae32를 사용하여 Core 1 부하를 20% 이하로 유지할 것.
+ */
+ 
+ /* [v214 잔여 과제]
+ * - TO-DO: 현재 DCT 연산도 SIMD 가속 버전(dsps_dct_f32)으로 교체 고려 필요.
+ */
+ 
 
 #include <math.h>
 #include <string.h>
+#include "dsps_fft.h" // ESP-DSP SIMD Library
 #include "T221_Mfcc_Inter_214.h"
 
 /* [내부 헬퍼] 256-point FFT용 Bit-Reversal Index (v210 복구) */
@@ -153,12 +165,30 @@ void T20_processTask(void* p_arg) {
     }
 }
 
-// Radix-2 FFT 가속 버전 또는 ESP-DSP 연동 인터페이스
+// [v214] 하드웨어 가속 기반 FFT 
 void T20_performFFT_Optimized(CL_T20_Mfcc::ST_Impl* p, float* p_real) {
-    // 여기에 ESP-DSP dsps_fft2r_fc32_ansi 등을 연동하면 
-    // S3의 가속 기능을 사용하여 연산 시간을 1ms 미만으로 단축 가능합니다.
-    float imag[G_T20_FFT_SIZE] = {0};
-    T20_performFFT256(p_real, imag); // 이전 단계 구현한 FFT 호출
+    // 1. 입력 데이터를 복소수 형식(Real, Imag, Real, Imag...)으로 재배열
+    // ESP-DSP는 복소수 배열 입력을 기본으로 함
+    static float fft_input[G_T20_FFT_SIZE * 2] __attribute__((aligned(16)));
+    for (int i = 0; i < G_T20_FFT_SIZE; i++) {
+        fft_input[i * 2] = p_real[i];
+        fft_input[i * 2 + 1] = 0.0f; // Imaginary part
+    }
+
+    // 2. SIMD 가속 FFT 실행 (S3 PIE 명령어 사용)
+    // dsps_fft2r_fc32_ae32: Radix-2, Floating-point, Complex FFT
+    dsps_fft2r_fc32_ae32(fft_input, G_T20_FFT_SIZE);
+
+    // 3. Bit-reversal 정렬
+    dsps_bit_rev_fc32_ae32(fft_input, G_T20_FFT_SIZE);
+
+    // 4. Power Spectrum 계산 (Magnitude Square)
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+    for (int i = 0; i < bins; i++) {
+        float re = fft_input[i * 2];
+        float im = fft_input[i * 2 + 1];
+        p->power[i] = (re * re) + (im * im);
+    }
 }
 
 
@@ -247,6 +277,30 @@ void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
 
 // [2] 스펙트럼 차감 (학습된 노이즈 제거)
 void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
+    if (!p || p->cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) return;
+
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+    float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
+    float alpha = p->cfg.preprocess.noise.adaptive_alpha;
+
+    for (uint16_t i = 0; i < bins; ++i) {
+        // [v214] Adaptive Noise Floor 추적
+        if (p->cfg.preprocess.noise.mode == EN_T20_NOISE_ADAPTIVE) {
+            // 측정 중이 아닐 때나 Web 학습 모드일 때 더 빠르게 학습 가능
+            // 실시간으로 노이즈 바닥면을 추적하는 지수 이동 평균(EMA) 로직을 적용
+            float current_alpha = p->noise_learning_active ? 0.1f : alpha;
+            p->noise_spectrum[i] = (1.0f - current_alpha) * p->noise_spectrum[i] + current_alpha * p_power[i];
+        }
+
+        float v = p_power[i] - (strength * p->noise_spectrum[i]);
+        if (v < G_T20_EPSILON) v = G_T20_EPSILON;
+        p_power[i] = v;
+    }
+}
+
+/*
+
+void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
     if (p == nullptr || p_power == nullptr) return;
     if (!p->cfg.preprocess.noise.enable_spectral_subtract) return;
     if (p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames) return;
@@ -261,6 +315,7 @@ void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
         p_power[i] = v;
     }
 }
+*/
 
 // [3] 멜 필터뱅크 적용 (에너지 맵핑 및 로그 변환)
 void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out) {
@@ -366,3 +421,35 @@ void T20_applyRuntimeFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p
     p->biquad_state[0] = s0;
     p->biquad_state[1] = s1;
 }
+
+
+
+// [v214] 노이즈 학습 제어 백엔드 
+void T20_processNoiseLearning(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
+    if (!p || !p->noise_learning_active) return;
+
+    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
+    
+    // 학습 모드일 때는 높은 Alpha 값을 사용하여 노이즈 바닥면을 빠르게 추적
+    float learning_alpha = 0.2f; 
+    for (uint16_t i = 0; i < bins; ++i) {
+        p->noise_spectrum[i] = (1.0f - learning_alpha) * p->noise_spectrum[i] + learning_alpha * p_power[i];
+    }
+    
+    // 특정 프레임 이상 학습되면 자동으로 플래그를 내리거나 상태를 보고할 수 있음
+    p->noise_learned_frames++;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

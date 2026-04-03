@@ -63,6 +63,9 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
 	cfg.output.output_mode							= EN_T20_OUTPUT_VECTOR;
 	cfg.output.sequence_frames						= G_T20_SEQUENCE_FRAMES_DEFAULT;
 	cfg.output.sequence_flatten						= true;
+	
+	cfg.system.auto_start                           = true;                  // true: 부팅 즉시 측정, false: 버튼/Web 대기
+    cfg.ststem.button_pin                           = G_T20_PIN_BTN_CONTROL; // 수동 제어용 GPIO (Default: 0)
 
 	return cfg;
 }

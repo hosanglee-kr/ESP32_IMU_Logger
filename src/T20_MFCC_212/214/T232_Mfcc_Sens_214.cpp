@@ -8,6 +8,12 @@
  * 4. DRDY ISR에서 Queue를 통한 데이터 전달 레이턴시 최소화
  ============================================================================ */
 
+ /**
+ * [v214 튜닝 가이드 - Sensor]
+ * 1. FIFO Watermark: 현재 16샘플(10ms 주기). 시스템 지터가 심할 경우 32로 상향 조정 가능.
+ * 2. SPI Speed: 10MHz 사용. 배선 길이에 따라 안정적이지 않으면 4~8MHz로 하향할 것.
+ */
+ 
 #include "T221_Mfcc_Inter_214.h"
 
 
@@ -150,6 +156,42 @@ bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
+// [v214] FIFO 일괄 읽기 로직 보완 
+bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
+    if (!p) return false;
+
+    // 1. FIFO에 쌓인 데이터 길이 확인
+    uint16_t fifo_length = 0;
+    if (p->bmi.getFIFOLength(&fifo_length) != BMI2_OK || fifo_length == 0) return false;
+
+    // 2. FIFO 데이터 일괄 획득 (라이브러리 내부 버퍼로 이동)
+    if (p->bmi.getFIFOData() != BMI2_OK) return false;
+
+    // 3. FIFO 내의 모든 프레임을 파싱하여 처리
+    // 가속도/자이로 데이터를 추출하여 링버퍼(frame_buffer)에 순차 투입
+    while (p->bmi.fifo_count > 0) {
+        float sample = 0.0f;
+        // 설정된 축 모드에 따라 데이터 추출
+        if (p->bmi270_axis_mode == G_T20_BMI270_AXIS_MODE_ACC_Z) {
+            sample = p->bmi.fifo_accel[p->bmi.fifo_count - 1].z;
+        } else {
+            sample = p->bmi.fifo_gyro[p->bmi.fifo_count - 1].z;
+        }
+        
+        // 링버퍼 인덱싱 및 데이터 투입
+        uint16_t idx = p->active_sample_index % G_T20_FFT_SIZE;
+        p->frame_buffer[0][idx] = sample;
+        p->active_sample_index++;
+        p->bmi.fifo_count--;
+
+        // Hop Size 마다 분석 태스크에 알림
+        if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && p->active_sample_index >= G_T20_FFT_SIZE) {
+            ST_T20_FrameMessage_t msg = { .frame_index = 0 };
+            xQueueSend(p->frame_queue, &msg, 0);
+        }
+    }
+    return true;
+}
 
 
 
@@ -158,5 +200,4 @@ bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
-// 라이브러리 미사용 항목 제거: T20_bmi270ActualReadBurst 등은 이제 불필요함
 
