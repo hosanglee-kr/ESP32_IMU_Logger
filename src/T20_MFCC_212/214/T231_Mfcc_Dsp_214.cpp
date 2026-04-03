@@ -21,7 +21,11 @@
 
 #include <math.h>
 #include <string.h>
-#include "dsps_fft.h" // ESP-DSP SIMD Library
+
+// 바꾼 방식 (헤더 경로가 안 잡힐 때의 임시 방편)
+#include "modules/fft/include/dsps_fft.h"
+//#include "dsps_fft.h" // ESP-DSP SIMD Library
+
 #include "T221_Mfcc_Inter_214.h"
 
 /* [내부 헬퍼] 256-point FFT용 Bit-Reversal Index (v210 복구) */
