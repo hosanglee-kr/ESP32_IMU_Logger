@@ -33,7 +33,8 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
 	cfg.preprocess.filter.q_factor					= 0.707f;
 	cfg.preprocess.noise.enable_gate				= true;
 	cfg.preprocess.noise.gate_threshold_abs			= 0.002f;
-	cfg.preprocess.noise.enable_spectral_subtract	= true;
+	cfg.preprocess.noise.mode                       = EN_T20_NOISE_ADAPTIVE;
+	// cfg.preprocess.noise.enable_spectral_subtract	= true;
 	cfg.preprocess.noise.spectral_subtract_strength = 1.0f;
 	cfg.preprocess.noise.noise_learn_frames			= G_T20_SYSTEM_LIMITS.noise_min_frames;;
 

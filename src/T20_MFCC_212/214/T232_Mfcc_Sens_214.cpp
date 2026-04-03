@@ -156,42 +156,78 @@ bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
+
+
+
+
 // [v214] FIFO 일괄 읽기 로직 보완 
+/* ============================================================================
+ * Function: T20_bmi270ReadFifoBatch
+ * Summary: BMI270 FIFO 버스트 읽기 및 링버퍼 투입 (v214 최적화)
+ * ========================================================================== */
+
 bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
-    if (!p) return false;
+    if (p == nullptr) return false;
 
-    // 1. FIFO에 쌓인 데이터 길이 확인
-    uint16_t fifo_length = 0;
-    if (p->bmi.getFIFOLength(&fifo_length) != BMI2_OK || fifo_length == 0) return false;
+    // 1. FIFO에 쌓인 데이터 길이(Bytes) 확인
+    uint16_t fifo_bytes = 0;
+    if (p->bmi.getFIFOLength(&fifo_bytes) != BMI2_OK || fifo_bytes == 0) {
+        return false;
+    }
 
-    // 2. FIFO 데이터 일괄 획득 (라이브러리 내부 버퍼로 이동)
-    if (p->bmi.getFIFOData() != BMI2_OK) return false;
+    /* [v214 튜닝 가이드]
+     * BMI270_SensorData 구조체는 가속도(3축)와 자이로(3축) 데이터를 모두 포함(약 12~13 bytes).
+     * 1600Hz에서 워터마크가 16개라면 약 200바이트 내외의 데이터가 확인됨.
+     */
+    
+    // 2. FIFO 데이터 일괄 획득을 위한 임시 버퍼 선언
+    // 스택 오버플로우 방지를 위해 적절한 크기(예: 32프레임)로 제한
+    static constexpr uint16_t MAX_FIFO_FRAMES = 32U;
+    BMI270_SensorData fifo_buffer[MAX_FIFO_FRAMES];
+    uint16_t frames_to_read = MAX_FIFO_FRAMES; 
 
-    // 3. FIFO 내의 모든 프레임을 파싱하여 처리
-    // 가속도/자이로 데이터를 추출하여 링버퍼(frame_buffer)에 순차 투입
-    while (p->bmi.fifo_count > 0) {
+    // SparkFun API: getFIFOData(데이터배열, 읽을개수포인터)
+    // 함수 호출 후 frames_to_read에는 실제 읽어온 개수가 담김
+    if (p->bmi.getFIFOData(fifo_buffer, &frames_to_read) != BMI2_OK) {
+        return false;
+    }
+
+    // 3. 획득한 프레임들 순차 처리
+    for (uint16_t i = 0; i < frames_to_read; ++i) {
         float sample = 0.0f;
-        // 설정된 축 모드에 따라 데이터 추출
+
+        // 설정된 분석 축(Z축 가속도 vs Z축 자이로)에 따라 샘플 추출
         if (p->bmi270_axis_mode == G_T20_BMI270_AXIS_MODE_ACC_Z) {
-            sample = p->bmi.fifo_accel[p->bmi.fifo_count - 1].z;
+            sample = fifo_buffer[i].accelZ;
         } else {
-            sample = p->bmi.fifo_gyro[p->bmi.fifo_count - 1].z;
+            sample = fifo_buffer[i].gyroZ;
         }
-        
-        // 링버퍼 인덱싱 및 데이터 투입
+
+        /* [v214 최적화] 링버퍼 데이터 투입 및 인덱스 관리 */
+        // active_sample_index는 0 ~ (G_T20_FFT_SIZE - 1) 범위에서 순환
         uint16_t idx = p->active_sample_index % G_T20_FFT_SIZE;
         p->frame_buffer[0][idx] = sample;
+        
         p->active_sample_index++;
-        p->bmi.fifo_count--;
+        p->bmi270_sample_counter++; // 전체 수집 샘플 카운트 갱신
 
-        // Hop Size 마다 분석 태스크에 알림
-        if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && p->active_sample_index >= G_T20_FFT_SIZE) {
+        // 4. Hop Size(오버랩 주기) 도달 시 분석 태스크 알림
+        // 예: FFT 256, Hop 128인 경우 128개 샘플마다 실행
+        if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && 
+             p->active_sample_index >= G_T20_FFT_SIZE) {
+            
             ST_T20_FrameMessage_t msg = { .frame_index = 0 };
-            xQueueSend(p->frame_queue, &msg, 0);
+            
+            // Queue가 가득 찬 경우(Dropped Frame)에 대한 처리는 ProcessTask에서 수행
+            if (xQueueSend(p->frame_queue, &msg, 0) != pdPASS) {
+                p->dropped_frames++; // 성능 지표 모니터링용
+            }
         }
     }
-    return true;
+
+    return (frames_to_read > 0);
 }
+
 
 
 
