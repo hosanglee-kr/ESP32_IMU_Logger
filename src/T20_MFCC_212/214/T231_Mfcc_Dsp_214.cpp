@@ -80,33 +80,6 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
-// [v214] 통합 MFCC 추출 엔진
-void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out) {
-    if (!p || !p_frame || !p_mfcc_out) return;
-
-    // 1. 전처리 (DC 제거 및 Pre-emphasis)
-    memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
-    if (p->cfg.preprocess.remove_dc) T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
-    if (p->cfg.preprocess.preemphasis.enable) {
-        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
-    }
-
-    // 2. 필터 및 윈도우 적용
-    T20_applyRuntimeFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
-    for (uint16_t i = 0; i < G_T20_FFT_SIZE; ++i) p->work_frame[i] *= p->window[i];
-
-    // 3. SIMD 가속 FFT (결과는 p->power에 저장)
-    T20_performFFT_Optimized(p, p->work_frame);
-
-    // 4. 적응형 노이즈 제거 (v214 핵심)
-    T20_learnNoiseSpectrum(p, p->power);
-    T20_applySpectralSubtraction(p, p->power);
-
-    // 5. 특징량 추출 (Mel 에너지 -> DCT)
-    T20_applyMelFilterbank(p, p->power, p->log_mel);
-    T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
-}
-
 
 void T20_processTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
@@ -411,6 +384,36 @@ void T20_applyRuntimeFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p
     p->biquad_state[0] = s0;
     p->biquad_state[1] = s1;
 }
+
+
+
+// [v214] 통합 MFCC 추출 엔진
+void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out) {
+    if (!p || !p_frame || !p_mfcc_out) return;
+
+    // 1. 전처리 (DC 제거 및 Pre-emphasis)
+    memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
+    if (p->cfg.preprocess.remove_dc) T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
+    if (p->cfg.preprocess.preemphasis.enable) {
+        T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
+    }
+
+    // 2. 필터 및 윈도우 적용
+    T20_applyRuntimeFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
+    for (uint16_t i = 0; i < G_T20_FFT_SIZE; ++i) p->work_frame[i] *= p->window[i];
+
+    // 3. SIMD 가속 FFT (결과는 p->power에 저장)
+    T20_performFFT_Optimized(p, p->work_frame);
+
+    // 4. 적응형 노이즈 제거 (v214 핵심)
+    T20_learnNoiseSpectrum(p, p->power);
+    T20_applySpectralSubtraction(p, p->power);
+
+    // 5. 특징량 추출 (Mel 에너지 -> DCT)
+    T20_applyMelFilterbank(p, p->power, p->log_mel);
+    T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
+}
+
 
 
 /*
