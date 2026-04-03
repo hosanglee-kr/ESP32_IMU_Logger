@@ -58,6 +58,7 @@
  * ---------------------------------------------------------------------------- */
 
 
+
 struct CL_T20_Mfcc::ST_Impl {
 
     // [1] 시스템 및 RTOS 핸들 (System & RTOS Resources)
@@ -113,7 +114,12 @@ struct CL_T20_Mfcc::ST_Impl {
     uint16_t            active_sample_index;    // 현재 프레임 내 샘플 인덱스
     uint32_t            dropped_frames;         // 처리 지연으로 누락된 프레임 수
     uint16_t            mfcc_history_count;     // 현재 쌓인 MFCC 이력 수
+    
     uint16_t            noise_learned_frames;   // 학습된 노이즈 프레임 수
+    // [v214 추가] 노이즈 제어 및 학습 상태 멤버
+    bool     noise_learning_active; // 이 라인 추가
+    
+    
     float               prev_raw_sample;        // Pre-emphasis용 직전 샘플값
     float               runtime_sim_phase;      // 시뮬레이션용 페이즈 변수
     
@@ -262,6 +268,7 @@ struct CL_T20_Mfcc::ST_Impl {
         active_fill_buffer = 0; active_sample_index = 0;
         dropped_frames = 0; mfcc_history_count = 0;
         noise_learned_frames = 0; prev_raw_sample = 0.0f;
+        noise_learning_active = false;
         runtime_sim_phase = 0.0f;
 
         last_frame_process_ms = 0;

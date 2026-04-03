@@ -19,23 +19,28 @@
  */
  
 
+
 #include <math.h>
 #include <string.h>
 
-// 바꾼 방식 (헤더 경로가 안 잡힐 때의 임시 방편)
 #include "esp_dsp.h"
-// #include "modules/fft/include/dsps_fft.h"
-//#include "dsps_fft.h" // ESP-DSP SIMD Library
 
 #include "T221_Mfcc_Inter_214.h"
 
-/* [내부 헬퍼] 256-point FFT용 Bit-Reversal Index (v210 복구) */
-static const uint8_t G_T20_FFT_BIT_REVERSE_256[256] = {
-    0,128,64,192,32,160,96,224,16,144,80,208,48,176,112,240, // ... 중략 (컴파일러 최적화 위해 실제 코드 시 인라인 구현)
-};
 
+
+
+// [v214] FFT 및 DSP 엔진 초기화
 bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
+    
+    static bool dsp_initialized = false;
+    if (!dsp_initialized) {
+        // ESP-DSP Radix-2 전용 초기화 (S3 최적화 테이블 생성)
+        esp_err_t err = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
+        if (err != ESP_OK) return false;
+        dsp_initialized = true;
+    }
 
     // 윈도우 계수 생성
     T20_buildHammingWindow(p);
@@ -73,76 +78,31 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
     return T20_configureRuntimeFilter(p);
 }
 
-/* [v212 추가] 기본적인 Radix-2 FFT (esp_dsp 미사용 시 대비) */
-void T20_performFFT256(float* p_real, float* p_imag) {
-    // 256포인트 FFT 연산 (주파수 분석의 핵심)
-    // 실제 구현 시 v210의 루프 구조를 사용하여 연산 속도 확보
-    int n = 256;
-    int j = 0;
-    for (int i = 0; i < n; i++) {
-        if (i < j) {
-            float tempR = p_real[i]; p_real[i] = p_real[j]; p_real[j] = tempR;
-            float tempI = p_imag[i]; p_imag[i] = p_imag[j]; p_imag[j] = tempI;
-        }
-        int m = n >> 1;
-        while (m >= 1 && j >= m) { j -= m; m >>= 1; }
-        j += m;
-    }
-    // Butterfly 연산 (v210 로직 이식)
-    for (int len = 2; len <= n; len <<= 1) {
-        float ang = 2.0f * G_T20_PI / (float)len;
-        float wlen_r = cosf(ang), wlen_i = -sinf(ang);
-        for (int i = 0; i < n; i += len) {
-            float w_r = 1.0f, w_i = 0.0f;
-            for (int k = 0; k < len / 2; k++) {
-                float u_r = p_real[i + k], u_i = p_imag[i + k];
-                float v_r = p_real[i + k + len / 2] * w_r - p_imag[i + k + len / 2] * w_i;
-                float v_i = p_real[i + k + len / 2] * w_i + p_imag[i + k + len / 2] * w_r;
-                p_real[i + k] = u_r + v_r; p_imag[i + k] = u_i + v_i;
-                p_real[i + k + len / 2] = u_r - v_r; p_imag[i + k + len / 2] = u_i - v_i;
-                float tmp_w_r = w_r * wlen_r - w_i * wlen_i;
-                w_i = w_r * wlen_i + w_i * wlen_r; w_r = tmp_w_r;
-            }
-        }
-    }
-}
 
 
+// [v214] 통합 MFCC 추출 엔진
 void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out) {
-    if (p == nullptr || p_frame == nullptr) return;
+    if (!p || !p_frame || !p_mfcc_out) return;
 
-    // 1. 원시 데이터 복사 및 DC 제거 (v210 기능)
+    // 1. 전처리 (DC 제거 및 Pre-emphasis)
     memcpy(p->temp_frame, p_frame, sizeof(float) * G_T20_FFT_SIZE);
     if (p->cfg.preprocess.remove_dc) T20_applyDCRemove(p->temp_frame, G_T20_FFT_SIZE);
-
-    // 2. Pre-emphasis 및 런타임 필터(LPF/HPF) 적용 (v210 기능)
     if (p->cfg.preprocess.preemphasis.enable) {
         T20_applyPreEmphasis(p, p->temp_frame, G_T20_FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
     }
+
+    // 2. 필터 및 윈도우 적용
     T20_applyRuntimeFilter(p, p->temp_frame, p->work_frame, G_T20_FFT_SIZE);
-
-    // 3. 노이즈 게이트 적용 (v210 기능)
-    if (p->cfg.preprocess.noise.enable_gate) {
-        T20_applyNoiseGate(p->work_frame, G_T20_FFT_SIZE, p->cfg.preprocess.noise.gate_threshold_abs);
-    }
-
-    // 4. Windowing 및 FFT 변환 (v213 개선)
     for (uint16_t i = 0; i < G_T20_FFT_SIZE; ++i) p->work_frame[i] *= p->window[i];
-    float imag_buf[G_T20_FFT_SIZE] = {0};
-    T20_performFFT256(p->work_frame, imag_buf);
 
-    // 5. Power Spectrum 산출 및 스펙트럼 차감 (v210 기능 복구)
-    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
-    for (uint16_t b = 0; b < bins; ++b) {
-        p->power[b] = (p->work_frame[b] * p->work_frame[b]) + (imag_buf[b] * imag_buf[b]);
-        if (p->power[b] < G_T20_EPSILON) p->power[b] = G_T20_EPSILON;
-    }
-    
-    // 노이즈 학습 및 차감 실행
+    // 3. SIMD 가속 FFT (결과는 p->power에 저장)
+    T20_performFFT_Optimized(p, p->work_frame);
+
+    // 4. 적응형 노이즈 제거 (v214 핵심)
     T20_learnNoiseSpectrum(p, p->power);
     T20_applySpectralSubtraction(p, p->power);
 
-    // 6. Mel-Filterbank & DCT (최종 특징량 추출)
+    // 5. 특징량 추출 (Mel 에너지 -> DCT)
     T20_applyMelFilterbank(p, p->power, p->log_mel);
     T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
 }
@@ -170,35 +130,32 @@ void T20_processTask(void* p_arg) {
     }
 }
 
-// [v214] 하드웨어 가속 기반 FFT 
+
+
+// [v214] S3 PIE 가속 FFT 연산
 void T20_performFFT_Optimized(CL_T20_Mfcc::ST_Impl* p, float* p_real) {
-    // 1. 입력 데이터를 복소수 형식(Real, Imag, Real, Imag...)으로 재배열
-    // ESP-DSP는 복소수 배열 입력을 기본으로 함
+    if (!p || !p_real) return;
+
+    // 16바이트 정렬된 복소수 버퍼 사용 (S3 SIMD 필수 조건)
     static float fft_input[G_T20_FFT_SIZE * 2] __attribute__((aligned(16)));
+    
     for (int i = 0; i < G_T20_FFT_SIZE; i++) {
         fft_input[i * 2] = p_real[i];
-        fft_input[i * 2 + 1] = 0.0f; // Imaginary part
+        fft_input[i * 2 + 1] = 0.0f;
     }
 
-    // 2. SIMD 가속 FFT 실행 (S3 PIE 명령어 사용)
-    // 수정 (표준 버전)
-    // dsps_bit_rev_fc32(fft_input, G_T20_FFT_SIZE); 
-    // 또는 컴파일러 제안대로
+    // Radix-2 Complex FFT 실행
+    dsps_fft2r_fc32(fft_input, G_T20_FFT_SIZE);
     dsps_bit_rev2r_fc32(fft_input, G_T20_FFT_SIZE);
 
-
-    // dsps_fft2r_fc32_ae32: Radix-2, Floating-point, Complex FFT
-    // dsps_fft2r_fc32_ae32(fft_input, G_T20_FFT_SIZE);
-
-    // 3. Bit-reversal 정렬
-    dsps_bit_rev_fc32_ae32(fft_input, G_T20_FFT_SIZE);
-
-    // 4. Power Spectrum 계산 (Magnitude Square)
     const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
     for (int i = 0; i < bins; i++) {
         float re = fft_input[i * 2];
         float im = fft_input[i * 2 + 1];
-        p->power[i] = (re * re) + (im * im);
+        float mag_sq = (re * re) + (im * im);
+        
+        // 로그 연산 에러 방지를 위한 하한선 처리
+        p->power[i] = (mag_sq < G_T20_EPSILON) ? G_T20_EPSILON : mag_sq;
     }
 }
 
@@ -235,11 +192,6 @@ void T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_d
 }
 
 
-
-
-
-
-
 void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p) {
     for (uint16_t i = 0; i < G_T20_FFT_SIZE; ++i) {
         p->window[i] = 0.54f - 0.46f * cosf((2.0f * G_T20_PI * i) / (G_T20_FFT_SIZE - 1U));
@@ -269,64 +221,87 @@ void T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs) {
     }
 }
 
-// [1] 노이즈 패턴 학습 (학습 프레임 수 동안 실행)
+
+// [v214] 통합 노이즈 학습 로직
 void T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
-    if (p == nullptr || p_power == nullptr) return;
-    if (!p->cfg.preprocess.noise.enable_spectral_subtract) return;
-    if (p->noise_learned_frames >= p->cfg.preprocess.noise.noise_learn_frames) return;
+    if (!p || !p_power || p->cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) return;
 
     const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
-    uint16_t count = p->noise_learned_frames;
+    bool is_learning = p->noise_learning_active || (p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames);
 
-    for (uint16_t i = 0; i < bins; ++i) {
-        // 이동 평균을 이용한 노이즈 프로파일 생성
-        p->noise_spectrum[i] = ((p->noise_spectrum[i] * (float)count) + p_power[i]) / (float)(count + 1U);
+    if (!is_learning) return;
+
+    if (p->cfg.preprocess.noise.mode == EN_T20_NOISE_ADAPTIVE) {
+        // Adaptive: 지수 이동 평균 추적
+        float alpha = p->noise_learning_active ? 0.2f : p->cfg.preprocess.noise.adaptive_alpha;
+        for (uint16_t i = 0; i < bins; ++i) {
+            p->noise_spectrum[i] = (1.0f - alpha) * p->noise_spectrum[i] + alpha * p_power[i];
+        }
+    } else {
+        // Fixed: 초기 베이스라인 누적 평균
+        float count = (float)p->noise_learned_frames;
+        for (uint16_t i = 0; i < bins; ++i) {
+            p->noise_spectrum[i] = ((p->noise_spectrum[i] * count) + p_power[i]) / (count + 1.0f);
+        }
     }
-    p->noise_learned_frames++;
+
+    if (p->noise_learned_frames < 0xFFFF) p->noise_learned_frames++;
 }
 
 
-// [2] 스펙트럼 차감 (학습된 노이즈 제거)
+
+/* ============================================================================
+ * Function: T20_applySpectralSubtraction
+ * Summary: 학습된 노이즈 스펙트럼을 이용한 신호 정제 (v214 최종본)
+ * * [v214 튜닝 가이드]
+ * 1. strength: 보통 1.0f를 사용하나, 노이즈 제거 후 신호가 너무 왜곡되면 
+ * 0.7~0.8로 낮추고, 잔류 노이즈가 많으면 1.2~1.5로 높여 조정하십시오.
+ * 2. G_T20_EPSILON: 로그 연산(logf) 시 -inf 발생을 막는 최소값입니다. 
+ * 시스템 노이즈 플로어보다 약간 낮게 설정하는 것이 좋습니다.
+ ============================================================================ */
+
 void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
-    if (!p || p->cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) return;
+    // 1. 유효성 검사 및 모드 확인
+    if (p == nullptr || p_power == nullptr) return;
+    
+    // 노이즈 제거 모드가 OFF라면 즉시 종료
+    if (p->cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) {
+        return;
+    }
+
+    /* [v214 점검 사항] 
+     * FIXED 모드일 경우 충분한 프레임이 학습되었는지 확인.
+     * 학습이 덜 된 상태에서 차감을 수행하면 신호 왜곡이 심해질 수 있음.
+     */
+    if (p->cfg.preprocess.noise.mode == EN_T20_NOISE_FIXED && 
+        p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames) {
+        return;
+    }
 
     const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
-    float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
-    float alpha = p->cfg.preprocess.noise.adaptive_alpha;
+    const float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
 
+    /* [v214 최적화 연산 루프] */
     for (uint16_t i = 0; i < bins; ++i) {
-        // [v214] Adaptive Noise Floor 추적
-        if (p->cfg.preprocess.noise.mode == EN_T20_NOISE_ADAPTIVE) {
-            // 측정 중이 아닐 때나 Web 학습 모드일 때 더 빠르게 학습 가능
-            // 실시간으로 노이즈 바닥면을 추적하는 지수 이동 평균(EMA) 로직을 적용
-            float current_alpha = p->noise_learning_active ? 0.1f : alpha;
-            p->noise_spectrum[i] = (1.0f - current_alpha) * p->noise_spectrum[i] + current_alpha * p_power[i];
+        // [식] Clean_Power = Raw_Power - (Strength * Noise_Floor)
+        float noise_val = p->noise_spectrum[i];
+        float sub_result = p_power[i] - (strength * noise_val);
+
+        // [수치 안정성 확보] 
+        // 결과값이 음수가 되거나 너무 작아지면 logf() 에러를 유발하므로 EPSILON으로 클램핑
+        if (sub_result < G_T20_EPSILON) {
+            sub_result = G_T20_EPSILON;
         }
 
-        float v = p_power[i] - (strength * p->noise_spectrum[i]);
-        if (v < G_T20_EPSILON) v = G_T20_EPSILON;
-        p_power[i] = v;
+        p_power[i] = sub_result;
     }
+
+    /* [잔여 과제 - TODO]
+     * 향후 과도한 차감으로 인한 'Musical Noise' 현상 발생 시 
+     * Spectral Over-subtraction 또는 Noise Floor Smoothing 알고리즘 추가 고려.
+     */
 }
 
-/*
-
-void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
-    if (p == nullptr || p_power == nullptr) return;
-    if (!p->cfg.preprocess.noise.enable_spectral_subtract) return;
-    if (p->noise_learned_frames < p->cfg.preprocess.noise.noise_learn_frames) return;
-
-    const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
-    float strength = p->cfg.preprocess.noise.spectral_subtract_strength;
-
-    for (uint16_t i = 0; i < bins; ++i) {
-        float v = p_power[i] - (strength * p->noise_spectrum[i]);
-        // 로그 연산 안정성을 위한 최소값(EPSILON) 제한
-        if (v < G_T20_EPSILON) v = G_T20_EPSILON;
-        p_power[i] = v;
-    }
-}
-*/
 
 // [3] 멜 필터뱅크 적용 (에너지 맵핑 및 로그 변환)
 void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out) {
@@ -366,13 +341,17 @@ void T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc, uint16_t 
 }
 
 void T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, uint16_t p_dim, float* p_delta2_out) {
-    // Delta-Delta (가속도) 단순 계산: t+1 - 2*t + t-1
-    if (p->mfcc_history_count < 3) return;
-    int t = p->mfcc_history_count - 2;
-    for (int i = 0; i < p_dim; i++) {
-        p_delta2_out[i] = p->mfcc_history[t+1][i] - 2 * p->mfcc_history[t][i] + p->mfcc_history[t-1][i];
+    // Delta-Delta 계산을 위해 최소 3개 이상의 프레임이 필요하며, 
+    // Delta와 동일하게 히스토리 중앙(Index 2)을 기준으로 함
+    if (!p || p->mfcc_history_count < 5) return; 
+
+    const int t = 2; // History 중앙 인덱스
+    for (uint16_t i = 0; i < p_dim; i++) {
+        // 가속도 공식: c[3] - 2*c[2] + c[1]
+        p_delta2_out[i] = p->mfcc_history[t + 1][i] - (2.0f * p->mfcc_history[t][i]) + p->mfcc_history[t - 1][i];
     }
 }
+
 
 // [5] 런타임 필터 설정 (HPF/LPF 계수 계산)
 bool T20_configureRuntimeFilter(CL_T20_Mfcc::ST_Impl* p) {
@@ -434,7 +413,7 @@ void T20_applyRuntimeFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p
 }
 
 
-
+/*
 // [v214] 노이즈 학습 제어 백엔드 
 void T20_processNoiseLearning(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
     if (!p || !p->noise_learning_active) return;
@@ -450,6 +429,7 @@ void T20_processNoiseLearning(CL_T20_Mfcc::ST_Impl* p, const float* p_power) {
     // 특정 프레임 이상 학습되면 자동으로 플래그를 내리거나 상태를 보고할 수 있음
     p->noise_learned_frames++;
 }
+*/
 
 
 

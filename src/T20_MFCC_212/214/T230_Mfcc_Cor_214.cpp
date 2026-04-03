@@ -154,44 +154,45 @@ void CL_T20_Mfcc::printStatus(Stream& p_out) const {
 	p_out.println(F("---------------------------------------"));
 }
 
-
-
 bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len) {
     if (!p || !p_frame) return false;
 
-    float mfcc[G_T20_MFCC_COEFFS_MAX];
+    float current_mfcc[G_T20_MFCC_COEFFS_MAX];
     float delta[G_T20_MFCC_COEFFS_MAX];
     float delta2[G_T20_MFCC_COEFFS_MAX];
 
-    // 1. 기본 MFCC 13차 추출
-    T20_computeMFCC(p, p_frame, mfcc);
+    // 1. 현재 프레임에서 MFCC 추출
+    T20_computeMFCC(p, p_frame, current_mfcc);
     
-    // 2. 이력 버퍼 갱신 (Delta 계산용)
-    T20_pushMfccHistory(p, mfcc, p->cfg.feature.mfcc_coeffs);
+    // 2. 히스토리 버퍼에 최신 MFCC 푸시
+    T20_pushMfccHistory(p, current_mfcc, p->cfg.feature.mfcc_coeffs);
     
-    // 3. Delta 및 Delta-Delta 연산
-    T20_computeDeltaFromHistory(p, p->cfg.feature.mfcc_coeffs, 2, delta);
-    T20_computeDeltaDeltaFromHistory(p, p->cfg.feature.mfcc_coeffs, delta2);
+    // 3. 히스토리가 꽉 찼을 때(5프레임) 39차 벡터 완성 가능
+    // 현재 프레임은 Index 4에 있고, 우리는 Index 2의 Delta를 계산함
+    if (p->mfcc_history_count >= 5) {
+        uint16_t dim = p->cfg.feature.mfcc_coeffs;
 
-    // 4. 39차 벡터 통합
-    T20_buildVector(mfcc, delta, delta2, p->cfg.feature.mfcc_coeffs, p->latest_feature.vector);
+        // 중앙 프레임(Index 2)에 대한 Delta/Delta-Delta 연산
+        T20_computeDeltaFromHistory(p, dim, 2, delta);
+        T20_computeDeltaDeltaFromHistory(p, dim, delta2);
 
-    // 5. 로깅 및 뷰어 업데이트 (Part 1 연결)
-    if (p->recorder_enabled) {
-        ST_T20_RecorderVectorMessage_t msg;
-        msg.frame_id = p->viewer_last_frame_id;
-        msg.vector_len = 39; // 39차 고정
-        memcpy(msg.vector, p->latest_feature.vector, sizeof(msg.vector));
-        
-        // 더블 버퍼링 스테이지 투입
-        T20_stageVectorToDmaSlot(p, &msg);
+        // 4. 39차 벡터 통합 (중앙 프레임 MFCC + Delta + Delta2)
+        T20_buildVector(p->mfcc_history[2], delta, delta2, dim, p->latest_feature.vector);
+
+        // 5. 로깅 및 저장 스테이지 투입
+        if (p->recorder_enabled) {
+            ST_T20_RecorderVectorMessage_t msg;
+            msg.frame_id = p->viewer_last_frame_id;
+            msg.vector_len = dim * 3; 
+            memcpy(msg.vector, p->latest_feature.vector, sizeof(float) * msg.vector_len);
+            
+            T20_stageVectorToDmaSlot(p, &msg);
+        }
+        return true;
     }
     
-    return true;
+    return false; // 히스토리가 쌓이는 중에는 false 반환
 }
-
-
-
 
 
 
