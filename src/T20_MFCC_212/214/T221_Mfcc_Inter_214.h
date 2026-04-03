@@ -38,9 +38,9 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <FS.h>
-#include <LittleFS.h>
-#include <SD_MMC.h>
 #include <SPI.h>
+#include <SD_MMC.h>
+#include <LittleFS.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
 
 #include <memory>
