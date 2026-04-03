@@ -181,8 +181,14 @@ void T20_performFFT_Optimized(CL_T20_Mfcc::ST_Impl* p, float* p_real) {
     }
 
     // 2. SIMD 가속 FFT 실행 (S3 PIE 명령어 사용)
+    // 수정 (표준 버전)
+    // dsps_bit_rev_fc32(fft_input, G_T20_FFT_SIZE); 
+    // 또는 컴파일러 제안대로
+    dsps_bit_rev2r_fc32(fft_input, G_T20_FFT_SIZE);
+
+
     // dsps_fft2r_fc32_ae32: Radix-2, Floating-point, Complex FFT
-    dsps_fft2r_fc32_ae32(fft_input, G_T20_FFT_SIZE);
+    // dsps_fft2r_fc32_ae32(fft_input, G_T20_FFT_SIZE);
 
     // 3. Bit-reversal 정렬
     dsps_bit_rev_fc32_ae32(fft_input, G_T20_FFT_SIZE);
