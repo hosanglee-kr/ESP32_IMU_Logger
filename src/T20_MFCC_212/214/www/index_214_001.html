@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T20 MFCC Analyzer</title>
+    <link rel="stylesheet" href="style_214_001.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav>
+        <h1>T20 MFCC v214</h1>
+        <div id="status-badge" class="badge">DISCONNECTED</div>
+    </nav>
+
+    <main class="container">
+        <section class="card control-panel">
+            <button id="btn-start" class="btn primary">START</button>
+            <button id="btn-stop" class="btn danger">STOP</button>
+            <button id="btn-learn" class="btn warning">LEARN NOISE</button>
+            <div class="info-grid">
+                <div>FPS: <span id="val-fps">0</span></div>
+                <div>Dropped: <span id="val-dropped">0</span></div>
+                <div>Samples: <span id="val-samples">0</span></div>
+            </div>
+        </section>
+
+        <section class="chart-grid">
+            <div class="card">
+                <h3>Waveform (Time Domain)</h3>
+                <canvas id="chart-waveform"></canvas>
+            </div>
+            <div class="card">
+                <h3>Power Spectrum (FFT)</h3>
+                <canvas id="chart-spectrum"></canvas>
+            </div>
+            <div class="card">
+                <h3>39D Feature Vector (MFCC/D/DD)</h3>
+                <canvas id="chart-mfcc"></canvas>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>Storage Explorer (SD_MMC)</h3>
+            <table id="file-table">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="file-list"></tbody>
+            </table>
+        </section>
+    </main>
+    <script src="app_214_001.js"></script>
+</body>
+</html>
+

@@ -49,7 +49,9 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
         strlcpy(_impl->bmi270_status_text, "hw_init_fail", 48);
         return false;
     }
-
+    
+    LittleFS.begin(false);
+    
     // [Step 5] DSP 및 파일 시스템 준비
     T20_initDSP(_impl);
     T20_loadRuntimeConfigFile(_impl);
@@ -178,7 +180,12 @@ bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t
 
         // 4. 39차 벡터 통합 (중앙 프레임 MFCC + Delta + Delta2)
         T20_buildVector(p->mfcc_history[2], delta, delta2, dim, p->latest_feature.vector);
+        
+        p->latest_vector_valid = true; // 플래그 활성화
 
+        // [v214 핵심 추가] 웹 프론트엔드로 바이너리 실시간 전송
+        T20_broadcastBinaryData(p);
+        
         // 5. 로깅 및 저장 스테이지 투입
         if (p->recorder_enabled) {
             ST_T20_RecorderVectorMessage_t msg;
@@ -193,9 +200,6 @@ bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t
     
     return false; // 히스토리가 쌓이는 중에는 false 반환
 }
-
-
-
 
 
 // [4-1] 39차 특징 벡터 Web 전송용 JSON 빌더
@@ -456,8 +460,6 @@ void T20_handleControlInputs(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 
-
-
 // [v214] 데이터 흐름 감시 
 void T20_checkDataFlowWatchdog(CL_T20_Mfcc::ST_Impl* p) {
     static uint32_t last_counter = 0;
@@ -472,5 +474,25 @@ void T20_checkDataFlowWatchdog(CL_T20_Mfcc::ST_Impl* p) {
         last_counter = p->bmi270_sample_counter;
         last_check_ms = millis();
     }
+}
+
+/* ------------------------------------------------------------
+ * Function: T20_jsonWriteDoc
+ * Summary: JsonDocument를 문자열 버퍼로 안전하게 직렬화
+ * ------------------------------------------------------------ */
+bool T20_jsonWriteDoc(JsonDocument& p_doc, char* p_out_buf, uint16_t p_len) {
+    if (p_out_buf == nullptr || p_len == 0) return false;
+
+    // 필요한 크기 계산
+    size_t needed = measureJson(p_doc) + 1;
+    if (needed > p_len) {
+        // 버퍼 부족 시 최소한의 에러 메시지라도 남김
+        strlcpy(p_out_buf, "{\"error\":\"buffer_overflow\"}", p_len);
+        return false;
+    }
+
+    // 직렬화 실행
+    serializeJson(p_doc, p_out_buf, p_len);
+    return true;
 }
 
