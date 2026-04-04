@@ -57,6 +57,8 @@
  * CL_T20_Mfcc::ST_Impl 정의
  * ---------------------------------------------------------------------------- */
 
+// 전방선언
+void T20_broadcastBinaryData(CL_T20_Mfcc::ST_Impl* p);
 
 
 struct CL_T20_Mfcc::ST_Impl {
