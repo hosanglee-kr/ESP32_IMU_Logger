@@ -5,6 +5,9 @@
 
 #include "T221_Mfcc_Inter_216.h"
 
+inline constexpr uint32_t BINARY_HEADER_RECORD_COUNT_OFFSET = 20U;
+
+
 /* [v216 추가] DMA 안전 쓰기를 위한 버퍼 정렬 체크 헬퍼 */
 static inline bool T20_isDmaSafe(const void* p_ptr) {
     return ((uintptr_t)p_ptr % 32 == 0);
@@ -68,7 +71,7 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
     // 2. 바이너리 헤더 업데이트 및 최종 파일 크기 동기화
     File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, p->recorder_active_path, "r+");
     if (file) {
-        file.seek(T20::C10_Rec::HEADER_RECORD_OFFSET); 
+        file.seek(BINARY_HEADER_RECORD_COUNT_OFFSET); 
         uint32_t final_count = p->recorder_record_count;
         file.write((const uint8_t*)&final_count, sizeof(final_count));
         

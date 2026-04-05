@@ -79,7 +79,7 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
     // [최적화] DCT 매트릭스 캐싱 (매 프레임마다 cosf 연산을 피하기 위함)
     for (uint16_t n = 0; n < p->cfg.feature.mfcc_coeffs; ++n) {
         for (uint16_t k = 0; k < p->cfg.feature.mel_filters; ++k) {
-            p->dct_matrix[n][k] = cosf((T20::C10_DSP::PI / (float)p->cfg.feature.mel_filters) * ((float)k + 0.5f) * (float)n);
+            p->dct_matrix[n][k] = cosf((T20::C10_DSP::MATH_PI / (float)p->cfg.feature.mel_filters) * ((float)k + 0.5f) * (float)n);
         }
     }
 

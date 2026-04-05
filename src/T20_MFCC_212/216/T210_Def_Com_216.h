@@ -50,7 +50,7 @@ namespace T20 {
 
     // --- 4. DSP & 수학 연산 한계치 ---
     namespace C10_DSP {
-        inline constexpr float    PI               = 3.14159265358979323846f;
+        inline constexpr float    MATH_PI           = 3.14159265358979323846f;
         inline constexpr float    EPSILON          = 1.0e-12f;
         inline constexpr uint16_t FFT_SIZE         = 256U;
         inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;
