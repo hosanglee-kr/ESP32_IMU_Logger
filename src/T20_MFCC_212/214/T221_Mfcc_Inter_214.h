@@ -339,6 +339,93 @@ struct CL_T20_Mfcc::ST_Impl {
 
 extern CL_T20_Mfcc* g_t20_instance;
 
+
+/* ============================================================================
+ * [필수 함수 선언 리스트 - T221_Mfcc_Inter_214.h]
+ * ========================================================================== */
+
+// --- 1. Core & RTOS (T230) ---
+void    T20_sensorTask(void* p_arg);
+void    T20_processTask(void* p_arg);
+void    T20_recorderTask(void* p_arg);
+void    T20_resetRuntimeResources(CL_T20_Mfcc::ST_Impl* p);
+void    T20_initProfiles(CL_T20_Mfcc::ST_Impl* p);
+void    T20_stopTasks(CL_T20_Mfcc::ST_Impl* p);
+void    T20_handleControlInputs(CL_T20_Mfcc::ST_Impl* p);
+void    T20_checkDataFlowWatchdog(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len);
+
+// --- 2. DSP & MFCC Engine (T231) ---
+bool    T20_initDSP(CL_T20_Mfcc::ST_Impl* p);
+float   T20_hzToMel(float p_hz);
+float   T20_melToHz(float p_mel);
+void    T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_configureRuntimeFilter(CL_T20_Mfcc::ST_Impl* p);
+void    T20_applyRuntimeFilter(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out, uint16_t p_len);
+void    T20_applyDCRemove(float* p_data, uint16_t p_len);
+void    T20_applyPreEmphasis(CL_T20_Mfcc::ST_Impl* p, float* p_data, uint16_t p_len, float p_alpha);
+void    T20_applyNoiseGate(float* p_data, uint16_t p_len, float p_threshold_abs);
+void    T20_computePowerSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_time, float* p_power);
+void    T20_learnNoiseSpectrum(CL_T20_Mfcc::ST_Impl* p, const float* p_power);
+void    T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power);
+void    T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out);
+void    T20_computeDCT2(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out); // 시그니처 변경됨
+void    T20_pushMfccHistory(CL_T20_Mfcc::ST_Impl* p, const float* p_mfcc, uint16_t p_dim);
+void    T20_computeDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, uint16_t p_dim, uint16_t p_delta_window, float* p_delta_out);
+void    T20_computeDeltaDeltaFromHistory(CL_T20_Mfcc::ST_Impl* p, uint16_t p_dim, float* p_delta2_out);
+void    T20_buildVector(const float* p_mfcc, const float* p_delta, const float* p_delta2, uint16_t p_dim, float* p_out_vec);
+void    T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfcc_out);
+
+// --- 3. Sensor & Hardware (T232) ---
+bool    T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample);
+bool    T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_tryBMI270Reinit(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p);
+void IRAM_ATTR T20_onBmiDrdyISR();
+
+// --- 4. Recorder & Storage (T234) ---
+File    T20_openRecorderFileByBackend(EM_T20_StorageBackend_t p_backend, const char* p_path, const char* p_mode);
+bool    T20_recorderOpenIfNeeded(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg);
+bool    T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t p_len);
+bool    T20_stageVectorToDmaSlot(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVectorMessage_t* p_msg);
+bool    T20_commitDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p, uint8_t p_slot_index);
+bool    T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderBatchPush(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVectorMessage_t* p_msg);
+bool    T20_recorderBatchFlush(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderFlushNow(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderRotateIfNeeded(CL_T20_Mfcc::ST_Impl* p);
+void    T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_saveRecorderIndex(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderWriteEvent(CL_T20_Mfcc::ST_Impl* p, const char* p_text);
+void    T20_recorderSetLastError(CL_T20_Mfcc::ST_Impl* p, const char* p_text);
+bool    T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_recorderCloseSession(CL_T20_Mfcc::ST_Impl* p, const char* p_reason);
+bool    T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_applySdmmcProfilePins(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_applySdmmcProfileByName(CL_T20_Mfcc::ST_Impl* p, const char* p_name);
+bool    T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p);
+
+// --- 5. JSON & Web API (T250 등) ---
+bool    T20_jsonWriteDoc(JsonDocument& p_doc, char* p_out_buf, uint16_t p_len);
+bool    T20_buildViewerDataJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+bool    T20_buildRecorderFinalizeJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+bool    T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+bool    T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_text);
+void    T20_seqInit(ST_T20_FeatureRingBuffer_t* p_rb, uint16_t p_frames, uint16_t p_feature_dim);
+void    T20_syncDerivedViewState(CL_T20_Mfcc::ST_Impl* p);
+void    T20_updateSelectionSyncState(CL_T20_Mfcc::ST_Impl* p);
+void    T20_updateTypeMetaAutoClassify(CL_T20_Mfcc::ST_Impl* p);
+
+
+
+
+/*
 bool				T20_validateConfig(const ST_T20_Config_t* p_cfg);
 void				T20_initProfiles(CL_T20_Mfcc::ST_Impl* p);
 void				T20_stopTasks(CL_T20_Mfcc::ST_Impl* p);
@@ -970,10 +1057,7 @@ bool				T20_buildFinalIntegrationBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p
 bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p);
 bool T20_bmi270ActualReadRegister(CL_T20_Mfcc::ST_Impl* p, uint8_t p_reg, uint8_t* p_out);
 
-
-
-
-
+*/
 
 
 
