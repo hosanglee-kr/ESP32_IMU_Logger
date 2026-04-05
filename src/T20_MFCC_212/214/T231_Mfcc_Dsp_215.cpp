@@ -279,18 +279,6 @@ void T20_computeDCT2(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out) {
     }
 }
 
-/*
-void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len) {
-    if (p_in == nullptr || p_out == nullptr) return;
-    for (uint16_t n = 0; n < p_out_len; ++n) {
-        float sum = 0.0f;
-        for (uint16_t k = 0; k < p_in_len; ++k) {
-            sum += p_in[k] * cosf((G_T20_PI / (float)p_in_len) * ((float)k + 0.5f) * (float)n);
-        }
-        p_out[n] = sum;
-    }
-}
-*/
 
 /* ============================================================================
  * 6. 히스토리 기반 Delta 연산 (39차 벡터 생성)

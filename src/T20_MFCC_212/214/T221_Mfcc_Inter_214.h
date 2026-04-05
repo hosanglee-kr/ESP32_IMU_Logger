@@ -266,6 +266,121 @@ struct CL_T20_Mfcc::ST_Impl {
         // [3] 센서 상태 초기화
         memset(&bmi_state, 0, sizeof(bmi_state));
         memset(&bmi_runtime, 0, sizeof(bmi_runtime));
+        live_source_mode = 0; 
+        bmi270_chip_id = 0;
+        bmi270_spi_ok = bmi270_drdy_enabled = false;
+        bmi270_drdy_isr_flag = 0;
+        bmi270_sample_counter = 0;
+        bmi270_last_drdy_ms = bmi270_last_poll_ms = 0;
+        memset(bmi270_last_axis_values, 0, sizeof(bmi270_last_axis_values));
+        bmi270_axis_mode = 0; 
+        strlcpy(bmi270_status_text, "idle", sizeof(bmi270_status_text));
+
+        // [4] DSP 버퍼 초기화 (누락되었던 배열 모두 추가)
+        memset(frame_buffer, 0, sizeof(frame_buffer));
+        memset(work_frame, 0, sizeof(work_frame));
+        memset(temp_frame, 0, sizeof(temp_frame));
+        memset(window, 0, sizeof(window));
+        memset(power, 0, sizeof(power));
+        memset(noise_spectrum, 0, sizeof(noise_spectrum));
+        memset(log_mel, 0, sizeof(log_mel));
+        memset(mel_bank, 0, sizeof(mel_bank));
+        memset(mfcc_history, 0, sizeof(mfcc_history));
+        memset(biquad_coeffs, 0, sizeof(biquad_coeffs));
+        memset(biquad_state, 0, sizeof(biquad_state));
+        memset(dct_matrix, 0, sizeof(dct_matrix)); // 신규 캐시 행렬 초기화
+        
+        active_fill_buffer = 0; 
+        active_sample_index = 0;
+        dropped_frames = 0; 
+        mfcc_history_count = 0;
+        noise_learned_frames = 0; 
+        prev_raw_sample = 0.0f;
+        noise_learning_active = false;
+        runtime_sim_phase = 0.0f;
+        last_frame_process_ms = 0;
+        
+        // [5] 특징량 초기화
+        memset(&latest_feature, 0, sizeof(latest_feature));
+        memset(&seq_rb, 0, sizeof(seq_rb));
+        latest_vector_valid = latest_sequence_valid = false;
+
+        // [6] 레코더 초기화
+        memset(&rec_state, 0, sizeof(rec_state));
+        memset(&rec_runtime, 0, sizeof(rec_runtime));
+        recorder_storage_backend = EN_T20_STORAGE_LITTLEFS;
+        recorder_enabled = recorder_sdmmc_mounted = recorder_file_opened = false;
+        recorder_fallback_active = recorder_flush_requested = false;
+        memset(recorder_active_path, 0, sizeof(recorder_active_path));
+        memset(recorder_file_path, 0, sizeof(recorder_file_path));
+        memset(recorder_last_error, 0, sizeof(recorder_last_error));
+        recorder_record_count = 0; 
+        recorder_last_flush_ms = 0;
+        recorder_batch_count = 0; 
+        recorder_batch_last_push_ms = 0;
+        recorder_batch_watermark_low = G_T20_RECORDER_BATCH_WATERMARK_LOW;
+        recorder_batch_watermark_high = G_T20_RECORDER_BATCH_WATERMARK_HIGH;
+        recorder_batch_idle_flush_ms = G_T20_RECORDER_BATCH_IDLE_FLUSH_MS;
+        memset(recorder_dma_slots, 0, sizeof(recorder_dma_slots));
+        memset(recorder_dma_slot_used, 0, sizeof(recorder_dma_slot_used));
+        recorder_dma_active_slot = 0; 
+        recorder_zero_copy_slot_index = 0;
+        recorder_session_open = false; 
+        recorder_session_id = 0;
+        recorder_session_open_ms = recorder_session_close_ms = 0;
+        strlcpy(recorder_session_name, "default", sizeof(recorder_session_name));
+        
+        recorder_index_count = 0;
+        recorder_rotate_keep_max = G_T20_RECORDER_ROTATE_KEEP_MAX;
+        memset(recorder_index_items, 0, sizeof(recorder_index_items));
+
+        // [7] 뷰어 초기화
+        viewer_last_frame_id = 0;
+        memset(viewer_last_waveform, 0, sizeof(viewer_last_waveform));
+        memset(viewer_last_spectrum, 0, sizeof(viewer_last_spectrum));
+        memset(viewer_last_mfcc, 0, sizeof(viewer_last_mfcc));
+        viewer_last_waveform_len = viewer_last_spectrum_len = viewer_last_mfcc_len = viewer_last_vector_len = 0;
+        memset(viewer_events, 0, sizeof(viewer_events));
+        viewer_event_count = 0;
+        strlcpy(type_meta_name, "none", sizeof(type_meta_name));
+        strlcpy(type_meta_kind, "feature_vector", sizeof(type_meta_kind));
+        memset(type_meta_auto_text, 0, sizeof(type_meta_auto_text));
+        type_meta_enabled = true; 
+        selection_sync_enabled = false;
+        selection_sync_frame_from = selection_sync_frame_to = 0;
+        selection_sync_effective_from = selection_sync_effective_to = 0;
+        selection_sync_range_valid = false;
+        memset(selection_sync_name, 0, sizeof(selection_sync_name));
+        memset(viewer_selection_points, 0, sizeof(viewer_selection_points));
+        memset(viewer_overlay_points, 0, sizeof(viewer_overlay_points));
+        viewer_selection_points_len = viewer_overlay_points_len = viewer_overlay_accum_count = viewer_overlay_subset_count = 0;
+
+        // [8] SDMMC 프로필 초기화
+        memset(&sdmmc_profile, 0, sizeof(sdmmc_profile));
+        memset(sdmmc_profiles, 0, sizeof(sdmmc_profiles));
+        sdmmc_profile_applied = false;
+        strlcpy(sdmmc_last_apply_reason, "init", sizeof(sdmmc_last_apply_reason));
+        strlcpy(sdmmc_profile.profile_name, "default", sizeof(sdmmc_profile.profile_name));
+    }
+
+    
+    /*
+    ST_Impl() : spi(FSPI), bmi() {
+        // [1] RTOS 초기화
+        sensor_task_handle = process_task_handle = recorder_task_handle = nullptr;
+        frame_queue = recorder_queue = nullptr;
+        mutex = nullptr;
+        initialized = running = measurement_active = false;
+
+        // [2] 설정/프로필 초기화
+        cfg = T20_makeDefaultConfig();
+        memset(profiles, 0, sizeof(profiles));
+        current_profile_index = 0;
+        memset(runtime_cfg_profile_name, 0, sizeof(runtime_cfg_profile_name));
+
+        // [3] 센서 상태 초기화
+        memset(&bmi_state, 0, sizeof(bmi_state));
+        memset(&bmi_runtime, 0, sizeof(bmi_runtime));
         live_source_mode = 0; // SYNTHETIC
         bmi270_chip_id = 0;
         bmi270_spi_ok = bmi270_drdy_enabled = false;
@@ -340,6 +455,7 @@ struct CL_T20_Mfcc::ST_Impl {
         strlcpy(sdmmc_profile.profile_name, "default", sizeof(sdmmc_profile.profile_name));
         
     }
+    */
 };
 
 
