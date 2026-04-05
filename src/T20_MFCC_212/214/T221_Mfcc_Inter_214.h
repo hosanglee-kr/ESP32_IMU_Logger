@@ -113,8 +113,15 @@ struct CL_T20_Mfcc::ST_Impl {
     alignas(16) float               power[(G_T20_FFT_SIZE/2)+1];    // 파워 스펙트럼 (Magnitude)
     
     float               noise_spectrum[(G_T20_FFT_SIZE/2)+1]; // 노이즈 학습 데이터
-    float               log_mel[G_T20_MEL_FILTERS];      // 로그 멜 결과
-    float               mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE/2)+1]; // 멜 가중치 행렬
+    
+    
+    // [4] DSP 및 MFCC 연산 버퍼
+    alignas(16) float   log_mel[G_T20_MEL_FILTERS];                          // 로그 멜 결과
+    alignas(16) float   mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE/2)+1];   // 멜 가중치 행렬
+    
+    // DCT 코사인 매트릭스 캐싱 (SIMD 가속용, 16바이트 정렬)
+    alignas(16) float   dct_matrix[G_T20_MFCC_COEFFS_MAX][G_T20_MEL_FILTERS];
+    
     float               mfcc_history[G_T20_MFCC_HISTORY][G_T20_MFCC_COEFFS_MAX]; // Delta 계산용 (5U x 32U)
     
     // ESP-DSP 필터용 계수 및 상태 (사이즈 고정)

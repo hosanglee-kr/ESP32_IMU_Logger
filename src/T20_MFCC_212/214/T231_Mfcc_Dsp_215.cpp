@@ -76,6 +76,13 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
             p->mel_bank[m][k] = (float)(right - k) / (float)(right - center + G_T20_EPSILON);
         }
     }
+    
+    // [최적화] DCT 매트릭스 캐싱 (매 프레임마다 cosf 연산을 피하기 위함)
+    for (uint16_t n = 0; n < p->cfg.feature.mfcc_coeffs; ++n) {
+        for (uint16_t k = 0; k < p->cfg.feature.mel_filters; ++k) {
+            p->dct_matrix[n][k] = cosf((G_T20_PI / (float)p->cfg.feature.mel_filters) * ((float)k + 0.5f) * (float)n);
+        }
+    }
 
     return T20_configureRuntimeFilter(p);
 }
@@ -241,18 +248,38 @@ void T20_applySpectralSubtraction(CL_T20_Mfcc::ST_Impl* p, float* p_power) {
     }
 }
 
+
+/* 2. Mel-Filterbank 합산에 SIMD 내적 적용 */
 void T20_applyMelFilterbank(CL_T20_Mfcc::ST_Impl* p, const float* p_power, float* p_log_mel_out) {
     if (p == nullptr || p_power == nullptr || p_log_mel_out == nullptr) return;
     const uint16_t bins = (G_T20_FFT_SIZE / 2U) + 1U;
 
     for (uint16_t m = 0; m < G_T20_MEL_FILTERS; ++m) {
         float sum = 0.0f;
-        for (uint16_t k = 0; k < bins; ++k) sum += p_power[k] * p->mel_bank[m][k];
+        // [SIMD 가속] dsps_dotprod_f32를 이용한 고속 내적 연산
+        dsps_dotprod_f32(p_power, p->mel_bank[m], &sum, bins);
+        
         if (sum < G_T20_EPSILON) sum = G_T20_EPSILON;
         p_log_mel_out[m] = logf(sum);
     }
 }
 
+/* 3. DCT 연산을 SIMD 매트릭스 내적으로 교체 (함수 시그니처 변경됨) */
+void T20_computeDCT2(CL_T20_Mfcc::ST_Impl* p, const float* p_in, float* p_out) {
+    if (p == nullptr || p_in == nullptr || p_out == nullptr) return;
+    
+    uint16_t out_len = p->cfg.feature.mfcc_coeffs;
+    uint16_t in_len  = p->cfg.feature.mel_filters;
+
+    for (uint16_t n = 0; n < out_len; ++n) {
+        float sum = 0.0f;
+        // [SIMD 가속] 사전 계산된 DCT 행렬 행(Row)과 Log-Mel 벡터의 고속 내적
+        dsps_dotprod_f32(p_in, p->dct_matrix[n], &sum, in_len);
+        p_out[n] = sum;
+    }
+}
+
+/*
 void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_t p_out_len) {
     if (p_in == nullptr || p_out == nullptr) return;
     for (uint16_t n = 0; n < p_out_len; ++n) {
@@ -263,6 +290,7 @@ void T20_computeDCT2(const float* p_in, float* p_out, uint16_t p_in_len, uint16_
         p_out[n] = sum;
     }
 }
+*/
 
 /* ============================================================================
  * 6. 히스토리 기반 Delta 연산 (39차 벡터 생성)
@@ -344,7 +372,10 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfc
 
     // 6. 비선형 스케일 특징량 추출 (Mel 에너지 -> DCT-II)
     T20_applyMelFilterbank(p, p->power, p->log_mel);
-    T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
+    
+    // 기존: T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
+    T20_computeDCT2(p, p->log_mel, p_mfcc_out);
+
 }
 
 
@@ -380,4 +411,5 @@ void T20_processTask(void* p_arg) {
         }
     }
 }
+
 
