@@ -14,7 +14,7 @@
  * 2. SPI Speed: 10MHz 사용. 배선 길이에 따라 안정적이지 않으면 4~8MHz로 하향할 것.
  */
  
-#include "T221_Mfcc_Inter_214.h"
+#include "T221_Mfcc_Inter_215.h"
 
 
 

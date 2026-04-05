@@ -8,7 +8,7 @@
  * 4. SDMMC 마운트 실패 시 LittleFS로 즉시 전환되는 안정성 확보
  ============================================================================ */
 
-#include "T221_Mfcc_Inter_214.h"
+#include "T221_Mfcc_Inter_215.h"
 
 inline constexpr uint32_t BINARY_HEADER_RECORD_COUNT_OFFSET = 20U;
 

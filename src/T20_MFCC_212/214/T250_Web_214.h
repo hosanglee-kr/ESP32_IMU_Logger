@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "T221_Mfcc_Inter_214.h"
+#include "T221_Mfcc_Inter_215.h"
 
 /* ----------------------------------------------------------------------------
  * 전용 상수 정의 (C++17 inline constexpr 활용)

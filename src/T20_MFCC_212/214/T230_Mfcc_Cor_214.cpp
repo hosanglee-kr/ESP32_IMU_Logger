@@ -8,7 +8,7 @@
  * 4. Alias Accessor를 통한 v210 상태 로직의 v212 구조체 매핑
  ============================================================================ */
 
-#include "T221_Mfcc_Inter_214.h"
+#include "T221_Mfcc_Inter_215.h"
 
 CL_T20_Mfcc* g_t20_instance = nullptr;
 
