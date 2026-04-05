@@ -236,12 +236,12 @@ struct CL_T20_Mfcc::ST_Impl {
         char     profile_name[32];
         bool     enabled;
         bool     use_1bit_mode;
-        int8_t   clk_pin;
-        int8_t   cmd_pin;
-        int8_t   d0_pin;
-        int8_t   d1_pin;
-        int8_t   d2_pin;
-        int8_t   d3_pin;
+        uint8_t   clk_pin;
+        uint8_t   cmd_pin;
+        uint8_t   d0_pin;
+        uint8_t   d1_pin;
+        uint8_t   d2_pin;
+        uint8_t   d3_pin;
     } sdmmc_profile, sdmmc_profiles[G_T20_SDMMC_PROFILE_PRESET_COUNT];
 
     bool     sdmmc_profile_applied;

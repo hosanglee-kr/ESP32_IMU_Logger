@@ -461,9 +461,33 @@ bool T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
+    if (!p_file || !p_cfg) return false;
+    
+    // 구조체 전체를 0으로 초기화
+    ST_T20_RecorderBinaryHeader_t hdr = {0}; 
+    
+    // 헤더 필수 정보 기록
+    hdr.magic = G_T20_BINARY_MAGIC;
+    hdr.version = G_T20_BINARY_VERSION;
+    hdr.header_size = sizeof(ST_T20_RecorderBinaryHeader_t);
+    
+    // DSP 파이프라인 설정 기록 (p_cfg 활용)
+    hdr.sample_rate_hz = (uint32_t)p_cfg->feature.sample_rate_hz;
+    hdr.fft_size = p_cfg->feature.fft_size;
+    hdr.mfcc_dim = p_cfg->feature.mfcc_coeffs;
+    hdr.mel_filters = p_cfg->feature.mel_filters;
+    hdr.sequence_frames = p_cfg->output.sequence_frames;
+    
+    hdr.record_count = 0; // 초기 생성 시 0
+    
+    return p_file.write((const uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
+}
+/*
+bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     ST_T20_RecorderBinaryHeader_t hdr = { .magic = G_T20_BINARY_MAGIC, .version = G_T20_BINARY_VERSION };
     return p_file.write((uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
 }
+*=
 
 bool T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
