@@ -435,12 +435,15 @@ bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_
     p->cfg.preprocess.filter.cutoff_hz_1          = doc["filter_cutoff"] | p->cfg.preprocess.filter.cutoff_hz_1;
     p->cfg.preprocess.noise.spectral_subtract_strength = doc["sub_strength"] | p->cfg.preprocess.noise.spectral_subtract_strength;
     
-    if (doc.containsKey("noise_mode")) {
+    
+        // ArduinoJson V7 권장 문법 적용
+    if (doc["noise_mode"].is<int>()) {
         int n_mode = doc["noise_mode"].as<int>();
         if (n_mode >= 0 && n_mode <= 2) {
             p->cfg.preprocess.noise.mode = static_cast<EM_T20_NoiseMode_t>(n_mode);
         }
     }
+
 
     // --- 3. 기존 시스템 및 레코더 설정 복구 ---
     p->type_meta_enabled             = doc["type_meta_enabled"] | p->type_meta_enabled;

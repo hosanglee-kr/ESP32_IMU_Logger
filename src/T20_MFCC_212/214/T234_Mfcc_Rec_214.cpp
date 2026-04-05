@@ -541,5 +541,29 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 
+/* ============================================================================
+ * 프론트엔드 Explorer 탭을 위한 인덱스 JSON 직렬화
+ * ========================================================================== */
+bool T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
+    if (p == nullptr || p_out_buf == nullptr || p_len == 0) return false;
+
+    JsonDocument doc;
+    doc["count"] = p->recorder_index_count;
+    JsonArray arr = doc["items"].to<JsonArray>();
+    
+    for (uint16_t i = 0; i < p->recorder_index_count; i++) {
+        JsonObject item = arr.add<JsonObject>();
+        item["path"] = p->recorder_index_items[i].path;
+        item["record_count"] = p->recorder_index_items[i].record_count;
+        item["size_bytes"] = p->recorder_index_items[i].size_bytes;
+    }
+
+    size_t need = measureJson(doc) + 1U;
+    if (need > p_len) return false;
+
+    serializeJson(doc, p_out_buf, p_len);
+    return true;
+}
+
 
 
