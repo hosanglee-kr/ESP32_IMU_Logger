@@ -61,6 +61,10 @@
 void T20_broadcastBinaryData(CL_T20_Mfcc::ST_Impl* p);
 
 
+    
+
+
+
 struct CL_T20_Mfcc::ST_Impl {
 
     // [1] 시스템 및 RTOS 핸들 (System & RTOS Resources)
@@ -101,16 +105,22 @@ struct CL_T20_Mfcc::ST_Impl {
 
     // [4] DSP 및 MFCC 연산 버퍼 (DSP Pipeline Buffers)
     float               frame_buffer[G_T20_RAW_FRAME_BUFFERS][G_T20_FFT_SIZE]; // 핑퐁 수집 버퍼 (4U x 256U)
-    float               work_frame[G_T20_FFT_SIZE];     // 연산용 작업 프레임
-    float               temp_frame[G_T20_FFT_SIZE];     // 임시 저장용
-    float               window[G_T20_FFT_SIZE];         // 해밍/한 윈도우 계수
-    float               power[(G_T20_FFT_SIZE/2)+1];    // 파워 스펙트럼 (Magnitude)
+    
+    // [4] DSP 및 MFCC 연산 버퍼 (DSP Pipeline Buffers) - 16바이트 정렬 적용
+    alignas(16) float               work_frame[G_T20_FFT_SIZE];     // 연산용 작업 프레임
+    alignas(16) float               temp_frame[G_T20_FFT_SIZE];     // 임시 저장용
+    alignas(16) float               window[G_T20_FFT_SIZE];         // 해밍/한 윈도우 계수
+    alignas(16) float               power[(G_T20_FFT_SIZE/2)+1];    // 파워 스펙트럼 (Magnitude)
+    
     float               noise_spectrum[(G_T20_FFT_SIZE/2)+1]; // 노이즈 학습 데이터
     float               log_mel[G_T20_MEL_FILTERS];      // 로그 멜 결과
     float               mel_bank[G_T20_MEL_FILTERS][(G_T20_FFT_SIZE/2)+1]; // 멜 가중치 행렬
     float               mfcc_history[G_T20_MFCC_HISTORY][G_T20_MFCC_COEFFS_MAX]; // Delta 계산용 (5U x 32U)
-    float               biquad_coeffs[5];               // 필터 계수
-    float               biquad_state[2];                // 필터 상태 유지
+    
+    // ESP-DSP 필터용 계수 및 상태 (사이즈 고정)
+    alignas(16) float               biquad_coeffs[5];   // 필터 계수       
+    alignas(16) float               biquad_state[2];    // 필터 상태 유지
+
 
     uint8_t             active_fill_buffer;     // 현재 데이터를 채우고 있는 버퍼 인덱스
     uint16_t            active_sample_index;    // 현재 프레임 내 샘플 인덱스
