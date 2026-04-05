@@ -67,6 +67,61 @@ function initCharts() {
 }
 
 // ==========================================
+// 폭포수(Waterfall) 렌더링 클래스
+// ==========================================
+function getHeatmapColor(value, min, max) {
+    let norm = (value - min) / (max - min);
+    if (norm < 0) norm = 0;
+    if (norm > 1) norm = 1;
+    
+    // Jet 컬러맵 알고리즘 (파랑 -> 초록 -> 노랑 -> 빨강)
+    const r = Math.max(0, Math.min(255, Math.floor(255 * (1.5 - Math.abs(1 - 4 * (norm - 0.5))))));
+    const g = Math.max(0, Math.min(255, Math.floor(255 * (1.5 - Math.abs(1 - 4 * (norm - 0.25))))));
+    const b = Math.max(0, Math.min(255, Math.floor(255 * (1.5 - Math.abs(1 - 4 * norm)))));
+    
+    return `rgb(${r},${g},${b})`;
+}
+
+class WaterfallChart {
+    constructor(canvasId, dataLen, minVal, maxVal) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas ? this.canvas.getContext('2d', { alpha: false, willReadFrequently: true }) : null;
+        this.dataLen = dataLen;
+        this.minVal = minVal;
+        this.maxVal = maxVal;
+        
+        if (this.canvas) {
+            // 내부 해상도 설정 (X: 시간축 600픽셀, Y: 데이터 개수)
+            this.canvas.width = 600;
+            this.canvas.height = dataLen;
+        }
+    }
+
+    draw(dataArray) {
+        if (!this.ctx) return;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // 1. 기존 화면을 왼쪽으로 1픽셀 Shift
+        this.ctx.drawImage(this.canvas, 1, 0, w - 1, h, 0, 0, w - 1, h);
+
+        // 2. 맨 오른쪽 끝(w - 1)에 새로운 데이터 1열 그리기
+        for (let y = 0; y < h; y++) {
+            // 저주파(Index 0)가 화면 아래에 그려지도록 Y축을 뒤집음
+            const val = dataArray[h - 1 - y];
+            this.ctx.fillStyle = getHeatmapColor(val, this.minVal, this.maxVal);
+            this.ctx.fillRect(w - 1, y, 1, 1);
+        }
+    }
+}
+
+// 두 개의 폭포수 차트 인스턴스 생성
+// 스펙트럼은 0이상 양수, MFCC는 음수~양수 범위를 가짐 (min, max 값은 센서 환경에 맞춰 튜닝 필요)
+const waterfallSpec = new WaterfallChart('chart-waterfall-spec', 129, 0.0, 15.0); 
+const waterfallMfcc = new WaterfallChart('chart-waterfall-mfcc', 39, -20.0, 20.0);
+
+
+// ==========================================
 // 3. WebSocket 바이너리 스트리밍
 // ==========================================
 function connectWebSocket() {
@@ -90,6 +145,11 @@ function connectWebSocket() {
             charts.wave.update('none');
             charts.spec.update('none');
             charts.mfcc.update('none');
+            
+            // 폭포수 차트 업데이트
+            waterfallSpec.draw(specData);
+            waterfallMfcc.draw(mfccData);
+   
         }
     };
 
@@ -99,6 +159,8 @@ function connectWebSocket() {
         setTimeout(connectWebSocket, 2000);
     };
 }
+
+
 
 // ==========================================
 // 4. API 제어 및 동적 설정
@@ -193,3 +255,4 @@ window.onload = () => {
     loadSettings();
     refreshFileList();
 };
+

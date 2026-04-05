@@ -34,9 +34,21 @@
                     Samples: <span id="val-samples">0</span>
                 </div>
             </div>
-            <div class="chart-container"><canvas id="chart-waveform"></canvas></div>
-            <div class="chart-container"><canvas id="chart-spectrum"></canvas></div>
-            <div class="chart-container"><canvas id="chart-mfcc"></canvas></div>
+            <div class="grid">
+                <div class="chart-container"><canvas id="chart-waveform"></canvas></div>
+                <div class="chart-container"><canvas id="chart-spectrum"></canvas></div>
+                <div class="chart-container"><canvas id="chart-mfcc"></canvas></div>
+            </div>
+
+            <h4 style="margin: 15px 0 5px 0; color: #888;">Spectrogram (Waterfall)</h4>
+            <div class="grid">
+                <div class="chart-container" style="height: 150px;">
+                    <canvas id="chart-waterfall-spec"></canvas>
+                </div>
+                <div class="chart-container" style="height: 150px;">
+                    <canvas id="chart-waterfall-mfcc"></canvas>
+                </div>
+            </div>
         </section>
 
         <section id="tab-settings" class="tab-content">
