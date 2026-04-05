@@ -463,8 +463,9 @@ bool T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p) {
 bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     if (!p_file || !p_cfg) return false;
     
-    // 구조체 전체를 0으로 초기화
-    ST_T20_RecorderBinaryHeader_t hdr = {0}; 
+    // 엄격한 C++ 경고 방지를 위해 memset으로 확실하게 0 초기화
+    ST_T20_RecorderBinaryHeader_t hdr;
+    memset(&hdr, 0, sizeof(hdr));
     
     // 헤더 필수 정보 기록
     hdr.magic = G_T20_BINARY_MAGIC;
@@ -482,12 +483,13 @@ bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     
     return p_file.write((const uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
 }
+
 /*
 bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     ST_T20_RecorderBinaryHeader_t hdr = { .magic = G_T20_BINARY_MAGIC, .version = G_T20_BINARY_VERSION };
     return p_file.write((uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
 }
-*=
+*/
 
 bool T20_commitActiveDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
@@ -588,6 +590,8 @@ bool T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     serializeJson(doc, p_out_buf, p_len);
     return true;
 }
+
+
 
 
 
