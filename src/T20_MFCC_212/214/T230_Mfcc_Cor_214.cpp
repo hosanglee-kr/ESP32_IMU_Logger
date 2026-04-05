@@ -213,52 +213,6 @@ bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t
 }
 
 
-/*
-bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len) {
-    if (!p || !p_frame) return false;
-
-    float current_mfcc[G_T20_MFCC_COEFFS_MAX];
-    float delta[G_T20_MFCC_COEFFS_MAX];
-    float delta2[G_T20_MFCC_COEFFS_MAX];
-
-    // 1. 현재 프레임에서 MFCC 추출
-    T20_computeMFCC(p, p_frame, current_mfcc);
-    
-    // 2. 히스토리 버퍼에 최신 MFCC 푸시
-    T20_pushMfccHistory(p, current_mfcc, p->cfg.feature.mfcc_coeffs);
-    
-    // 3. 히스토리가 꽉 찼을 때(5프레임) 39차 벡터 완성 가능
-    // 현재 프레임은 Index 4에 있고, 우리는 Index 2의 Delta를 계산함
-    if (p->mfcc_history_count >= 5) {
-        uint16_t dim = p->cfg.feature.mfcc_coeffs;
-
-        // 중앙 프레임(Index 2)에 대한 Delta/Delta-Delta 연산
-        T20_computeDeltaFromHistory(p, dim, 2, delta);
-        T20_computeDeltaDeltaFromHistory(p, dim, delta2);
-
-        // 4. 39차 벡터 통합 (중앙 프레임 MFCC + Delta + Delta2)
-        T20_buildVector(p->mfcc_history[2], delta, delta2, dim, p->latest_feature.vector);
-        
-        p->latest_vector_valid = true; // 플래그 활성화
-
-        // [v214 핵심 추가] 웹 프론트엔드로 바이너리 실시간 전송
-        T20_broadcastBinaryData(p);
-        
-        // 5. 로깅 및 저장 스테이지 투입
-        if (p->recorder_enabled) {
-            ST_T20_RecorderVectorMessage_t msg;
-            msg.frame_id = p->viewer_last_frame_id;
-            msg.vector_len = dim * 3; 
-            memcpy(msg.vector, p->latest_feature.vector, sizeof(float) * msg.vector_len);
-            
-            T20_stageVectorToDmaSlot(p, &msg);
-        }
-        return true;
-    }
-    
-    return false; // 히스토리가 쌓이는 중에는 false 반환
-}
-*/
 
 
 // [4-1] 39차 특징 벡터 Web 전송용 JSON 빌더
@@ -312,58 +266,7 @@ void T20_stopTasks(CL_T20_Mfcc::ST_Impl* p) {
 
 
 
-bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_text) {
-    if (p == nullptr || p_json_text == nullptr) return false;
 
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, p_json_text);
-    if (err) return false;
-
-    const char* profile_name        = doc["profile_name"] | p->runtime_cfg_profile_name;
-    const char* backend             = doc["recorder_backend"] | ((p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc");
-    const char* sdmmc_profile       = doc["sdmmc_profile"] | p->sdmmc_profile.profile_name;
-    const char* output_mode         = doc["output_mode"] | ((p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence");
-    const char* selection_sync_name = doc["selection_sync_name"] | p->selection_sync_name;
-    const char* type_meta_name      = doc["type_meta_name"] | p->type_meta_name;
-    const char* type_meta_kind      = doc["type_meta_kind"] | p->type_meta_kind;
-
-    strlcpy(p->runtime_cfg_profile_name, profile_name, sizeof(p->runtime_cfg_profile_name));
-    strlcpy(p->selection_sync_name, selection_sync_name, sizeof(p->selection_sync_name));
-    strlcpy(p->type_meta_name, type_meta_name, sizeof(p->type_meta_name));
-    strlcpy(p->type_meta_kind, type_meta_kind, sizeof(p->type_meta_kind));
-    p->type_meta_enabled             = (bool)(doc["type_meta_enabled"] | p->type_meta_enabled);
-    p->cfg.feature.hop_size          = (uint16_t)(doc["hop_size"] | p->cfg.feature.hop_size);
-    p->cfg.feature.mfcc_coeffs       = (uint16_t)(doc["mfcc_coeffs"] | p->cfg.feature.mfcc_coeffs);
-    p->cfg.output.sequence_frames    = (uint16_t)(doc["sequence_frames"] | p->cfg.output.sequence_frames);
-    p->recorder_enabled              = (bool)(doc["recorder_enabled"] | p->recorder_enabled);
-    p->selection_sync_enabled        = (bool)(doc["selection_sync_enabled"] | p->selection_sync_enabled);
-    p->selection_sync_frame_from     = (uint32_t)(doc["selection_sync_frame_from"] | p->selection_sync_frame_from);
-    p->selection_sync_frame_to       = (uint32_t)(doc["selection_sync_frame_to"] | p->selection_sync_frame_to);
-    p->recorder_batch_watermark_low  = (uint16_t)(doc["batch_watermark_low"] | p->recorder_batch_watermark_low);
-    p->recorder_batch_watermark_high = (uint16_t)(doc["batch_watermark_high"] | p->recorder_batch_watermark_high);
-    p->recorder_batch_idle_flush_ms  = (uint32_t)(doc["batch_idle_flush_ms"] | p->recorder_batch_idle_flush_ms);
-    
-    if (p->recorder_batch_watermark_low == 0) p->recorder_batch_watermark_low = 1;
-    if (p->recorder_batch_watermark_high < p->recorder_batch_watermark_low) {
-        p->recorder_batch_watermark_high = p->recorder_batch_watermark_low;
-    }
-
-    if (strcmp(backend, "sdmmc") == 0)
-        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
-    else
-        p->recorder_storage_backend = EN_T20_STORAGE_LITTLEFS;
-
-    if (strcmp(output_mode, "sequence") == 0)
-        p->cfg.output.output_mode = EN_T20_OUTPUT_SEQUENCE;
-    else
-        p->cfg.output.output_mode = EN_T20_OUTPUT_VECTOR;
-
-    T20_applySdmmcProfileByName(p, sdmmc_profile);
-    T20_seqInit(&p->seq_rb, p->cfg.output.sequence_frames, (uint16_t)(p->cfg.feature.mfcc_coeffs * 3U));
-    T20_configureRuntimeFilter(p);
-    T20_syncDerivedViewState(p);
-    return true;
-}
 
 
 void T20_syncDerivedViewState(CL_T20_Mfcc::ST_Impl* p) {
@@ -373,8 +276,6 @@ void T20_syncDerivedViewState(CL_T20_Mfcc::ST_Impl* p) {
     T20_updateSelectionSyncState(p);
     T20_updateTypeMetaAutoClassify(p);
 }
-
-
 
 
 // [1] 시퀀스 링버퍼 초기화
@@ -443,59 +344,6 @@ void T20_updateTypeMetaAutoClassify(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 
-bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
-    if (p == nullptr || p_out_buf == nullptr || p_len == 0) return false;
-
-    JsonDocument doc;
-    
-    // [1] 시스템 기본 및 특징 추출 설정
-    doc["version"]                         = G_T20_VERSION_STR;
-    doc["profile_name"]                    = p->runtime_cfg_profile_name;
-    doc["frame_size"]                      = p->cfg.feature.frame_size;
-    doc["hop_size"]                        = p->cfg.feature.hop_size;
-    doc["sample_rate_hz"]                  = p->cfg.feature.sample_rate_hz;
-    doc["mfcc_coeffs"]                     = p->cfg.feature.mfcc_coeffs;
-    doc["sequence_frames"]                 = p->cfg.output.sequence_frames;
-    doc["output_mode"]                     = (p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence";
-
-    // [2] 레코더 및 스토리지 상태
-    doc["recorder_backend"]                = (p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc";
-    doc["recorder_enabled"]                = p->recorder_enabled;
-    doc["sdmmc_profile"]                   = p->sdmmc_profile.profile_name;
-    doc["sdmmc_profile_applied"]           = p->sdmmc_profile_applied;
-    doc["sdmmc_last_apply_reason"]         = p->sdmmc_last_apply_reason;
-
-    // [3] 뷰어 및 데이터 동기화 설정
-    doc["selection_sync_enabled"]          = p->selection_sync_enabled;
-    doc["selection_sync_frame_from"]       = p->selection_sync_frame_from;
-    doc["selection_sync_frame_to"]         = p->selection_sync_frame_to;
-    doc["selection_sync_name"]             = p->selection_sync_name;
-    doc["selection_sync_range_valid"]      = p->selection_sync_range_valid;
-    doc["selection_sync_effective_from"]   = p->selection_sync_effective_from;
-    doc["selection_sync_effective_to"]     = p->selection_sync_effective_to;
-
-    // [4] 메타데이터 및 분류 정보
-    doc["type_meta_enabled"]               = p->type_meta_enabled;
-    doc["type_meta_name"]                  = p->type_meta_name;
-    doc["type_meta_kind"]                  = p->type_meta_kind;
-    doc["type_meta_auto_text"]             = p->type_meta_auto_text;
-
-    // [5] 로우레벨 레코더 파라미터 (디버깅용)
-    doc["batch_flush_records"]             = G_T20_RECORDER_BATCH_FLUSH_RECORDS;
-    doc["batch_flush_timeout_ms"]          = G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS;
-    doc["batch_watermark_low"]             = p->recorder_batch_watermark_low;
-    doc["batch_watermark_high"]            = p->recorder_batch_watermark_high;
-    doc["batch_idle_flush_ms"]             = p->recorder_batch_idle_flush_ms;
-    doc["dma_slot_count"]                  = G_T20_ZERO_COPY_DMA_SLOT_COUNT;
-    doc["dma_slot_bytes"]                  = G_T20_ZERO_COPY_DMA_SLOT_BYTES;
-
-    // [6] 버퍼 크기 검증 및 직렬화
-    size_t need = measureJson(doc) + 1U;
-    if (need > p_len) return false;
-    
-    serializeJson(doc, p_out_buf, p_len);
-    return true;
-}
 
 
 
@@ -552,6 +400,128 @@ bool T20_jsonWriteDoc(JsonDocument& p_doc, char* p_out_buf, uint16_t p_len) {
 
     // 직렬화 실행
     serializeJson(p_doc, p_out_buf, p_len);
+    return true;
+}
+
+
+/* ============================================================================
+ * 1. 프론트엔드 -> 백엔드: JSON 설정 파싱 (저장 처리)
+ * ========================================================================== */
+bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_text) {
+    if (p == nullptr || p_json_text == nullptr) return false;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, p_json_text);
+    if (err) return false;
+
+    // --- 1. 기본 문자열 및 열거형 설정 ---
+    const char* profile_name        = doc["profile_name"] | p->runtime_cfg_profile_name;
+    const char* backend             = doc["recorder_backend"] | ((p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc");
+    const char* sdmmc_profile       = doc["sdmmc_profile"] | p->sdmmc_profile.profile_name;
+    const char* output_mode         = doc["output_mode"] | ((p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence");
+    const char* selection_sync_name = doc["selection_sync_name"] | p->selection_sync_name;
+    const char* type_meta_name      = doc["type_meta_name"] | p->type_meta_name;
+    const char* type_meta_kind      = doc["type_meta_kind"] | p->type_meta_kind;
+
+    strlcpy(p->runtime_cfg_profile_name, profile_name, sizeof(p->runtime_cfg_profile_name));
+    strlcpy(p->selection_sync_name, selection_sync_name, sizeof(p->selection_sync_name));
+    strlcpy(p->type_meta_name, type_meta_name, sizeof(p->type_meta_name));
+    strlcpy(p->type_meta_kind, type_meta_kind, sizeof(p->type_meta_kind));
+
+    // --- 2. 프론트엔드 DSP 및 노이즈 파라미터 연동 ---
+    p->cfg.feature.hop_size                       = doc["hop_size"] | p->cfg.feature.hop_size;
+    p->cfg.feature.mfcc_coeffs                    = doc["mfcc_coeffs"] | p->cfg.feature.mfcc_coeffs;
+    p->cfg.preprocess.preemphasis.alpha           = doc["pre_alpha"] | p->cfg.preprocess.preemphasis.alpha;
+    p->cfg.preprocess.filter.cutoff_hz_1          = doc["filter_cutoff"] | p->cfg.preprocess.filter.cutoff_hz_1;
+    p->cfg.preprocess.noise.spectral_subtract_strength = doc["sub_strength"] | p->cfg.preprocess.noise.spectral_subtract_strength;
+    
+    if (doc.containsKey("noise_mode")) {
+        int n_mode = doc["noise_mode"].as<int>();
+        if (n_mode >= 0 && n_mode <= 2) {
+            p->cfg.preprocess.noise.mode = static_cast<EM_T20_NoiseMode_t>(n_mode);
+        }
+    }
+
+    // --- 3. 기존 시스템 및 레코더 설정 복구 ---
+    p->type_meta_enabled             = doc["type_meta_enabled"] | p->type_meta_enabled;
+    p->cfg.output.sequence_frames    = doc["sequence_frames"] | p->cfg.output.sequence_frames;
+    p->recorder_enabled              = doc["recorder_enabled"] | p->recorder_enabled;
+    p->selection_sync_enabled        = doc["selection_sync_enabled"] | p->selection_sync_enabled;
+    p->selection_sync_frame_from     = doc["selection_sync_frame_from"] | p->selection_sync_frame_from;
+    p->selection_sync_frame_to       = doc["selection_sync_frame_to"] | p->selection_sync_frame_to;
+    
+    p->recorder_batch_watermark_low  = doc["batch_watermark_low"] | p->recorder_batch_watermark_low;
+    p->recorder_batch_watermark_high = doc["batch_watermark_high"] | p->recorder_batch_watermark_high;
+    p->recorder_batch_idle_flush_ms  = doc["batch_idle_flush_ms"] | p->recorder_batch_idle_flush_ms;
+    
+    if (p->recorder_batch_watermark_low == 0) p->recorder_batch_watermark_low = 1;
+    if (p->recorder_batch_watermark_high < p->recorder_batch_watermark_low) {
+        p->recorder_batch_watermark_high = p->recorder_batch_watermark_low;
+    }
+
+    if (strcmp(backend, "sdmmc") == 0) p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+    else p->recorder_storage_backend = EN_T20_STORAGE_LITTLEFS;
+
+    if (strcmp(output_mode, "sequence") == 0) p->cfg.output.output_mode = EN_T20_OUTPUT_SEQUENCE;
+    else p->cfg.output.output_mode = EN_T20_OUTPUT_VECTOR;
+
+    // --- 4. 변경된 설정 기반 파생 상태 재설정 ---
+    T20_applySdmmcProfileByName(p, sdmmc_profile);
+    T20_seqInit(&p->seq_rb, p->cfg.output.sequence_frames, (uint16_t)(p->cfg.feature.mfcc_coeffs * 3U));
+    
+    // 필터 컷오프 변경 사항 즉시 적용
+    T20_configureRuntimeFilter(p);
+    T20_syncDerivedViewState(p);
+    
+    return true;
+}
+
+/* ============================================================================
+ * 2. 백엔드 -> 프론트엔드: JSON 설정 생성 (불러오기 처리)
+ * ========================================================================== */
+bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
+    if (p == nullptr || p_out_buf == nullptr || p_len == 0) return false;
+
+    JsonDocument doc;
+    
+    doc["version"]                         = G_T20_VERSION_STR;
+    doc["profile_name"]                    = p->runtime_cfg_profile_name;
+    doc["frame_size"]                      = p->cfg.feature.frame_size;
+    doc["hop_size"]                        = p->cfg.feature.hop_size;
+    doc["sample_rate_hz"]                  = p->cfg.feature.sample_rate_hz;
+    doc["mfcc_coeffs"]                     = p->cfg.feature.mfcc_coeffs;
+    doc["sequence_frames"]                 = p->cfg.output.sequence_frames;
+    doc["output_mode"]                     = (p->cfg.output.output_mode == EN_T20_OUTPUT_VECTOR) ? "vector" : "sequence";
+
+    // UI 폼 렌더링용 DSP 설정 동기화
+    doc["pre_alpha"]                       = p->cfg.preprocess.preemphasis.alpha;
+    doc["filter_cutoff"]                   = p->cfg.preprocess.filter.cutoff_hz_1;
+    doc["noise_mode"]                      = static_cast<int>(p->cfg.preprocess.noise.mode);
+    doc["sub_strength"]                    = p->cfg.preprocess.noise.spectral_subtract_strength;
+
+    doc["recorder_backend"]                = (p->recorder_storage_backend == EN_T20_STORAGE_LITTLEFS) ? "littlefs" : "sdmmc";
+    doc["recorder_enabled"]                = p->recorder_enabled;
+    doc["sdmmc_profile"]                   = p->sdmmc_profile.profile_name;
+    doc["sdmmc_profile_applied"]           = p->sdmmc_profile_applied;
+    doc["sdmmc_last_apply_reason"]         = p->sdmmc_last_apply_reason;
+
+    doc["selection_sync_enabled"]          = p->selection_sync_enabled;
+    doc["selection_sync_frame_from"]       = p->selection_sync_frame_from;
+    doc["selection_sync_frame_to"]         = p->selection_sync_frame_to;
+    doc["selection_sync_name"]             = p->selection_sync_name;
+    doc["selection_sync_range_valid"]      = p->selection_sync_range_valid;
+    doc["type_meta_enabled"]               = p->type_meta_enabled;
+    doc["type_meta_name"]                  = p->type_meta_name;
+    doc["type_meta_kind"]                  = p->type_meta_kind;
+
+    doc["batch_watermark_low"]             = p->recorder_batch_watermark_low;
+    doc["batch_watermark_high"]            = p->recorder_batch_watermark_high;
+    doc["batch_idle_flush_ms"]             = p->recorder_batch_idle_flush_ms;
+
+    size_t need = measureJson(doc) + 1U;
+    if (need > p_len) return false;
+    
+    serializeJson(doc, p_out_buf, p_len);
     return true;
 }
 

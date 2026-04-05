@@ -184,6 +184,36 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         doc["fft_size"] = G_T20_FFT_SIZE;
         T20_sendJsonDocument(request, doc);
     });
+    
+    // [추가] 파일 탐색기 리스트 제공 (refreshFileList 대응)
+    v_server->on((base + "/recorder_index").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
+        char json[G_T20_WEB_LARGE_JSON_BUF_SIZE] = {0};
+        // 이미 만들어둔 T20_buildRecorderIndexJsonText 함수 활용
+        T20_sendJsonText(request, T20_buildRecorderIndexJsonText(p, json, sizeof(json)), json);
+    });
+
+    // [추가] 현재 설정값 조회 (loadSettings 대응)
+    v_server->on((base + "/runtime_config").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
+        char json[G_T20_WEB_JSON_BUF_SIZE] = {0};
+        T20_sendJsonText(request, T20_buildRuntimeConfigJsonText(p, json, sizeof(json)), json);
+    });
+
+    // [추가] 프론트엔드에서 설정값 변경 (saveSettings 대응)
+    // ESPAsyncWebServer에서 POST Body(JSON) 처리를 위한 핸들러
+    v_server->addHandler(new AsyncCallbackJsonWebHandler((base + "/runtime_config").c_str(), 
+        [p](AsyncWebServerRequest *request, JsonVariant &jsonVariant) {
+            JsonDocument doc;
+            doc.set(jsonVariant);
+            char json_text[G_T20_WEB_JSON_BUF_SIZE];
+            serializeJson(doc, json_text, sizeof(json_text));
+            
+            // JSON 문자열을 파서에 넘겨 설정 적용
+            bool ok = T20_applyRuntimeConfigJsonText(p, json_text);
+            T20_sendJsonText(request, ok, T250_Web::JSON_OK);
+        }
+    ));
+
+
 }
 
 /* ----------------------------------------------------------------------------
@@ -315,4 +345,6 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
     // 정적 프론트엔드 라우트 및 글로벌 OPTIONS(CORS) 처리는 가장 마지막에 등록
     T20_registerStaticFrontendHandlers(v_server);
 }
+
+
 
