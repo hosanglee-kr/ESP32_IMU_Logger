@@ -156,6 +156,64 @@ void CL_T20_Mfcc::printStatus(Stream& p_out) const {
 	p_out.println(F("---------------------------------------"));
 }
 
+
+bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len) {
+    if (!p || !p_frame) return false;
+
+    // SIMD 벡터 복사를 위한 16바이트 정렬 할당
+    alignas(16) float current_mfcc[G_T20_MFCC_COEFFS_MAX];
+    alignas(16) float delta[G_T20_MFCC_COEFFS_MAX];
+    alignas(16) float delta2[G_T20_MFCC_COEFFS_MAX];
+
+    // 1. 현재 프레임에서 MFCC 추출 (SIMD 최적화 엔진 호출)
+    T20_computeMFCC(p, p_frame, current_mfcc);
+    
+    // 2. 히스토리 버퍼에 최신 MFCC 푸시
+    T20_pushMfccHistory(p, current_mfcc, p->cfg.feature.mfcc_coeffs);
+    
+    // 3. 히스토리가 꽉 찼을 때(5프레임) 39차 벡터 완성
+    if (p->mfcc_history_count >= 5) {
+        uint16_t dim = p->cfg.feature.mfcc_coeffs;
+
+        // 중앙 프레임(Index 2)에 대한 Delta/Delta-Delta 연산
+        T20_computeDeltaFromHistory(p, dim, 2, delta);
+        T20_computeDeltaDeltaFromHistory(p, dim, delta2);
+
+        // 4. 39차 벡터 통합 및 Web 전송 데이터 동기화
+        // Web 전송 도중 데이터가 찢어지는 현상(Tearing)을 방지하기 위한 뮤텍스 락 적용
+        if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            T20_buildVector(p->mfcc_history[2], delta, delta2, dim, p->latest_feature.vector);
+            
+            // Web 뷰어 모니터링용 파형 및 스펙트럼 복사
+            memcpy(p->viewer_last_waveform, p_frame, sizeof(float) * G_T20_FFT_SIZE);
+            memcpy(p->viewer_last_spectrum, p->power, sizeof(float) * ((G_T20_FFT_SIZE/2)+1));
+            
+            p->latest_vector_valid = true;
+            xSemaphoreGive(p->mutex);
+        }
+
+        p->viewer_last_frame_id++;
+
+        // 5. 웹 프론트엔드로 바이너리 실시간 전송
+        T20_broadcastBinaryData(p);
+        
+        // 6. SD 카드 로깅 및 Zero-Copy DMA 스테이지 투입
+        if (p->recorder_enabled) {
+            ST_T20_RecorderVectorMessage_t rec_msg;
+            rec_msg.frame_id = p->viewer_last_frame_id;
+            rec_msg.vector_len = dim * 3; 
+            memcpy(rec_msg.vector, p->latest_feature.vector, sizeof(float) * rec_msg.vector_len);
+            
+            T20_stageVectorToDmaSlot(p, &rec_msg);
+        }
+        return true;
+    }
+    
+    return false; // 히스토리가 쌓이는 초기에는 false 반환
+}
+
+
+/*
 bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t p_len) {
     if (!p || !p_frame) return false;
 
@@ -200,6 +258,7 @@ bool T20_processOneFrame(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, uint16_t
     
     return false; // 히스토리가 쌓이는 중에는 false 반환
 }
+*/
 
 
 // [4-1] 39차 특징 벡터 Web 전송용 JSON 빌더

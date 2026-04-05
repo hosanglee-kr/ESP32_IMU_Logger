@@ -346,3 +346,38 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfc
     T20_applyMelFilterbank(p, p->power, p->log_mel);
     T20_computeDCT2(p->log_mel, p_mfcc_out, p->cfg.feature.mel_filters, p->cfg.feature.mfcc_coeffs);
 }
+
+
+
+/* ============================================================================
+ * T20_processTask 및 프레임 처리 연동부 (C++17 SIMD 최적화 적용)
+ * ========================================================================== */
+
+void T20_processTask(void* p_arg) {
+    CL_T20_Mfcc::ST_Impl* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
+    ST_T20_FrameMessage_t msg;
+    
+    // [SIMD 최적화] ESP-DSP 연산을 위해 16바이트 정렬된 로컬 버퍼 사용
+    alignas(16) float dsp_input[G_T20_FFT_SIZE];
+
+    for (;;) {
+        // 센서 태스크로부터 프레임 완료 신호 대기
+        if (xQueueReceive(p->frame_queue, &msg, portMAX_DELAY) == pdTRUE) {
+            
+            // [최적화 핑퐁 버퍼 연동] 
+            // msg.frame_index를 버퍼 인덱스로 활용 (0 ~ G_T20_RAW_FRAME_BUFFERS-1)
+            // 이를 통해 센서 태스크(Core 0)가 기록 중인 메모리를 읽는 데이터 레이스(Data Race) 원천 차단
+            uint8_t read_idx = msg.frame_index; 
+            
+            // 공유 다중 버퍼에서 로컬 정렬 버퍼로 고속 통복사
+            memcpy(dsp_input, p->frame_buffer[read_idx], sizeof(float) * G_T20_FFT_SIZE);
+
+            // 처리 시간 모니터링을 위한 타임스탬프 갱신
+            p->last_frame_process_ms = millis();
+
+            // DSP 파이프라인으로 1프레임 투입
+            T20_processOneFrame(p, dsp_input, G_T20_FFT_SIZE);
+        }
+    }
+}
+
