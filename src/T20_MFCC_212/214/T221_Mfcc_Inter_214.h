@@ -425,6 +425,24 @@ void    T20_updateTypeMetaAutoClassify(CL_T20_Mfcc::ST_Impl* p);
 
 
 
+
+bool				T20_buildRecorderFinalizeBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+bool				T20_buildIoSyncBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+bool				T20_getQueryParamPath(AsyncWebServerRequest* request, const char* p_name, char* p_out_buf, uint16_t p_len);
+bool				T20_loadTypePreviewText(CL_T20_Mfcc::ST_Impl* p, const char* p_path);
+void				T20_updateTypePreviewSchemaGuess(CL_T20_Mfcc::ST_Impl* p);
+void				T20_updateTypePreviewSamples(CL_T20_Mfcc::ST_Impl* p);
+uint32_t			T20_getQueryParamUint32(AsyncWebServerRequest* request, const char* p_name, uint32_t p_default, uint32_t p_min, uint32_t p_max);
+bool				T20_buildRecorderCsvTableAdvancedJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len, const char* p_path, uint32_t p_bytes,
+															  const char* p_global_filter, const char* p_col_filters_csv,
+															  uint16_t p_sort_col, uint16_t p_sort_dir, uint16_t p_page, uint16_t p_page_size);
+bool				T20_buildBuildSanityJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+
+
+
+
+
+
 /*
 bool				T20_validateConfig(const ST_T20_Config_t* p_cfg);
 void				T20_initProfiles(CL_T20_Mfcc::ST_Impl* p);
@@ -1059,16 +1077,4 @@ bool T20_bmi270ActualReadRegister(CL_T20_Mfcc::ST_Impl* p, uint8_t p_reg, uint8_
 
 */
 
-
-bool				T20_buildRecorderFinalizeBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
-bool				T20_buildIoSyncBundleJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
-bool				T20_getQueryParamPath(AsyncWebServerRequest* request, const char* p_name, char* p_out_buf, uint16_t p_len);
-bool				T20_loadTypePreviewText(CL_T20_Mfcc::ST_Impl* p, const char* p_path);
-void				T20_updateTypePreviewSchemaGuess(CL_T20_Mfcc::ST_Impl* p);
-void				T20_updateTypePreviewSamples(CL_T20_Mfcc::ST_Impl* p);
-uint32_t			T20_getQueryParamUint32(AsyncWebServerRequest* request, const char* p_name, uint32_t p_default, uint32_t p_min, uint32_t p_max);
-bool				T20_buildRecorderCsvTableAdvancedJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len, const char* p_path, uint32_t p_bytes,
-															  const char* p_global_filter, const char* p_col_filters_csv,
-															  uint16_t p_sort_col, uint16_t p_sort_dir, uint16_t p_page, uint16_t p_page_size);
-bool				T20_buildBuildSanityJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
 
