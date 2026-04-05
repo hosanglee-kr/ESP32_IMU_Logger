@@ -10,6 +10,9 @@
 
 #include "T221_Mfcc_Inter_214.h"
 
+inline constexpr uint32_t BINARY_HEADER_RECORD_COUNT_OFFSET = 20U;
+
+
 /* [v212 추가] DMA 안전 쓰기를 위한 버퍼 정렬 체크 헬퍼 */
 static inline bool T20_isDmaSafe(const void* p_ptr) {
     return ((uintptr_t)p_ptr % 32 == 0);
@@ -72,6 +75,50 @@ bool T20_commitDmaSlotToFile(CL_T20_Mfcc::ST_Impl* p, uint8_t p_slot_index) {
     return true;
 }
 
+/* ============================================================================
+ * 최적화된 레코더 태스크 (Zero-Copy DMA 다이렉트 라우팅 적용)
+ * ========================================================================== */
+void T20_recorderTask(void* p_arg) {
+    CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
+    ST_T20_RecorderVectorMessage_t msg;
+
+    for (;;) {
+        // 레코더가 비활성화 상태이거나 객체가 유효하지 않으면 대기
+        if (p == nullptr || !p->recorder_enabled) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
+        // 큐에서 39차 특징 벡터 수신 (200ms 타임아웃)
+        if (xQueueReceive(p->recorder_queue, &msg, pdMS_TO_TICKS(200)) == pdTRUE) {
+            
+            // [최적화 핵심] 이중 버퍼링(batch 배열) 로직을 제거하고, 
+            // 큐에서 꺼낸 데이터를 즉시 32-byte 정렬된 DMA 슬롯에 복사
+            if (T20_stageVectorToDmaSlot(p, &msg)) {
+                p->recorder_record_count++;          // 세션 누적 레코드 수 갱신
+                p->recorder_batch_count++;           // 현재 Flush 대기 중인 카운트 갱신
+                p->recorder_batch_last_push_ms = millis(); 
+            }
+
+            // 설정된 High Watermark(상한선) 도달 또는 명시적인 Flush 요청 시 디스크 쓰기 트리거
+            if (p->recorder_flush_requested || p->recorder_batch_count >= p->recorder_batch_watermark_high) {
+                T20_recorderFlushNow(p);
+                T20_saveRecorderIndex(p); // 파일 로테이션/크기 변경 사항을 index.json에 동기화
+            }
+        } else {
+            // 200ms 동안 큐에 새 데이터가 없는 Idle 상태 처리
+            // DMA 슬롯에 기록 대기 중인 데이터가 있고, 설정된 유휴 대기 시간(idle_flush_ms)을 초과했다면 강제 플러시 (데이터 유실 방지)
+            if (p->recorder_batch_count > 0 && (millis() - p->recorder_batch_last_push_ms) >= p->recorder_batch_idle_flush_ms) {
+                T20_recorderFlushNow(p);
+                T20_saveRecorderIndex(p);
+            }
+        }
+    }
+}
+
+
+
+/*
 void T20_recorderTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     ST_T20_RecorderVectorMessage_t msg;
@@ -102,7 +149,7 @@ void T20_recorderTask(void* p_arg) {
         }
     }
 }
-
+*/
 
 
 bool T20_recorderBatchPush(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVectorMessage_t* p_msg) {
@@ -208,10 +255,9 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
     // 2. 바이너리 헤더 업데이트 (Record Count 쓰기)
     File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, p->recorder_active_path, "r+");
     if (file) {
-        // record_count 필드 위치로 이동 (ST_T20_RecorderBinaryHeader_t 구조체 참조)
-        // magic(4) + version(2) + header_size(2) + sample_rate(4) + fft(2) + mfcc(2) + mel(2) + seq(2) = 20바이트 뒤
-        file.seek(20); 
+        file.seek(BINARY_HEADER_RECORD_COUNT_OFFSET); 
         uint32_t final_count = p->recorder_record_count;
+        
         file.write((const uint8_t*)&final_count, sizeof(final_count));
         file.close();
     }
@@ -302,7 +348,23 @@ bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     return T20_applyRuntimeConfigJsonText(p, json_text.c_str());
 }
 
+
 bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
+    
+    if (p == nullptr) return false;
+    
+    // 커스텀 핀 설정이 있는 경우 마운트 전 명시적으로 적용
+    if (p->sdmmc_profile_applied && p->sdmmc_profile.clk_pin != G_T20_SDMMC_PIN_UNASSIGNED) {
+        SD_MMC.setPins(
+               p->sdmmc_profile.clk_pin, 
+               p->sdmmc_profile.cmd_pin, 
+               p->sdmmc_profile.d0_pin, 
+               p->sdmmc_profile.d1_pin, 
+               p->sdmmc_profile.d2_pin, 
+               p->sdmmc_profile.d3_pin
+        );
+    }
+    
     // [v214] 1-bit 모드 고정 (안정성 우선)
     // ESP32-S3: 1-bit 모드 사용 시 D1, D2, D3 핀을 다른 용도로 사용 가능
     if (SD_MMC.begin("/sdcard", true)) { 
@@ -477,6 +539,7 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     file.close();
     return true;
 }
+
 
 
 
