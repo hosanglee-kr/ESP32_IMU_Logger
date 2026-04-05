@@ -47,11 +47,11 @@
  * ========================================================================== */
 
 /* --- DSP --- */
-static const uint16_t G_T20_FFT_SIZE               = 256U;
-static const float    G_T20_SAMPLE_RATE_HZ         = 1600.0f;
-static const uint16_t G_T20_MEL_FILTERS            = 26U;
-static const uint16_t G_T20_MFCC_COEFFS_MAX        = 32U;
-static const uint16_t G_T20_MFCC_COEFFS_DEFAULT    = 13U;
+inline constexpr uint16_t G_T20_FFT_SIZE               = 256U;
+inline constexpr float    G_T20_SAMPLE_RATE_HZ         = 1600.0f;
+inline constexpr uint16_t G_T20_MEL_FILTERS            = 26U;
+inline constexpr uint16_t G_T20_MFCC_COEFFS_MAX        = 32U;
+inline constexpr uint16_t G_T20_MFCC_COEFFS_DEFAULT    = 13U;
 
 #define G_T20_FEATURE_DIM_MAX   (G_T20_MFCC_COEFFS_MAX * 3U)
 
@@ -93,15 +93,15 @@ typedef struct {
 
 
 
-static const ST_T20_RuntimeLimits_t G_T20_RUNTIME_LIMITS = {
+inline constexpr ST_T20_RuntimeLimits_t G_T20_RUNTIME_LIMITS = {
     .queue_depth = 16U,
     .frame_max_samples = 1024U,
     .temp_buffer_size = 512U
 };
 
 /* --- Hardware --- */
-static const uint32_t G_T20_SPI_FREQ_HZ = 10000000UL;
-static const uint8_t  G_T20_BMI270_CHIP_ID_EXPECTED = 0x24U;
+inline constexpr uint32_t G_T20_SPI_FREQ_HZ = 10000000UL;
+inline constexpr uint8_t  G_T20_BMI270_CHIP_ID_EXPECTED = 0x24U;
 
 /* ============================================================================
  * Common Enums

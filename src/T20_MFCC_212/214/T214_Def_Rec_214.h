@@ -43,7 +43,7 @@ inline constexpr uint32_t G_T20_RECORDER_BATCH_FLUSH_TIMEOUT_MS = 2000U;
 inline constexpr uint8_t G_T20_RECORDER_ROTATE_KEEP_MAX = 8U;
 inline constexpr char const* G_T20_RECORDER_ROTATE_PREFIX     = "/rec_";
 inline constexpr char const* G_T20_RECORDER_ROTATE_EXT        = ".bin";
-// static const char* G_T20_RECORDER_FALLBACK_PATH     = "/rec_fallback.bin";
+// inline constexpr char* G_T20_RECORDER_FALLBACK_PATH     = "/rec_fallback.bin";
 
 
 // --- Recorder 상세 상태 관리 (v210 상태 매핑) ---
@@ -65,7 +65,7 @@ typedef struct {
     uint32_t slot_bytes;
 } ST_T20_DmaConfig_t;
 
-static const ST_T20_DmaConfig_t G_T20_DMA_CONFIG = {
+inline constexpr ST_T20_DmaConfig_t G_T20_DMA_CONFIG = {
     .dma_align_bytes = 32U,
     .zero_copy_slot_max = 2U,
     .slot_bytes = 1024U
@@ -104,7 +104,7 @@ typedef struct {
     uint16_t flush_interval_ms;
 } ST_T20_RecorderLimits_t;
 
-static const ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
+inline constexpr ST_T20_RecorderLimits_t G_T20_RECORDER_LIMITS = {
     .batch_count      = 16U,
     .watermark_low    = 2U,
     .watermark_high   = 8U,
