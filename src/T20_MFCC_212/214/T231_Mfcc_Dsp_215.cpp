@@ -84,8 +84,8 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
 // esp-dsp에 hammin 미지원해서 자체 구현
 void T20_dsps_wind_hamming_f32(float *data, int len) {
     // Hamming 윈도우의 alpha 값은 대략 0.54입니다.
-    // dsps_wind_gen_f32(배열, 길이, alpha)
-    dsps_wind_gen_f32(data, len, 0.54f);
+    // dsps_wind_cos_f32(배열, 길이, alpha)
+    dsps_wind_cos_f32(data, len, 0.54f);
 }
 
 
