@@ -23,6 +23,7 @@ float T20_melToHz(float p_mel) {
     return 700.0f * (powf(10.0f, p_mel / 2595.0f) - 1.0f);
 }
 
+
 /* ============================================================================
  * 2. 초기화 및 윈도우/필터뱅크 생성
  * ========================================================================== */
@@ -79,8 +80,18 @@ bool T20_initDSP(CL_T20_Mfcc::ST_Impl* p) {
     return T20_configureRuntimeFilter(p);
 }
 
+// #include "dsps_window.h"
+// esp-dsp에 hammin 미지원해서 자체 구현
+void T20_dsps_wind_hamming_f32(float *data, int len) {
+    // Hamming 윈도우의 alpha 값은 대략 0.54입니다.
+    // dsps_wind_gen_f32(배열, 길이, alpha)
+    dsps_wind_gen_f32(data, len, 0.54f);
+}
+
+
 void T20_buildHammingWindow(CL_T20_Mfcc::ST_Impl* p) {
-    dsps_wind_hamming_f32(p->window, G_T20_FFT_SIZE);
+    T20_dsps_wind_hamming_f32(p->window, G_T20_FFT_SIZE);
+    // dsps_wind_hamming_f32(p->window, G_T20_FFT_SIZE);
 }
 
 /* ============================================================================
