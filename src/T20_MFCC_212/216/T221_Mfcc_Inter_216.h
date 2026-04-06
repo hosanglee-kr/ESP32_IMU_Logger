@@ -273,6 +273,10 @@ struct CL_T20_Mfcc::ST_Impl {
         recorder_last_flush_ms = 0;
         recorder_batch_count = 0; 
         recorder_batch_last_push_ms = 0;
+        
+        // 레코더 배치 벡터 버퍼 초기화 (메모리 찌꺼기 방지)
+        memset(recorder_batch_vectors, 0, sizeof(recorder_batch_vectors));
+        
         recorder_batch_watermark_low  = T20::C10_Rec::BATCH_WMARK_LOW;
         recorder_batch_watermark_high = T20::C10_Rec::BATCH_WMARK_HIGH;
         recorder_batch_idle_flush_ms  = T20::C10_Rec::BATCH_IDLE_FLUSH_MS;
@@ -412,4 +416,5 @@ uint32_t T20_getQueryParamUint32(AsyncWebServerRequest* request, const char* p_n
 bool    T20_buildRecorderCsvTableAdvancedJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len, const char* p_path, uint32_t p_bytes, const char* p_global_filter, const char* p_col_filters_csv, uint16_t p_sort_col, uint16_t p_sort_dir, uint16_t p_page, uint16_t p_page_size);
 bool    T20_buildBuildSanityJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
 bool    T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
+
 

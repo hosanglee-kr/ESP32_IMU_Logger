@@ -37,6 +37,9 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
     
     // G_T20_SYSTEM_LIMITS 래퍼 삭제에 따른 직접 상수 접근
 	cfg.preprocess.noise.noise_learn_frames			= T20::C10_DSP::NOISE_MIN_FRAMES;
+	
+	// 적응형 노이즈 업데이트 비율 설정 (예: 5%씩 최신 스펙트럼 반영)
+    cfg.preprocess.noise.adaptive_alpha             = 0.05f; 
 
 	cfg.preprocess.pipeline.stage_count				= 4;
 	cfg.preprocess.pipeline.stages[0].enable		= true;
@@ -71,4 +74,5 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
 
 	return cfg;
 }
+
 
