@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T20 MFCC v214 Control</title>
+    <link rel="stylesheet" href="style_214_002.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">T20 MFCC <span>v214</span></div>
+        <div id="status-tag" class="tag">OFFLINE</div>
+    </header>
+
+    <nav class="tab-bar">
+        <button class="tab-btn active" onclick="showTab('tab-dash')">Dashboard</button>
+        <button class="tab-btn" onclick="showTab('tab-settings')">Settings</button>
+        <button class="tab-btn" onclick="showTab('tab-files')">Explorer</button>
+        <button class="tab-btn" onclick="showTab('tab-diag')">Diagnostics</button>
+    </nav>
+
+    <main class="container">
+        <section id="tab-dash" class="tab-content active">
+            <div class="toolbar">
+                <button id="btn-measure" class="btn primary">MEASURE START</button>
+                <button id="btn-learn" class="btn warning">NOISE LEARN</button>
+                <div class="mini-stat">FPS: <span id="val-fps">0</span> | Dropped: <span id="val-dropped">0</span></div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-waveform"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-spectrum"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-mfcc"></canvas>
+            </div>
+        </section>
+
+        <section id="tab-settings" class="tab-content">
+            <div class="card">
+                <h3>DSP & Feature Configuration</h3>
+                <form id="form-config">
+                    <div class="form-group">
+                        <label>Hop Size (Samples)</label>
+                        <input type="number" name="hop_size" min="64" max="256">
+                    </div>
+                    <div class="form-group">
+                        <label>MFCC Coefficients (1-13)</label>
+                        <input type="number" name="mfcc_coeffs" min="1" max="13">
+                    </div>
+                    <div class="form-group">
+                        <label>Noise Mode</label>
+                        <select name="noise_mode">
+                            <option value="0">OFF</option>
+                            <option value="1">FIXED</option>
+                            <option value="2">ADAPTIVE</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Spectral Subtract Strength</label>
+                        <input type="number" name="subtract_strength" step="0.1" min="0" max="5">
+                    </div>
+                    <button type="button" onclick="saveSettings()" class="btn primary">APPLY SETTINGS</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="tab-files" class="tab-content">
+            <div class="card">
+                <div class="toolbar">
+                    <h3>SD_MMC Files</h3>
+                    <button onclick="refreshFileList()" class="btn">Refresh</button>
+                </div>
+                <table>
+                    <thead><tr><th>File</th><th>Size (KB)</th><th>Action</th></tr></thead>
+                    <tbody id="file-list"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="tab-diag" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h3>Sensor Bridge</h3>
+                    <div id="diag-sensor">Loading...</div>
+                </div>
+                <div class="card">
+                    <h3>System Events</h3>
+                    <div id="event-log" class="log-box"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="app_214_002.js"></script>
+</body>
+</html>

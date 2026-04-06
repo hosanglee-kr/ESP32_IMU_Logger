@@ -13,11 +13,41 @@
 #endif
 
 
-#define T04
+//// #define T04
 #ifdef T04
-	#include "T004/A10_Main_012.h"
+	#include "T004/A10_Main_014.h"
 #endif
 
+
+// #define T20
+#ifdef T20
+	#include "T20_MFCC_008/T20_Main_010.h"
+	// #include "T20_MFCC_005/T20_Main_007.h"
+#endif
+
+
+/*
+#define T20_11
+#ifdef T20_11
+    // 1. 버전 정의
+    #define VER  083
+
+    // 2. 매크로를 문자열로 변환하기 위한 보조 매크로
+    #define TO_STR(x) #x
+    #define GET_PATH(v) TO_STR(T20_MFCC_011/v/T20_Main_##v.h)
+
+    // 3. 최종 include (계산된 경로 적용)
+    #include GET_PATH(VER)
+#endif
+*/
+
+
+#define T20_11
+#ifdef T20_11
+    #include "T20_MFCC_212/216/T200_Main_216.h"
+	// #include "T20_MFCC_212/214/T200_Main_214.h"
+	// #include "T20_MFCC_011/212/T20_Main_211.h"
+#endif
 
 
 void setup() {
@@ -38,6 +68,17 @@ void setup() {
 		A10_init();
 	#endif
 
+	#ifdef T20
+		T20_init();
+	#endif
+
+
+
+	#ifdef T20_11
+		T20_init();
+	#endif
+
+
 }
 
 void loop() {
@@ -54,5 +95,13 @@ void loop() {
 		A10_run();
 	#endif
 
+
+	#ifdef T20
+		T20_run();
+	#endif
+
+	#ifdef T20_11
+		T20_run();
+	#endif
 
 }

@@ -109,6 +109,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
+          
+      - name: Clean up esp-dsp for S3 build
+        run: |
+          DSP_DIR=".pio/libdeps/${{ matrix.environments }}/esp-dsp"
+          pio lib install
+          if [ -d "$DSP_DIR" ]; then
+            # 1. 모든 테스트 및 예제 폴더 삭제
+            find "$DSP_DIR" -type d -name "test" -exec rm -rf {} +
+            find "$DSP_DIR" -type d -name "test_sim" -exec rm -rf {} +
+            find "$DSP_DIR" -type d -name "test_app" -exec rm -rf {} +
+            rm -rf "$DSP_DIR/examples"
+            rm -rf "$DSP_DIR/applications"
+            
+            # 2. (선택사항) S3에서 사용하지 않는 타 아키텍처 파일 삭제 (충돌 방지)
+            # RISC-V(arp4) 전용 어셈블리 삭제
+            find "$DSP_DIR" -name "*_arp4.S" -delete
+            echo "Deep cleanup for S3 complete."
+          fi
+        shell: bash
+
 
       - name: Run PlatformIO build for ${{ matrix.environments }}
         run: pio run -e ${{ matrix.environments }}
