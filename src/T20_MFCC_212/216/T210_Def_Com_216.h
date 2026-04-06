@@ -152,16 +152,8 @@ namespace T20 {
         inline constexpr char const* MIME_JSON         = "application/json; charset=utf-8";
         inline constexpr char const* MIME_OCTET        = "application/octet-stream";
         inline constexpr char const* MIME_HTML         = "text/html";
+        inline constexpr char const* MIME_TEXT         = "text/plain";
         
-        inline constexpr char const* JSON_OK           = "{\"ok\":true}";
-        inline constexpr char const* JSON_FAIL         = "{\"ok\":false}";
-        
-        inline constexpr char const* WS_URI            = "/api/t20/ws";
-
-        inline constexpr uint16_t JSON_BUF_SIZE        = 2048U;
-        inline constexpr uint16_t LARGE_JSON_BUF_SIZE  = 8192U;
-        inline constexpr uint32_t BTN_DEBOUNCE_MS      = 500U;
-    }
 
     // --- 9. [NEW] 폴더 아키텍처 및 파일 경로 관리 ---
     namespace C10_Path {

@@ -282,7 +282,7 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server) {
         request->send(LittleFS, path, T20::C10_Web::MIME_HTML);
     });
     v_server->serveStatic("/", LittleFS, T20::C10_Path::LFS_DIR_WEB)
-            .setDefaultFile(T20::C10_Path::LFS_FILE_WEB_IDX)
+            .setDefaultFile(T20::C10_Path::LFS_FILE_WEB_IDX);
 
     /*
     v_server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
