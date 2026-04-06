@@ -1,6 +1,6 @@
 /* ============================================================================
  * File: T210_Def_Com_216.h
- * Summary: 시스템 전역 상수 (미사용 제거 및 연관 계산식 완벽 적용)
+ * Summary: 시스템 전역 공통 정의 및 전역 상수 (C++17 Namespace 기반 통폐합)
  * Compiler: gnu++17 기준 최적화
  * ========================================================================== */
 #pragma once
@@ -9,17 +9,23 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* ----------------------------------------------------------------------------
+ * [통합 전역 상수 네임스페이스] 
+ * 기존 G_T20_ 접두사를 T20:: 네임스페이스로 대체합니다.
+ * ---------------------------------------------------------------------------- */
 namespace T20 {
     
     // --- 1. 시스템 및 RTOS 공통 ---
     namespace C10_Sys {
-        inline constexpr char const* VERSION_STR           = "T20_Mfcc_v216";
+        inline constexpr char const* VERSION_STR           = "T20_Mfcc_v215";
         inline constexpr uint16_t QUEUE_LEN                = 8U;
         inline constexpr uint16_t CFG_PROFILE_COUNT        = 4U;
         inline constexpr uint16_t RUNTIME_CFG_PROFILE_NAME_MAX = 32U;
         inline constexpr uint16_t RAW_FRAME_BUFFERS        = 4U;
         inline constexpr uint16_t SEQUENCE_FRAMES_MAX      = 16U;
         inline constexpr uint16_t SEQUENCE_FRAMES_DEFAULT  = 16U;
+        inline constexpr uint16_t RUNTIME_SIM_FRAME_INTERVAL_MS = 160U;
+        inline constexpr float    RUNTIME_SIM_AMPLITUDE_DEFAULT = 0.20f;
     }
 
     // --- 2. 하드웨어 핀 맵 (ESP32-S3) ---
@@ -46,22 +52,12 @@ namespace T20 {
     namespace C10_DSP {
         inline constexpr float    MATH_PI          = 3.14159265358979323846f;
         inline constexpr float    EPSILON          = 1.0e-12f;
-        
         inline constexpr uint16_t FFT_SIZE         = 256U;
-        // [계산식] FFT 절반(Nyquist) + 1 (DC 성분)
-        inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U; 
-        
         inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;
         inline constexpr uint16_t MEL_FILTERS      = 26U;
-        
         inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;
         inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;
-        
-        // [계산식] 특징 벡터 파생 공식 (MFCC + Delta + Delta2 = x3)
-        inline constexpr uint16_t FEATURE_MULTIPLIER = 3U;
-        inline constexpr uint16_t FEATURE_DIM_MAX  = MFCC_COEFFS_MAX * FEATURE_MULTIPLIER; // 96
-        inline constexpr uint16_t FEATURE_DIM_DEF  = MFCC_COEFFS_DEF * FEATURE_MULTIPLIER; // 39
-        
+        inline constexpr uint16_t FEATURE_DIM_MAX  = MFCC_COEFFS_MAX * 3U; // 96
         inline constexpr uint16_t MFCC_HISTORY     = 5U;
         inline constexpr uint8_t  PREPROCESS_STAGE_MAX = 8U;
         inline constexpr uint16_t NOISE_MIN_FRAMES = 8U;
@@ -73,6 +69,7 @@ namespace T20 {
         inline constexpr uint8_t  CHIP_ID_EXPECTED = 0x24U;
         inline constexpr uint8_t  BURST_AXIS_COUNT = 3U;
         inline constexpr uint8_t  STATUS_TEXT_MAX  = 48U;
+        inline constexpr uint8_t  LIVE_SOURCE_MODE = 1U;
 
         inline constexpr uint8_t AXIS_MODE_GYRO_Z    = 0U;
         inline constexpr uint8_t AXIS_MODE_ACC_Z     = 1U;
@@ -99,17 +96,6 @@ namespace T20 {
         inline constexpr uint32_t BINARY_MAGIC       = 0x54323042UL;
         inline constexpr uint16_t BINARY_VERSION     = 1U;
         inline constexpr uint16_t BIN_RESERVED_BYTES = 8U;
-
-        // [계산식] 바이너리 헤더 구조체의 record_count 위치를 바이트 크기 합산으로 명확히 지정 (20U)
-        inline constexpr uint32_t HEADER_RECORD_OFFSET = 
-            sizeof(uint32_t) + // magic
-            sizeof(uint16_t) + // version
-            sizeof(uint16_t) + // header_size
-            sizeof(uint32_t) + // sample_rate_hz
-            sizeof(uint16_t) + // fft_size
-            sizeof(uint16_t) + // mfcc_dim
-            sizeof(uint16_t) + // mel_filters
-            sizeof(uint16_t);  // sequence_frames
 
         inline constexpr uint8_t  DMA_SLOT_COUNT     = 3U;
         inline constexpr uint32_t DMA_SLOT_BYTES     = 1024U;
@@ -163,12 +149,9 @@ namespace T20 {
 
     // --- 8. Web UI & WebSocket ---
     namespace C10_Web {
-        // [계산식] DSP 도메인의 상수를 직접 참조하여 런타임 유연성(Flexibility) 확보
-        inline constexpr size_t   WAVEFORM_LEN         = C10_DSP::FFT_SIZE;          // 256U
-        inline constexpr size_t   SPECTRUM_LEN         = C10_DSP::FFT_BINS;          // 129U
-        inline constexpr size_t   MFCC_LEN             = C10_DSP::FEATURE_DIM_DEF;   // 39U
-        
-        // [계산식] 위 길이들의 합
+        inline constexpr size_t   WAVEFORM_LEN         = 256U;
+        inline constexpr size_t   SPECTRUM_LEN         = 129U;
+        inline constexpr size_t   MFCC_LEN             = 39U;
         inline constexpr size_t   BINARY_BUF_LEN       = WAVEFORM_LEN + SPECTRUM_LEN + MFCC_LEN; // 424U
 
         inline constexpr uint32_t HASH_OFFSET_BASIS    = 2166136261UL;
@@ -195,7 +178,7 @@ namespace T20 {
 }
 
 /* ----------------------------------------------------------------------------
- * 공통 상태 및 결과 정의
+ * 공통 상태 및 결과 정의 (Enum은 기존 유지)
  * ---------------------------------------------------------------------------- */
 typedef enum {
     EN_T20_STATE_IDLE = 0,
