@@ -5,7 +5,7 @@
 
 #include "T221_Mfcc_Inter_216.h"
 
-inline constexpr uint32_t BINARY_HEADER_RECORD_COUNT_OFFSET = 20U;
+
 
 
 /* DMA 안전 쓰기를 위한 버퍼 정렬 체크 헬퍼 */
@@ -73,7 +73,7 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
     // 2. 바이너리 헤더 업데이트 및 최종 파일 크기 동기화
     File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, p->recorder_active_path, "r+");
     if (file) {
-        file.seek(BINARY_HEADER_RECORD_COUNT_OFFSET);
+        file.seek(T20::C10_Rec::HEADER_RECORD_OFFSET);
         uint32_t final_count = p->recorder_record_count;
         file.write((const uint8_t*)&final_count, sizeof(final_count));
 
@@ -436,48 +436,7 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     return true;
 }
 
-bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
-    if (p == nullptr) return false;
 
-    if (p->sdmmc_profile_applied && p->sdmmc_profile.clk_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED) {
-        SD_MMC.setPins(
-               p->sdmmc_profile.clk_pin,
-               p->sdmmc_profile.cmd_pin,
-               p->sdmmc_profile.d0_pin,
-               p->sdmmc_profile.d1_pin,
-               p->sdmmc_profile.d2_pin,
-               p->sdmmc_profile.d3_pin
-        );
-    }
-
-    if (SD_MMC.begin(T20::C10_Path::MOUNT_SDMMC, true)) {
-        p->recorder_sdmmc_mounted = true;
-        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
-
-        // [NEW] SD 카드 초기 폴더 트리 생성
-        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_ROOT)) SD_MMC.mkdir(T20::C10_Path::SD_DIR_ROOT);
-        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_BIN))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_BIN);
-        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_CSV))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_CSV);
-        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_LOG))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_LOG);
-
-        T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
-        return true;
-    }
-
-
-    /*
-    if (SD_MMC.begin(T20::C10_Rec::SDMMC_MOUNT_PATH, true)) {
-        p->recorder_sdmmc_mounted = true;
-        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
-        T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
-        return true;
-    }
-    */
-
-    p->recorder_fallback_active = true;
-    T20_recorderWriteEvent(p, "sd_mount_fail_fallback_fs");
-    return false;
-}
 
 bool T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t p_len) {
     if (p == nullptr || p_out == nullptr || p_len == 0) return false;
@@ -570,12 +529,12 @@ bool T20_applySdmmcProfilePins(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
     bool valid_basic =
-        (p->sdmmc_profile.clk_pin == T20::C10_Rec::SDMMC_PIN_UNASSIGNED &&
-         p->sdmmc_profile.cmd_pin == T20::C10_Rec::SDMMC_PIN_UNASSIGNED &&
-         p->sdmmc_profile.d0_pin == T20::C10_Rec::SDMMC_PIN_UNASSIGNED) ||
-        (p->sdmmc_profile.clk_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED &&
-         p->sdmmc_profile.cmd_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED &&
-         p->sdmmc_profile.d0_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED);
+        (p->sdmmc_profile.clk_pin == T20::C10_Pin::PIN_UNASSIGNED &&
+         p->sdmmc_profile.cmd_pin == T20::C10_Pin::PIN_UNASSIGNED &&
+         p->sdmmc_profile.d0_pin == T20::C10_Pin::PIN_UNASSIGNED) ||
+        (p->sdmmc_profile.clk_pin != T20::C10_Pin::PIN_UNASSIGNED &&
+         p->sdmmc_profile.cmd_pin != T20::C10_Pin::PIN_UNASSIGNED &&
+         p->sdmmc_profile.d0_pin != T20::C10_Pin::PIN_UNASSIGNED);
 
     if (!valid_basic) {
         p->sdmmc_profile_applied = false;
@@ -585,9 +544,9 @@ bool T20_applySdmmcProfilePins(CL_T20_Mfcc::ST_Impl* p) {
 
     if (!p->sdmmc_profile.use_1bit_mode) {
         bool valid_4bit =
-            (p->sdmmc_profile.d1_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED) &&
-            (p->sdmmc_profile.d2_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED) &&
-            (p->sdmmc_profile.d3_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED);
+            (p->sdmmc_profile.d1_pin != T20::C10_Pin::PIN_UNASSIGNED) &&
+            (p->sdmmc_profile.d2_pin != T20::C10_Pin::PIN_UNASSIGNED) &&
+            (p->sdmmc_profile.d3_pin != T20::C10_Pin::PIN_UNASSIGNED);
         if (!valid_4bit) {
             p->sdmmc_profile_applied = false;
             strlcpy(p->sdmmc_last_apply_reason, "4bit pins incomplete", sizeof(p->sdmmc_last_apply_reason));
@@ -598,4 +557,43 @@ bool T20_applySdmmcProfilePins(CL_T20_Mfcc::ST_Impl* p) {
     p->sdmmc_profile_applied = true;
     strlcpy(p->sdmmc_last_apply_reason, "profile accepted", sizeof(p->sdmmc_last_apply_reason));
     return true;
+}
+
+bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    if (p->sdmmc_profile_applied && p->sdmmc_profile.clk_pin != T20::C10_Pin::PIN_UNASSIGNED) {
+        SD_MMC.setPins(
+               p->sdmmc_profile.clk_pin,
+               p->sdmmc_profile.cmd_pin,
+               p->sdmmc_profile.d0_pin,
+               p->sdmmc_profile.d1_pin,
+               p->sdmmc_profile.d2_pin,
+               p->sdmmc_profile.d3_pin
+        );
+    }
+
+    // 설정된 모드(1-bit 또는 4-bit)를 반영하여 마운트 시도
+    if (SD_MMC.begin(T20::C10_Path::MOUNT_SDMMC, p->sdmmc_profile.use_1bit_mode)) {
+        p->recorder_sdmmc_mounted = true;
+        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+
+        // SD 카드 초기 폴더 트리 생성
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_ROOT)) SD_MMC.mkdir(T20::C10_Path::SD_DIR_ROOT);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_BIN))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_BIN);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_CSV))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_CSV);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_LOG))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_LOG);
+
+        // 현재 모드에 맞게 명확한 마운트 성공 로그 기록
+        if (p->sdmmc_profile.use_1bit_mode) {
+            T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
+        } else {
+            T20_recorderWriteEvent(p, "sd_mount_4bit_ok");
+        }
+        return true;
+    }
+
+    p->recorder_fallback_active = true;
+    T20_recorderWriteEvent(p, "sd_mount_fail_fallback_fs");
+    return false;
 }

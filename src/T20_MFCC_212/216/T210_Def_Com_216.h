@@ -24,6 +24,35 @@ namespace T20 {
 
     // --- 2. 하드웨어 핀 맵 (ESP32-S3) ---
     namespace C10_Pin {
+        // [1] 공통 제어
+        inline constexpr uint8_t PIN_UNASSIGNED  = 0xFFU;
+        
+        inline constexpr uint8_t BTN_CONTROL = 0U;
+        inline constexpr uint8_t RGB_LED     = 21U;
+
+        // [2] BMI270 센서 (SPI 버스 및 듀얼 인터럽트)
+        inline constexpr uint8_t BMI_SCK     = 12U;
+        inline constexpr uint8_t BMI_MISO    = 13U;
+        inline constexpr uint8_t BMI_MOSI    = 11U;
+        inline constexpr uint8_t BMI_CS      = 10U;
+        inline constexpr uint8_t BMI_INT1    = 14U;  // 주 인터럽트 (주로 DRDY / FIFO Watermark용)
+        inline constexpr uint8_t BMI_INT2    = PIN_UNASSIGNED;  // 보조 인터럽트 (Step Counter, Any-motion 등 분리용)
+
+        // [3] SD_MMC 스토리지 (1-bit / 4-bit 겸용 핀 맵)
+        // 1-bit 모드 필수 핀 (CLK, CMD, D0)
+        inline constexpr uint8_t SDMMC_CLK      = 39U;  // 예시 핀 (실제 보드 배선에 맞게 수정)
+        inline constexpr uint8_t SDMMC_CMD      = 38U;
+        inline constexpr uint8_t SDMMC_D0       = 40U;
+        
+        // 4-bit 모드 확장 핀 (D1, D2, D3)
+        // 1-bit 모드만 사용할 경우  PIN_UNASSIGNED 처리
+        inline constexpr uint8_t SDMMC_D1       = PIN_UNASSIGNED; // 41U;  
+        inline constexpr uint8_t SDMMC_D2       = PIN_UNASSIGNED; // 42U;
+        inline constexpr uint8_t SDMMC_D3       = PIN_UNASSIGNED; // 2U;   
+    }
+    
+    /*
+    namespace C10_Pin {
         inline constexpr uint8_t SPI_SCK     = 12U;
         inline constexpr uint8_t SPI_MISO    = 13U;
         inline constexpr uint8_t SPI_MOSI    = 11U;
@@ -33,6 +62,7 @@ namespace T20 {
 
 		inline constexpr uint8_t BTN_CONTROL = 0U;
     }
+    */
 
     // --- 3. RTOS 태스크 파라미터 ---
     namespace C10_Task {
@@ -122,7 +152,7 @@ namespace T20 {
         inline constexpr uint16_t SESSION_NAME_MAX   		= 48U;
         inline constexpr uint16_t LAST_ERROR_MAX     		= 128U;
 
-        inline constexpr uint8_t  SDMMC_PIN_UNASSIGNED   	= 0xFFU;
+        // inline constexpr uint8_t  SDMMC_PIN_UNASSIGNED   	= 0xFFU;
         inline constexpr uint16_t SDMMC_PROFILE_COUNT    	= 3U;
         inline constexpr uint16_t SDMMC_PROFILE_NAME_MAX 	= 32U;
     }
