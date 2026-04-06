@@ -92,18 +92,12 @@ void T20_stopTasks(CL_T20_Mfcc::ST_Impl* p) {
 }
 
 // ============================================================================
-// [복구] 핑퐁 버퍼(Double Buffering)가 완벽히 적용된 Sensor Task
+// 핑퐁 버퍼(Double Buffering)가 완벽히 적용된 Sensor Task
 // ========================================================================== 
-void T20_sensorTask(void* p_arg) {
-    // ...
-    
-}
-
 
 void T20_sensorTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     T20_bmi270InstallDrdyHook(p);
-    
     
     // FIFI Batch 방식
     for (;;) {
