@@ -22,7 +22,9 @@ bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
     
     // 로테이션 파일명 생성 (현재 시간 기반)
     snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s", 
-             T20::C10_Rec::ROTATE_PREFIX, (unsigned long)millis(), T20::C10_Rec::ROTATE_EXT);
+         T20::C10_Path::SD_PREFIX_BIN, (unsigned long)millis(), T20::C10_Path::SD_EXT_BIN);
+    // snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s", 
+    //         T20::C10_Rec::ROTATE_PREFIX, (unsigned long)millis(), T20::C10_Rec::ROTATE_EXT);
     
     // 세션 및 버퍼 상태 초기화
     p->recorder_record_count = 0;
@@ -405,9 +407,11 @@ bool T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
 
 bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    if (!LittleFS.exists(T20::C10_Rec::RUNTIME_CFG_PATH)) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_CFG)) return false;
+    // if (!LittleFS.exists(T20::C10_Rec::RUNTIME_CFG_PATH)) return false;
 
-    File f = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "r");
+    File f = LittleFS.open(T20::C10_Path::LFS_FILE_CFG, "r");
+    // File f = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "r");
     if (!f) return false;
     
     String json_text = f.readString();
@@ -421,9 +425,12 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
 
     char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
     if (!T20_buildRuntimeConfigJsonText(p, json, sizeof(json))) return false;
-
-    File file = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "w");
+    
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "w");
+    // File file = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "w");
+    
     if (!file) return false;
+    
     file.print(json);
     file.close();
     return true;
@@ -443,12 +450,29 @@ bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
         );
     }
     
+    if (SD_MMC.begin(T20::C10_Path::MOUNT_SDMMC, true)) { 
+        p->recorder_sdmmc_mounted = true;
+        p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
+    
+        // [NEW] SD 카드 초기 폴더 트리 생성
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_ROOT)) SD_MMC.mkdir(T20::C10_Path::SD_DIR_ROOT);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_BIN))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_BIN);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_CSV))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_CSV);
+        if (!SD_MMC.exists(T20::C10_Path::SD_DIR_LOG))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_LOG);
+    
+        T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
+        return true;
+    }
+
+
+    /*
     if (SD_MMC.begin(T20::C10_Rec::SDMMC_MOUNT_PATH, true)) { 
         p->recorder_sdmmc_mounted = true;
         p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
         T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
         return true;
     }
+    */
     
     p->recorder_fallback_active = true;
     T20_recorderWriteEvent(p, "sd_mount_fail_fallback_fs");
@@ -461,10 +485,19 @@ bool T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t
     if (p->recorder_file_path[0] != 0) {
         strlcpy(p_out, p->recorder_file_path, p_len);
     } else if (p->recorder_fallback_active) {
+        strlcpy(p_out, T20::C10_Path::LFS_FILE_FALLBACK, p_len);
+    } else {
+        strlcpy(p_out, T20::C10_Path::LFS_FILE_DEFAULT, p_len);
+    }
+
+
+    /*
+    } else if (p->recorder_fallback_active) {
         strlcpy(p_out, T20::C10_Rec::FALLBACK_PATH, p_len);
     } else {
         strlcpy(p_out, T20::C10_Rec::DEFAULT_PATH, p_len);
     }
+    */
 
     strlcpy(p->recorder_active_path, p_out, sizeof(p->recorder_active_path));
     return true; 

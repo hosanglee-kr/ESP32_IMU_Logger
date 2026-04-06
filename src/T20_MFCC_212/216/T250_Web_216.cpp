@@ -276,7 +276,15 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server) {
             request->send(response);
         }
     });
+    
+    v_server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String path = String(T20::C10_Path::LFS_DIR_WEB) + String("/") + String(T20::C10_Path::LFS_FILE_WEB_IDX);
+        request->send(LittleFS, path, T20::C10_Web::MIME_HTML);
+    });
+    v_server->serveStatic("/", LittleFS, T20::C10_Path::LFS_DIR_WEB)
+            .setDefaultFile(T20::C10_Path::LFS_FILE_WEB_IDX)
 
+    /*
     v_server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         String path = String("/") + String(T20::C10_Web::INDEX_FILE);
         request->send(LittleFS, path, T20::C10_Web::MIME_HTML);
@@ -285,6 +293,7 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server) {
     v_server->serveStatic("/", LittleFS, "/")
             .setDefaultFile(T20::C10_Web::INDEX_FILE)
             .setCacheControl(T20::C10_Web::CACHE_CTRL);
+    */
 }
 
 /* ----------------------------------------------------------------------------
