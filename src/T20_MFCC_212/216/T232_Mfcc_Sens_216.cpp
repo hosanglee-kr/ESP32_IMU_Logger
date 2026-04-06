@@ -66,6 +66,11 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     intPinConfig.pin_cfg[0].output_en = BMI2_INT_OUTPUT_ENABLE;
     intPinConfig.pin_cfg[0].input_en = BMI2_INT_INPUT_DISABLE;
     p->bmi.setInterruptPinConfig(intPinConfig);
+    
+    
+    // 6. Calibration 보정값이 있으면 센서에 보정값
+    T20_bmi270_ApplyStoredCalibration(p);
+
 
     p->bmi_state.init = EN_T20_STATE_DONE;
     strlcpy(p->bmi270_status_text, "1600Hz_FIFO_Active", T20::C10_BMI::STATUS_TEXT_MAX);
@@ -201,3 +206,118 @@ bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
     return (frames_to_read > 0);
 }
 
+
+/* ============================================================================
+ * [Direct SPI Helpers] 라이브러리 private 은닉 우회를 위한 직접 통신 함수
+ * ========================================================================== */
+
+// BMI270 SPI Read 규격: (주소 | 0x80) 전송 -> Dummy 바이트(0x00) 전송 -> 수신
+static bool T20_bmi270_ReadRegs_Direct(CL_T20_Mfcc::ST_Impl* p, uint8_t reg, uint8_t* data, uint16_t len) {
+    if (p == nullptr) return false;
+    
+    p->spi.beginTransaction(SPISettings(T20::C10_BMI::SPI_FREQ_HZ, MSBFIRST, SPI_MODE0));
+    digitalWrite(T20::C10_Pin::BMI_CS, LOW);
+    
+    p->spi.transfer(reg | 0x80); // Read 플래그 (MSB 1)
+    p->spi.transfer(0x00);       // Dummy 바이트 필수
+    
+    for (uint16_t i = 0; i < len; i++) {
+        data[i] = p->spi.transfer(0x00);
+    }
+    
+    digitalWrite(T20::C10_Pin::BMI_CS, HIGH);
+    p->spi.endTransaction();
+    return true;
+}
+
+// BMI270 SPI Write 규격: (주소 & 0x7F) 전송 -> 데이터 연속 송신
+static bool T20_bmi270_WriteRegs_Direct(CL_T20_Mfcc::ST_Impl* p, uint8_t reg, const uint8_t* data, uint16_t len) {
+    if (p == nullptr) return false;
+
+    p->spi.beginTransaction(SPISettings(T20::C10_BMI::SPI_FREQ_HZ, MSBFIRST, SPI_MODE0));
+    digitalWrite(T20::C10_Pin::BMI_CS, LOW);
+    
+    p->spi.transfer(reg & 0x7F); // Write 플래그 (MSB 0)
+    
+    for (uint16_t i = 0; i < len; i++) {
+        p->spi.transfer(data[i]);
+    }
+    
+    digitalWrite(T20::C10_Pin::BMI_CS, HIGH);
+    p->spi.endTransaction();
+    return true;
+}
+
+/* ============================================================================
+ * [1] 캘리브레이션 실행 및 결과를 LittleFS에 JSON으로 저장 (수동 트리거)
+ * ========================================================================== */
+bool T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    // 측정 중단 및 센서 안정화 대기
+    bool was_measuring = p->measurement_active;
+    p->measurement_active = false;
+    vTaskDelay(pdMS_TO_TICKS(100)); 
+
+    // 1. 센서 내장 캘리브레이션 엔진 구동
+    p->bmi.performComponentRetrim();
+    p->bmi.performAccelOffsetCalibration(BMI2_GRAVITY_POS_Z); // Z축을 중력 방향으로 상정
+    p->bmi.performGyroOffsetCalibration();
+
+    // 2. Direct SPI로 7바이트 오프셋 추출
+    uint8_t offsets[T20::C10_BMI::REG_OFFSET_LEN] = {0};
+    if (!T20_bmi270_ReadRegs_Direct(p, T20::C10_BMI::REG_OFFSET_START, offsets, T20::C10_BMI::REG_OFFSET_LEN)) {
+        p->measurement_active = was_measuring;
+        return false;
+    }
+
+    // 3. 추출된 값을 LittleFS에 영구 저장
+    JsonDocument doc;
+    doc["calibrated"] = true;
+    doc["timestamp"] = millis();
+    JsonArray offset_array = doc["offsets"].to<JsonArray>();
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_OFFSET_LEN; i++) {
+        offset_array.add(offsets[i]);
+    }
+
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_BMI_CALIB, "w");
+    if (file) {
+        serializeJson(doc, file);
+        file.close();
+    }
+
+    p->measurement_active = was_measuring;
+    return true;
+}
+
+/* ============================================================================
+ * [2] LittleFS에서 보정값을 읽어와 BMI270 센서에 주입 (부팅 시 자동 실행)
+ * ========================================================================== */
+bool T20_bmi270_ApplyStoredCalibration(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_BMI_CALIB)) return false;
+
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_BMI_CALIB, "r");
+    if (!file) return false;
+
+    String json_text = file.readString();
+    file.close();
+
+    JsonDocument doc;
+    if (deserializeJson(doc, json_text)) return false;
+
+    JsonArray offset_array = doc["offsets"].as<JsonArray>();
+    if (offset_array.size() != T20::C10_BMI::REG_OFFSET_LEN) return false;
+
+    uint8_t offsets[T20::C10_BMI::REG_OFFSET_LEN] = {0};
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_OFFSET_LEN; i++) {
+        offsets[i] = (uint8_t)offset_array[i];
+    }
+
+    // Direct SPI를 통해 센서 레지스터에 강제 주입
+    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_OFFSET_START, offsets, T20::C10_BMI::REG_OFFSET_LEN)) {
+        strlcpy(p->bmi270_status_text, "Calib_Injected", T20::C10_BMI::STATUS_TEXT_MAX);
+        return true;
+    }
+    return false;
+}

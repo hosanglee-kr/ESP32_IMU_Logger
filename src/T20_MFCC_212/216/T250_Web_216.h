@@ -23,3 +23,7 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server);
 // 바이너리 데이터 브로드캐스트
 void T20_broadcastBinaryData(CL_T20_Mfcc::ST_Impl* p);
 
+// 캘리브레이션 실행 및 결과를 LittleFS에 JSON으로 저장 (수동 트리거)
+bool T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p) {
+
+

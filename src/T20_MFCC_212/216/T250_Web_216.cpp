@@ -107,6 +107,17 @@ void T20_registerControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_serv
         char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
         T20_sendJsonText(request, T20_buildRecorderFinalizeBundleJsonText(p, json, sizeof(json)), json);
     });
+    
+    // bmi 센서 수동 캘리브레이션 API
+    v_server->on((base + "/calibrate_sensor").c_str(), HTTP_POST, [p](AsyncWebServerRequest* request) {
+        bool ok = T20_bmi270_RunAndSaveCalibration(p);
+        if (ok) {
+            T20_sendJsonText(request, true, "{\"ok\":true,\"msg\":\"calibration_saved\"}");
+        } else {
+            T20_sendJsonText(request, false, "{\"ok\":false,\"msg\":\"calib_failed\"}");
+        }
+    });
+
 }
 
 /* ----------------------------------------------------------------------------

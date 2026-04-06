@@ -116,7 +116,11 @@ namespace T20 {
         inline constexpr uint8_t REG_ACC_X_LSB    			= 0x12U;
         inline constexpr uint8_t REG_INT_STATUS_1 			= 0x1DU;
         inline constexpr uint8_t REG_READ_FLAG    			= 0x80U;
+        
+        inline constexpr uint8_t REG_CALIB_OFFSET_START = 0x71U; // 보정값이 저장되는 시작 레지스터
+        inline constexpr uint8_t REG_CALIB_OFFSET_LEN   = 7U;    // 보정값 총 길이 (7 bytes)
     }
+
 
     // --- 6. SDMMC 레코더 & 파일 시스템 상태 ---
     namespace C10_Rec {
@@ -235,6 +239,8 @@ namespace T20 {
         inline constexpr char const* SD_EXT_BIN       		= ".bin";
         inline constexpr char const* SD_PREFIX_CSV    		= "/t20_data/csv/exp_";
         inline constexpr char const* SD_EXT_CSV       		= ".csv";
+        
+        inline constexpr char const* LFS_FILE_BMI_CALIB     = "/sys/bmi_calib.json"; // 보정값 저장 파일
     }
 }
 
