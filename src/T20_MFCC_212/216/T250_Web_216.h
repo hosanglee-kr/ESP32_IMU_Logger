@@ -6,7 +6,7 @@
 #pragma once
 
 #include <AsyncJson.h>
-#include "T221_Mfcc_Inter_216.h" // 216 버전으로 업데이트된 Inter 헤더 참조
+#include "T221_Mfcc_Inter_216.h"
 
 /* ----------------------------------------------------------------------------
  * [참고] 이전의 T250_Web 전용 상수들은 모두 T210_Def_Com_216.h 파일의 

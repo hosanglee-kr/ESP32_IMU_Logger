@@ -8,7 +8,7 @@
 inline constexpr uint32_t BINARY_HEADER_RECORD_COUNT_OFFSET = 20U;
 
 
-/* [v216 추가] DMA 안전 쓰기를 위한 버퍼 정렬 체크 헬퍼 */
+/* DMA 안전 쓰기를 위한 버퍼 정렬 체크 헬퍼 */
 static inline bool T20_isDmaSafe(const void* p_ptr) {
     return ((uintptr_t)p_ptr % 32 == 0);
 }
@@ -75,7 +75,7 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
         uint32_t final_count = p->recorder_record_count;
         file.write((const uint8_t*)&final_count, sizeof(final_count));
         
-        // [누락 복구] 파일 닫기 직전 실제 용량을 가져와 인덱스 최신화
+        // 파일 닫기 직전 실제 용량을 가져와 인덱스 최신화
         uint32_t final_size = file.size();
         file.close();
 
@@ -328,7 +328,7 @@ void T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p) {
  * 5. 환경 설정 및 인덱스 관리 유틸리티
  * ========================================================================== */
 
-// [누락 복구] 시스템 재부팅 시 기존 저장된 파일 목록을 읽어오는 로직
+// 시스템 재부팅 시 기존 저장된 파일 목록을 읽어오는 로직
 bool T20_loadRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
     if (!LittleFS.exists(T20::C10_Rec::INDEX_PATH)) return false;

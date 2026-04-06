@@ -90,7 +90,7 @@ namespace T20 {
     namespace C10_Rec {
         inline constexpr char const* DEFAULT_PATH    = "/t20_rec.bin";
         inline constexpr char const* INDEX_PATH      = "/t20_rec_index.json";
-        inline constexpr char const* RUNTIME_CFG_PATH= "/t20_runtime_cfg.json";
+        inline constexpr char const* RUNTIME_CFG_PATH= "/t20_runtime_cfg_216_01.json";
         inline constexpr char const* FALLBACK_PATH   = "/rec_fallback.bin";
         inline constexpr char const* ROTATE_PREFIX   = "/rec_";
         inline constexpr char const* ROTATE_EXT      = ".bin";

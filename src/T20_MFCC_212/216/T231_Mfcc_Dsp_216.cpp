@@ -337,7 +337,7 @@ void T20_computeMFCC(CL_T20_Mfcc::ST_Impl* p, const float* p_frame, float* p_mfc
         T20_applyPreEmphasis(p, p->temp_frame, T20::C10_DSP::FFT_SIZE, p->cfg.preprocess.preemphasis.alpha);
     }
 
-    // [복구 완료] 노이즈 게이트(Noise Gate) 적용
+    // 노이즈 게이트(Noise Gate) 적용
     if (p->cfg.preprocess.noise.enable_gate) {
         T20_applyNoiseGate(p->temp_frame, T20::C10_DSP::FFT_SIZE, p->cfg.preprocess.noise.gate_threshold_abs);
     }

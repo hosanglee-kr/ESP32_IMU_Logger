@@ -184,19 +184,19 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         T20_sendJsonDocument(request, doc);
     });
     
-    // [누락 복구] 파일 탐색기 리스트 제공 (refreshFileList 대응)
+    // 파일 탐색기 리스트 제공 (refreshFileList 대응)
     v_server->on((base + "/recorder_index").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         char json[T20::C10_Web::LARGE_JSON_BUF_SIZE] = {0};
         T20_sendJsonText(request, T20_buildRecorderIndexJsonText(p, json, sizeof(json)), json);
     });
 
-    // [누락 복구] 현재 설정값 조회 (loadSettings 대응)
+    // 현재 설정값 조회 (loadSettings 대응)
     v_server->on((base + "/runtime_config").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
         T20_sendJsonText(request, T20_buildRuntimeConfigJsonText(p, json, sizeof(json)), json);
     });
 
-    // [누락 복구] 프론트엔드에서 설정값 변경 (saveSettings 대응)
+    // 프론트엔드에서 설정값 변경 (saveSettings 대응)
     v_server->addHandler(new AsyncCallbackJsonWebHandler((base + "/runtime_config").c_str(), 
         [p](AsyncWebServerRequest *request, JsonVariant &jsonVariant) {
             JsonDocument doc;

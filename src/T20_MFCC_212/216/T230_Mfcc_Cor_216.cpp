@@ -125,7 +125,7 @@ void T20_sensorTask(void* p_arg) {
 }
 
 // ============================================================================
-// [누락 복구] SIMD 최적화 연동을 위한 Process Task
+// SIMD 최적화 연동을 위한 Process Task
 // ========================================================================== 
 void T20_processTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
