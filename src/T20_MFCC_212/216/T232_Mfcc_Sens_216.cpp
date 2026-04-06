@@ -91,32 +91,6 @@ void IRAM_ATTR T20_onBmiDrdyISR() {
     }
 }
 
-// 라이브러리 데이터 구조를 사용하여 샘플 읽기
-// [최적화된 데이터 읽기] 
-// FIFO를 사용할 경우 단일 샘플이 아닌 배치 단위로 읽어 링버퍼에 채웁니다. 
-/* [데이터 읽기] 
-   sensorTask에서 호출됨. 라이브러리의 getSensorData를 통해 float 변환된 데이터 획득 */
-bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
-    if (p == nullptr || p_out_sample == nullptr) return false;
-
-    // 라이브러리가 내부적으로 SPI Burst Read 및 float 스케일링 수행
-    if (p->bmi.getSensorData() != BMI2_OK) return false;
-
-    // 설정된 축 모드에 따라 분석용 샘플 선택
-    if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
-        *p_out_sample = p->bmi.data.accelZ;
-    } else {
-        *p_out_sample = p->bmi.data.gyroZ; // 기본값: Gyro Z
-    }
-
-    // 웹 모니터링용 실시간 값 갱신
-    p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
-    p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
-    p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
-    
-    return true;
-}
-
 bool T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
     pinMode(T20::C10_Pin::BMI_INT1, INPUT);
@@ -143,7 +117,33 @@ bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
     return T20_initBMI270_SPI(p);
 }
 
-// [v216] FIFO 일괄 읽기 로직 보완 (핑퐁 버퍼 스위칭 연동)
+
+// 라이브러리 데이터 구조를 사용하여 단건 샘플 읽기
+// FIFO를 사용할 경우 단일 샘플이 아닌 배치 단위로 읽어 링버퍼에 채웁니다. 
+/* [데이터 읽기] 
+   sensorTask에서 호출됨. 라이브러리의 getSensorData를 통해 float 변환된 데이터 획득 */
+bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
+    if (p == nullptr || p_out_sample == nullptr) return false;
+
+    // 라이브러리가 내부적으로 SPI Burst Read 및 float 스케일링 수행
+    if (p->bmi.getSensorData() != BMI2_OK) return false;
+
+    // 설정된 축 모드에 따라 분석용 샘플 선택
+    if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
+        *p_out_sample = p->bmi.data.accelZ;
+    } else {
+        *p_out_sample = p->bmi.data.gyroZ; // 기본값: Gyro Z
+    }
+
+    // 웹 모니터링용 실시간 값 갱신
+    p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
+    p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
+    p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
+    
+    return true;
+}
+
+// FIFO 일괄 읽기 로직 보완 (핑퐁 버퍼 스위칭 연동)
 /* ============================================================================
  * Function: T20_bmi270ReadFifoBatch
  * Summary: BMI270 FIFO 버스트 읽기 및 핑퐁 버퍼 투입 (v216 최적화)

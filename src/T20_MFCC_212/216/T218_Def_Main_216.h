@@ -21,7 +21,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
 	ST_T20_Config_t cfg;
 	memset(&cfg, 0, sizeof(cfg));
 
-	cfg.preprocess.axis								= EN_T20_AXIS_Z;
+	// cfg.preprocess.axis								= EN_T20_AXIS_Z;
 	cfg.preprocess.remove_dc						= true;
 	cfg.preprocess.preemphasis.enable				= true;
 	cfg.preprocess.preemphasis.alpha				= 0.97f;
@@ -55,6 +55,12 @@ static inline ST_T20_Config_t T20_makeDefaultConfig(void) {
 	cfg.preprocess.pipeline.stages[3].param_1		= 15.0f;
 	cfg.preprocess.pipeline.stages[3].param_2		= 250.0f;
 	cfg.preprocess.pipeline.stages[3].q_factor		= 0.707f;
+	
+	// 센서 초기 기본값: 가속도 Z축, 8G, 2000dps
+    cfg.sensor.axis        = EN_T20_AXIS_ACCEL_Z;
+    cfg.sensor.accel_range = EN_T20_ACCEL_RANGE_8G;
+    cfg.sensor.gyro_range  = EN_T20_GYRO_RANGE_2000;
+
 
     // G_T20_ 매크로들을 T20::C10_ 네임스페이스로 치환
 	cfg.feature.fft_size							= T20::C10_DSP::FFT_SIZE;

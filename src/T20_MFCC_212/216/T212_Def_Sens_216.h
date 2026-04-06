@@ -19,11 +19,57 @@ typedef enum {
     EN_T20_FILTER_BPF
 } EM_T20_FilterType_t;
 
+/*
 typedef enum {
     EN_T20_AXIS_X = 0,
     EN_T20_AXIS_Y,
     EN_T20_AXIS_Z
 } EM_T20_AxisType_t;
+*/
+
+
+/* ----------------------------------------------------------------------------
+ * [NEW] 센서 축 및 측정 범위 Enum 정의
+ * ---------------------------------------------------------------------------- */
+typedef enum {
+    EN_T20_AXIS_ACCEL_X = 0,
+    EN_T20_AXIS_ACCEL_Y,
+    EN_T20_AXIS_ACCEL_Z,
+    EN_T20_AXIS_GYRO_X,
+    EN_T20_AXIS_GYRO_Y,
+    EN_T20_AXIS_GYRO_Z
+} EM_T20_SensorAxis_t;
+
+typedef enum {
+    EN_T20_ACCEL_RANGE_2G = 0,
+    EN_T20_ACCEL_RANGE_4G,
+    EN_T20_ACCEL_RANGE_8G,
+    EN_T20_ACCEL_RANGE_16G
+} EM_T20_AccelRange_t;
+
+typedef enum {
+    EN_T20_GYRO_RANGE_125 = 0,
+    EN_T20_GYRO_RANGE_250,
+    EN_T20_GYRO_RANGE_500,
+    EN_T20_GYRO_RANGE_1000,
+    EN_T20_GYRO_RANGE_2000
+} EM_T20_GyroRange_t;
+
+// 센서 환경설정 하위 구조체
+typedef struct {
+    EM_T20_SensorAxis_t axis;
+    EM_T20_AccelRange_t accel_range;
+    EM_T20_GyroRange_t  gyro_range;
+} ST_T20_ConfigSensor_t;
+
+
+
+
+
+    
+    
+
+
 
 typedef enum {
     EN_T20_NOISE_OFF = 0,
@@ -141,7 +187,7 @@ typedef struct {
 } ST_T20_PipelineStage_t;
 
 typedef struct {
-    EM_T20_AxisType_t          axis;
+    // EM_T20_AxisType_t          axis;
     bool                       remove_dc;
     ST_T20_PreEmphasisConfig_t preemphasis;
     ST_T20_FilterConfig_t      filter;

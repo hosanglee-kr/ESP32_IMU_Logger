@@ -95,39 +95,58 @@ void T20_stopTasks(CL_T20_Mfcc::ST_Impl* p) {
 // [복구] 핑퐁 버퍼(Double Buffering)가 완벽히 적용된 Sensor Task
 // ========================================================================== 
 void T20_sensorTask(void* p_arg) {
+    // ...
+    
+}
+
+
+void T20_sensorTask(void* p_arg) {
     CL_T20_Mfcc::ST_Impl* p = reinterpret_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     T20_bmi270InstallDrdyHook(p);
-
+    
+    
+    // FIFI Batch 방식
     for (;;) {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
+        // 인터럽트(16샘플 누적 시 발생) 대기
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
-        if (!p->running) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
-
-        float sample = 0.0f;
-        if (T20_bmi270ReadVectorSample(p, &sample)) {
-            p->bmi270_sample_counter++;
-
-            // 현재 쓰기 권한이 있는 버퍼 인덱스
-            uint8_t write_idx = p->active_fill_buffer;
-            uint16_t sample_idx = p->active_sample_index % T20::C10_DSP::FFT_SIZE;
+        // 함수 내부에서 한 번에 16개를 긁어오고 핑퐁 버퍼와 큐 전송까지 일괄 완료
+        T20_bmi270ReadFifoBatch(p); 
+    }
+    
+    // 단건 방식
+    #ifdef single_read
+        for (;;) {
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
             
-            p->frame_buffer[write_idx][sample_idx] = sample; 
-            p->active_sample_index++;
-
-            // Hop Size 달성 시 DSP 태스크로 버퍼 인덱스 통지
-            if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && p->active_sample_index >= T20::C10_DSP::FFT_SIZE) {
-                ST_T20_FrameMessage_t msg;
-                msg.frame_index = write_idx; 
+            if (!p->running) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
+    
+            float sample = 0.0f;
+            if (T20_bmi270ReadVectorSample(p, &sample)) {
+                p->bmi270_sample_counter++;
+    
+                // 현재 쓰기 권한이 있는 버퍼 인덱스
+                uint8_t write_idx = p->active_fill_buffer;
+                uint16_t sample_idx = p->active_sample_index % T20::C10_DSP::FFT_SIZE;
                 
-                if (xQueueSend(p->frame_queue, &msg, 0) == pdPASS) {
-                    // 전송 성공 시 핑퐁 스위칭
-                    p->active_fill_buffer = (write_idx + 1) % T20::C10_Sys::RAW_FRAME_BUFFERS;
-                } else {
-                    p->dropped_frames++;
+                p->frame_buffer[write_idx][sample_idx] = sample; 
+                p->active_sample_index++;
+    
+                // Hop Size 달성 시 DSP 태스크로 버퍼 인덱스 통지
+                if ((p->active_sample_index % p->cfg.feature.hop_size) == 0 && p->active_sample_index >= T20::C10_DSP::FFT_SIZE) {
+                    ST_T20_FrameMessage_t msg;
+                    msg.frame_index = write_idx; 
+                    
+                    if (xQueueSend(p->frame_queue, &msg, 0) == pdPASS) {
+                        // 전송 성공 시 핑퐁 스위칭
+                        p->active_fill_buffer = (write_idx + 1) % T20::C10_Sys::RAW_FRAME_BUFFERS;
+                    } else {
+                        p->dropped_frames++;
+                    }
                 }
             }
         }
-    }
+    #endif
 }
 
 // ============================================================================
