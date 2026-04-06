@@ -315,7 +315,7 @@ bool T20_bmi270_ApplyStoredCalibration(CL_T20_Mfcc::ST_Impl* p) {
     }
 
     // Direct SPI를 통해 센서 레지스터에 강제 주입
-    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
+    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_CALIB_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
         strlcpy(p->bmi270_status_text, "Calib_Injected", T20::C10_BMI::STATUS_TEXT_MAX);
         return true;
     }

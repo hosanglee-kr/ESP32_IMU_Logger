@@ -1,11 +1,8 @@
-# .github/workflows/ci_005.yml
-
 name: PR
 
 on:
   pull_request:
     branches: [main, main-standalone]
-    # 소스 코드와 직접적인 관련이 없는 파일 수정 시 빌드를 건너뜁니다.
     paths:
       - 'platformio.ini'
       - 'lib/**'
@@ -15,12 +12,12 @@ on:
       - 'src/**/*.cpp'
       - 'src/**/*.h'
       - 'src/**/*.ino'
-      - '!**.md'               # 모든 경로의 md 파일 제외
-      - '!src/**/data_*/**'    # 웹 소스 폴더 제외 (데이터 변경 시 빌드 불필요)
-      - '!src/*_backup/**'     # 백업 폴더 제외 (문법 오류 수정 완료)
+      - '!**.md'
+      - '!src/**/data_*/**'
+      - '!src/*_backup/**'
 
 jobs:
-  # 1단계: 빌드할 환경 목록(Environments) 동적 추출
+  # 1단계: 빌드할 환경 목록 추출
   get_environments:
     runs-on: ubuntu-latest
     outputs:
@@ -43,21 +40,12 @@ jobs:
           import os
           config = configparser.ConfigParser()
           config.read('platformio.ini')
-
-          # 1. 모든 env: 섹션 추출
           all_envs = [s.split(':', 1)[1] for s in config.sections() if s.startswith('env:')]
-
-          # 2. 특정 환경만 빌드하도록 필터링 (필요 시 주석 해제하여 조정 가능)
           envs = [e for e in all_envs if e in ['esp32-s3-n16r8']]
-
-          # 3. 필터링 결과가 비어있다면 default_envs 시도
           if not envs and 'platformio' in config:
               default = config['platformio'].get('default_envs', '')
               if default: envs = [e.strip() for e in default.split(',')]
-
-          # 만약 여전히 비어있다면 전체 환경 사용
           if not envs: envs = all_envs
-
           print(json.dumps(envs))
           " > envs.json
         shell: bash
@@ -73,7 +61,7 @@ jobs:
           echo "envs=${ENVS}" >> $GITHUB_OUTPUT
         shell: bash
 
-  # 2단계: 추출된 환경별 병렬 빌드 실행
+  # 2단계: 환경별 병렬 빌드 및 캐시 최적화
   build:
     runs-on: ubuntu-latest
     needs: get_environments
@@ -90,47 +78,44 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          # cache: 'pip'  # 경고 발생 방지를 위해 제거하고 아래 통합 캐시에서 관리
 
-      # 통합 캐시 설정: pip 패키지 + PIO 코어 + 빌드 결과물
+      # [개선] 캐시 경로 및 키 최적화
       - name: Cache PlatformIO
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio
-            .pio
-          key: ${{ runner.os }}-pio-${{ matrix.environments }}-${{ hashFiles('**/platformio.ini') }}
+            .pio/libdeps
+            .pio/build
+          # 키에 OS, 환경 이름, ini 파일 해시를 포함하여 정확도 향상
+          key: ${{ runner.os }}-pio-v1-${{ matrix.environments }}-${{ hashFiles('**/platformio.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-${{ matrix.environments }}-
-            ${{ runner.os }}-pio-
+            ${{ runner.os }}-pio-v1-${{ matrix.environments }}-
+            ${{ runner.os }}-pio-v1-
 
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
-          
-      - name: Clean up esp-dsp for S3 build
+
+      # [개선] 의존성 설치와 정리를 빌드 전 단계로 명확히 분리
+      - name: PlatformIO Lib Install & Deep Cleanup
         run: |
+          # 라이브러리 먼저 설치
+          pio lib install -e ${{ matrix.environments }}
+          
+          # esp-dsp 등 특정 라이브러리 충돌 방지 cleanup
           DSP_DIR=".pio/libdeps/${{ matrix.environments }}/esp-dsp"
-          pio lib install
           if [ -d "$DSP_DIR" ]; then
-            # 1. 모든 테스트 및 예제 폴더 삭제
-            find "$DSP_DIR" -type d -name "test" -exec rm -rf {} +
-            find "$DSP_DIR" -type d -name "test_sim" -exec rm -rf {} +
-            find "$DSP_DIR" -type d -name "test_app" -exec rm -rf {} +
-            rm -rf "$DSP_DIR/examples"
-            rm -rf "$DSP_DIR/applications"
-            
-            # 2. (선택사항) S3에서 사용하지 않는 타 아키텍처 파일 삭제 (충돌 방지)
-            # RISC-V(arp4) 전용 어셈블리 삭제
+            echo "Cleaning up esp-dsp for S3..."
+            find "$DSP_DIR" -type d -name "test*" -exec rm -rf {} +
+            rm -rf "$DSP_DIR/examples" "$DSP_DIR/applications"
             find "$DSP_DIR" -name "*_arp4.S" -delete
-            echo "Deep cleanup for S3 complete."
           fi
         shell: bash
 
-
-      - name: Run PlatformIO build for ${{ matrix.environments }}
+      - name: Run PlatformIO build
         run: pio run -e ${{ matrix.environments }}
 
       - name: Build filesystem image
@@ -147,4 +132,3 @@ jobs:
             .pio/build/${{ matrix.environments }}/bootloader.bin
             .pio/build/${{ matrix.environments }}/littlefs.bin
           if-no-files-found: warn
-
