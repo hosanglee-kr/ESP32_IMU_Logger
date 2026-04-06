@@ -6,7 +6,7 @@
 #include "T250_Web_216.h"
 
 // [WebSocket] 글로벌 인스턴스 선언
-AsyncWebSocket ws(T20::C10_Web::WS_URI);
+AsyncWebSocket g_T250_ws(T20::C10_Web::WS_URI);
 
 // --- 전방 선언 (Forward Declarations) ---
 void T20_registerControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, const String& base);
@@ -22,14 +22,14 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server);
  * ---------------------------------------------------------------------------- */
 static void T20_sendJsonText(AsyncWebServerRequest* request, bool ok, const char* json_ok) {
     if (request == nullptr) return;
-    
+
     AsyncWebServerResponse* response;
     if (ok && json_ok != nullptr) {
         response = request->beginResponse(200, T20::C10_Web::MIME_JSON, json_ok);
     } else {
         response = request->beginResponse(500, T20::C10_Web::MIME_JSON, T20::C10_Web::JSON_FAIL);
     }
-    
+
     // [최적화] 프론트엔드 개발 및 외부 도메인 접근을 위한 CORS 허용
     response->addHeader("Access-Control-Allow-Origin", "*");
     request->send(response);
@@ -38,7 +38,7 @@ static void T20_sendJsonText(AsyncWebServerRequest* request, bool ok, const char
 static void T20_sendJsonDocument(AsyncWebServerRequest* request, const JsonDocument& doc) {
     char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
     serializeJson(doc, json, sizeof(json));
-    
+
     AsyncWebServerResponse* response = request->beginResponse(200, T20::C10_Web::MIME_JSON, json);
     response->addHeader("Access-Control-Allow-Origin", "*");
     request->send(response);
@@ -56,16 +56,16 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 }
 
 void T20_broadcastBinaryData(CL_T20_Mfcc::ST_Impl* p) {
-    if (ws.count() == 0 || p == nullptr || !p->latest_vector_valid) return;
+    if (g_T250_ws.count() == 0 || p == nullptr || !p->latest_vector_valid) return;
 
     // [최적화] 웹소켓 큐가 가득 찼다면 OOM 방지를 위해 현재 프레임 드롭
-    if (!ws.availableForWriteAll()) {
-        return; 
+    if (!g_T250_ws.availableForWriteAll()) {
+        return;
     }
 
     // 패킷 구조: Waveform(256) + Spectrum(129) + MFCC(39) = 424 floats
     static float ws_buffer[T20::C10_Web::BINARY_BUF_LEN];
-    
+
     // [최적화] 데이터 찢어짐(Tearing) 방지를 위한 짧은 Mutex 락 획득
     if (xSemaphoreTake(p->mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
         size_t offset = 0;
@@ -76,11 +76,11 @@ void T20_broadcastBinaryData(CL_T20_Mfcc::ST_Impl* p) {
         offset += T20::C10_Web::SPECTRUM_LEN;
 
         memcpy(&ws_buffer[offset], p->latest_feature.vector, T20::C10_Web::MFCC_LEN * sizeof(float));
-        
+
         xSemaphoreGive(p->mutex);
 
         // 락 해제 후 네트워크 전송 수행 (블로킹 최소화)
-        ws.binaryAll((uint8_t*)ws_buffer, sizeof(ws_buffer));
+        g_T250_ws.binaryAll((uint8_t*)ws_buffer, sizeof(ws_buffer));
     }
 }
 
@@ -159,7 +159,7 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         bool ok = T20_buildRecorderCsvTableAdvancedJsonText(p, json, sizeof(json), path, 4096, nullptr, nullptr, 0, 0, page, 20);
         T20_sendJsonText(request, ok, json);
     });
-    
+
     v_server->on((base + "/dsp/noise").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         JsonDocument doc;
         doc["is_learning"] = p->noise_learning_active;
@@ -171,9 +171,9 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
 
     v_server->on((base + "/live_debug").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         JsonDocument doc;
-        float hz = (p->viewer_last_frame_id > 0) ? 
+        float hz = (p->viewer_last_frame_id > 0) ?
                    (1000.0f / (float)(millis() - p->last_frame_process_ms + 1)) : 0.0f;
-                   
+
         doc["process_hz"] = hz;
         doc["integrity"]["dropped_frames"] = p->dropped_frames;
         doc["integrity"]["dma_overflows"] = p->recorder_last_error[0] == 'd' ? 1 : 0;
@@ -183,7 +183,7 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
         doc["fft_size"] = T20::C10_DSP::FFT_SIZE;
         T20_sendJsonDocument(request, doc);
     });
-    
+
     // 파일 탐색기 리스트 제공 (refreshFileList 대응)
     v_server->on((base + "/recorder_index").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         char json[T20::C10_Web::LARGE_JSON_BUF_SIZE] = {0};
@@ -197,13 +197,13 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
     });
 
     // 프론트엔드에서 설정값 변경 (saveSettings 대응)
-    v_server->addHandler(new AsyncCallbackJsonWebHandler((base + "/runtime_config").c_str(), 
+    v_server->addHandler(new AsyncCallbackJsonWebHandler((base + "/runtime_config").c_str(),
         [p](AsyncWebServerRequest *request, JsonVariant &jsonVariant) {
             JsonDocument doc;
             doc.set(jsonVariant);
             char json_text[T20::C10_Web::JSON_BUF_SIZE];
             serializeJson(doc, json_text, sizeof(json_text));
-            
+
             bool ok = T20_applyRuntimeConfigJsonText(p, json_text);
             T20_sendJsonText(request, ok, T20::C10_Web::JSON_OK);
         }
@@ -224,7 +224,7 @@ void T20_registerFileStreamingHandler(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v
         }
 
         File file = (p->recorder_storage_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(path, "r") : LittleFS.open(path, "r");
-        
+
         if (!file) {
             AsyncWebServerResponse *response = request->beginResponse(404, T20::C10_Web::MIME_TEXT, "file_not_found");
             response->addHeader("Access-Control-Allow-Origin", "*");
@@ -233,8 +233,8 @@ void T20_registerFileStreamingHandler(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v
         }
 
         AsyncWebServerResponse *response = request->beginResponse(
-            file, 
-            String(path), 
+            file,
+            String(path),
             String(T20::C10_Web::MIME_OCTET)
         );
         response->addHeader("Access-Control-Allow-Origin", "*");
@@ -276,7 +276,7 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server) {
             request->send(response);
         }
     });
-    
+
     v_server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         String path = String(T20::C10_Path::LFS_DIR_WEB) + String("/") + String(T20::C10_Path::LFS_FILE_WEB_IDX);
         request->send(LittleFS, path, T20::C10_Web::MIME_HTML);
@@ -301,12 +301,12 @@ void T20_registerStaticFrontendHandlers(AsyncWebServer* v_server) {
  * ---------------------------------------------------------------------------- */
 uint32_t T20_calcStatusHash(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return 0;
-    
+
     uint32_t h = T20::C10_Web::HASH_OFFSET_BASIS;
-    h ^= p->viewer_last_frame_id;      h *= T20::C10_Web::HASH_PRIME; 
-    h ^= p->recorder_record_count;     h *= T20::C10_Web::HASH_PRIME; 
-    h ^= (uint32_t)(p->bmi270_last_axis_values[2] * 1000.0f); 
-    h ^= (p->measurement_active ? T20::C10_Web::MEASURE_FLAG_BIT : 0UL); 
+    h ^= p->viewer_last_frame_id;      h *= T20::C10_Web::HASH_PRIME;
+    h ^= p->recorder_record_count;     h *= T20::C10_Web::HASH_PRIME;
+    h ^= (uint32_t)(p->bmi270_last_axis_values[2] * 1000.0f);
+    h ^= (p->measurement_active ? T20::C10_Web::MEASURE_FLAG_BIT : 0UL);
     return h;
 }
 
@@ -337,14 +337,14 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
     T20_registerNoiseControlHandlers(p, v_server, base);
 
     // WebSocket 핸들러 등록
-    ws.onEvent(onWsEvent);
-    v_server->addHandler(&ws);
+    g_T250_ws.onEvent(onWsEvent);
+    v_server->addHandler(&g_T250_ws);
 
     v_server->on((base + "/build_sanity").c_str(), HTTP_GET, [p](AsyncWebServerRequest* request) {
         char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
         T20_sendJsonText(request, T20_buildBuildSanityJsonText(p, json, sizeof(json)), json);
     });
-    
+
     // 정적 프론트엔드 라우트 및 글로벌 OPTIONS(CORS) 처리는 가장 마지막에 등록
     T20_registerStaticFrontendHandlers(v_server);
 }

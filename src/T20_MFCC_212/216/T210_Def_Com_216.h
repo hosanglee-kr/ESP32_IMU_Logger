@@ -10,7 +10,7 @@
 #include <stdbool.h>
 
 namespace T20 {
-    
+
     // --- 1. 시스템 및 RTOS 공통 ---
     namespace C10_Sys {
         inline constexpr char const* VERSION_STR           = "T20_Mfcc_v217"; // 217 업데이트
@@ -27,9 +27,11 @@ namespace T20 {
         inline constexpr uint8_t SPI_SCK     = 12U;
         inline constexpr uint8_t SPI_MISO    = 13U;
         inline constexpr uint8_t SPI_MOSI    = 11U;
+
         inline constexpr uint8_t BMI_CS      = 10U;
         inline constexpr uint8_t BMI_INT1    = 14U;
-        inline constexpr uint8_t BTN_CONTROL = 0U;
+
+		inline constexpr uint8_t BTN_CONTROL = 0U;
     }
 
     // --- 3. RTOS 태스크 파라미터 ---
@@ -46,20 +48,22 @@ namespace T20 {
     namespace C10_DSP {
         inline constexpr float    MATH_PI          = 3.14159265358979323846f;
         inline constexpr float    EPSILON          = 1.0e-12f;
-        
+
         inline constexpr uint16_t FFT_SIZE         = 256U;
-        inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U; 
-        
+		// [계산식] FFT 절반(Nyquist) + 1 (DC 성분)
+        inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U;
+
         inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;
         inline constexpr uint16_t MEL_FILTERS      = 26U;
-        
+
         inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;
         inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;
-        
+
+		// [계산식] 특징 벡터 파생 공식 (MFCC + Delta + Delta2 = x3)
         inline constexpr uint16_t FEATURE_MULTIPLIER = 3U;
         inline constexpr uint16_t FEATURE_DIM_MAX  = MFCC_COEFFS_MAX * FEATURE_MULTIPLIER; // 96
         inline constexpr uint16_t FEATURE_DIM_DEF  = MFCC_COEFFS_DEF * FEATURE_MULTIPLIER; // 39
-        
+
         inline constexpr uint16_t MFCC_HISTORY     = 5U;
         inline constexpr uint8_t  PREPROCESS_STAGE_MAX = 8U;
         inline constexpr uint16_t NOISE_MIN_FRAMES = 8U;
@@ -90,10 +94,16 @@ namespace T20 {
         inline constexpr uint16_t BINARY_VERSION     = 1U;
         inline constexpr uint16_t BIN_RESERVED_BYTES = 8U;
 
-        inline constexpr uint32_t HEADER_RECORD_OFFSET = 
-            sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + 
-            sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + 
-            sizeof(uint16_t) + sizeof(uint16_t);
+        // [계산식] 바이너리 헤더 구조체의 record_count 위치를 바이트 크기 합산으로 명확히 지정 (20U)
+        inline constexpr uint32_t HEADER_RECORD_OFFSET =
+            		  sizeof(uint32_t)  			// magic
+            		+ sizeof(uint16_t)  			// version
+            		+ sizeof(uint16_t)  			// header_size
+            		+ sizeof(uint32_t)  			// sample_rate_hz
+            		+ sizeof(uint16_t)  			// fft_size
+            		+ sizeof(uint16_t)  			// mfcc_dim
+            		+ sizeof(uint16_t)  			// mel_filters
+            		+ sizeof(uint16_t);  			// sequence_frames
 
         inline constexpr uint8_t  DMA_SLOT_COUNT     = 3U;
         inline constexpr uint32_t DMA_SLOT_BYTES     = 1024U;
@@ -111,7 +121,7 @@ namespace T20 {
         inline constexpr uint16_t FILE_PATH_MAX      = 192U;
         inline constexpr uint16_t SESSION_NAME_MAX   = 48U;
         inline constexpr uint16_t LAST_ERROR_MAX     = 128U;
-        
+
         inline constexpr uint8_t  SDMMC_PIN_UNASSIGNED   = 0xFFU;
         inline constexpr uint16_t SDMMC_PROFILE_COUNT    = 3U;
         inline constexpr uint16_t SDMMC_PROFILE_NAME_MAX = 32U;
@@ -124,12 +134,12 @@ namespace T20 {
         inline constexpr uint16_t SELECTION_POINTS_MAX = 128U;
         inline constexpr uint16_t SYNC_SERIES_MAX      = 4U;
         inline constexpr uint16_t SYNC_NAME_MAX        = 32U;
-        
+
         inline constexpr uint16_t META_KIND_MAX        = 24U;
         inline constexpr uint16_t META_AUTO_TEXT_MAX   = 64U;
         inline constexpr uint16_t META_NAME_MAX        = 32U;
         inline constexpr uint16_t META_TEXT_MAX        = 96U;
-        
+
         inline constexpr uint16_t CSV_MAX_ROWS         = 128U;
         inline constexpr uint16_t CSV_PAGE_SIZE_DEF    = 20U;
         inline constexpr uint16_t CSV_PAGE_SIZE_MAX    = 100U;
@@ -153,16 +163,21 @@ namespace T20 {
         inline constexpr char const* MIME_OCTET        = "application/octet-stream";
         inline constexpr char const* MIME_HTML         = "text/html";
         inline constexpr char const* MIME_TEXT         = "text/plain";
-        
+
+        inline constexpr char const* JSON_OK           = "{\"ok\":true}";
+        inline constexpr char const* JSON_FAIL         = "{\"ok\":false}";
+
+        inline constexpr char const* INDEX_FILE        = "index_214_003.html";
+        inline constexpr char const* CACHE_CTRL        = "max-age=3600";
         inline constexpr char const* WS_URI            = "/api/t20/ws";
 
         inline constexpr uint16_t JSON_BUF_SIZE        = 2048U;
         inline constexpr uint16_t LARGE_JSON_BUF_SIZE  = 8192U;
+        inline constexpr uint16_t PATH_BUF_SIZE        = 256U;
         inline constexpr uint32_t BTN_DEBOUNCE_MS      = 500U;
 
-
     }
-        
+
 
     // --- 9. [NEW] 폴더 아키텍처 및 파일 경로 관리 ---
     namespace C10_Path {

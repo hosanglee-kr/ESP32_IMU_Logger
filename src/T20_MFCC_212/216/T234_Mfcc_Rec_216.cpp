@@ -19,13 +19,13 @@ static inline bool T20_isDmaSafe(const void* p_ptr) {
 
 bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr || p->recorder_enabled) return false;
-    
+
     // 로테이션 파일명 생성 (현재 시간 기반)
-    snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s", 
+    snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s",
          T20::C10_Path::SD_PREFIX_BIN, (unsigned long)millis(), T20::C10_Path::SD_EXT_BIN);
-    // snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s", 
+    // snprintf(p->recorder_file_path, sizeof(p->recorder_file_path), "%s%lu%s",
     //         T20::C10_Rec::ROTATE_PREFIX, (unsigned long)millis(), T20::C10_Rec::ROTATE_EXT);
-    
+
     // 세션 및 버퍼 상태 초기화
     p->recorder_record_count = 0;
     p->recorder_batch_count = 0;
@@ -35,7 +35,7 @@ bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
     p->recorder_session_open = true;
     p->recorder_session_open_ms = millis();
     p->recorder_file_opened = false; // 오픈은 T20_recorderOpenIfNeeded에서 지연 처리
-    
+
     // 인덱스 리스트에 새 파일 등록
     if (p->recorder_index_count < T20::C10_Rec::MAX_ROTATE_LIST) {
         strlcpy(p->recorder_index_items[p->recorder_index_count].path, p->recorder_file_path, 128);
@@ -43,11 +43,11 @@ bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
         p->recorder_index_items[p->recorder_index_count].created_ms = p->recorder_session_open_ms;
         p->recorder_index_items[p->recorder_index_count].record_count = 0;
         p->recorder_index_count++;
-        
+
         // 시작하자마자 인덱스 갱신
         T20_saveRecorderIndex(p);
     }
-    
+
     p->recorder_enabled = true;
     T20_recorderWriteEvent(p, "recorder_started");
     return true;
@@ -55,11 +55,11 @@ bool T20_recorderBegin(CL_T20_Mfcc::ST_Impl* p) {
 
 bool T20_recorderCloseSession(CL_T20_Mfcc::ST_Impl* p, const char* p_reason) {
     if (p == nullptr) return false;
-    
+
     p->recorder_session_open = false;
     p->recorder_session_close_ms = millis();
     p->recorder_file_opened = false;
-    
+
     T20_recorderWriteEvent(p, p_reason ? p_reason : "session_closed");
     return true;
 }
@@ -73,10 +73,10 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
     // 2. 바이너리 헤더 업데이트 및 최종 파일 크기 동기화
     File file = T20_openRecorderFileByBackend(p->recorder_storage_backend, p->recorder_active_path, "r+");
     if (file) {
-        file.seek(BINARY_HEADER_RECORD_COUNT_OFFSET); 
+        file.seek(BINARY_HEADER_RECORD_COUNT_OFFSET);
         uint32_t final_count = p->recorder_record_count;
         file.write((const uint8_t*)&final_count, sizeof(final_count));
-        
+
         // 파일 닫기 직전 실제 용량을 가져와 인덱스 최신화
         uint32_t final_size = file.size();
         file.close();
@@ -84,7 +84,7 @@ bool T20_recorderEnd(CL_T20_Mfcc::ST_Impl* p) {
         if (p->recorder_index_count > 0) {
             p->recorder_index_items[p->recorder_index_count - 1].size_bytes = final_size;
             p->recorder_index_items[p->recorder_index_count - 1].record_count = final_count;
-            T20_saveRecorderIndex(p); 
+            T20_saveRecorderIndex(p);
         }
     }
 
@@ -174,11 +174,11 @@ void T20_recorderTask(void* p_arg) {
 
         // 큐에서 39차 특징 벡터 수신 (200ms 타임아웃)
         if (xQueueReceive(p->recorder_queue, &msg, pdMS_TO_TICKS(200)) == pdTRUE) {
-            
+
             if (T20_stageVectorToDmaSlot(p, &msg)) {
-                p->recorder_record_count++;          
-                p->recorder_batch_count++;           
-                p->recorder_batch_last_push_ms = millis(); 
+                p->recorder_record_count++;
+                p->recorder_batch_count++;
+                p->recorder_batch_last_push_ms = millis();
             }
 
             if (p->recorder_flush_requested || p->recorder_batch_count >= p->recorder_batch_watermark_high) {
@@ -200,13 +200,13 @@ bool T20_stageVectorToDmaSlot(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVect
 
     uint8_t slot = p->recorder_dma_active_slot;
     uint16_t msg_size = sizeof(p_msg->frame_id) + sizeof(p_msg->vector_len) + (sizeof(float) * p_msg->vector_len);
-    
+
     if ((p->recorder_dma_slot_used[slot] + msg_size) > T20::C10_Rec::DMA_SLOT_BYTES) {
         T20_commitDmaSlotToFile(p, slot);
-        
+
         p->recorder_dma_active_slot = (slot + 1) % T20::C10_Rec::DMA_SLOT_COUNT;
         slot = p->recorder_dma_active_slot;
-        
+
         if (p->recorder_dma_slot_used[slot] > 0) {
             T20_recorderSetLastError(p, "dma_overflow_busy");
             return false;
@@ -219,7 +219,7 @@ bool T20_stageVectorToDmaSlot(CL_T20_Mfcc::ST_Impl* p, const ST_T20_RecorderVect
     memcpy(target_ptr, &p_msg->vector_len, sizeof(p_msg->vector_len));
     target_ptr += sizeof(p_msg->vector_len);
     memcpy(target_ptr, p_msg->vector, sizeof(float) * p_msg->vector_len);
-    
+
     p->recorder_dma_slot_used[slot] += msg_size;
     return true;
 }
@@ -240,15 +240,15 @@ bool T20_recorderBatchFlush(CL_T20_Mfcc::ST_Impl* p) {
 
 bool T20_recorderFlushNow(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    
+
     bool ok = T20_recorderBatchFlush(p);
-    
+
     p->recorder_last_flush_ms = millis();
     T20_recorderWriteMetadataHeartbeat(p);
     T20_recorderRotateIfNeeded(p);
-    
+
     p->recorder_flush_requested = false;
-    p->recorder_batch_count = 0; 
+    p->recorder_batch_count = 0;
     return ok;
 }
 
@@ -333,9 +333,9 @@ void T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p) {
 // 시스템 재부팅 시 기존 저장된 파일 목록을 읽어오는 로직
 bool T20_loadRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    if (!LittleFS.exists(T20::C10_Rec::INDEX_PATH)) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_IDX)) return false;
 
-    File file = LittleFS.open(T20::C10_Rec::INDEX_PATH, "r");
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "r");
     if (!file) return false;
 
     String json_text = file.readString();
@@ -363,13 +363,13 @@ bool T20_loadRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
 bool T20_saveRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
-    File file = LittleFS.open(T20::C10_Rec::INDEX_PATH, "w");
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "w");
     if (!file) return false;
 
     JsonDocument doc;
     doc["count"] = p->recorder_index_count;
     JsonArray arr = doc["items"].to<JsonArray>();
-    
+
     for (uint16_t i = 0; i < p->recorder_index_count; i++) {
         JsonObject item = arr.add<JsonObject>();
         item["path"] = p->recorder_index_items[i].path;
@@ -389,7 +389,7 @@ bool T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     JsonDocument doc;
     doc["count"] = p->recorder_index_count;
     JsonArray arr = doc["items"].to<JsonArray>();
-    
+
     for (uint16_t i = 0; i < p->recorder_index_count; i++) {
         JsonObject item = arr.add<JsonObject>();
         item["path"] = p->recorder_index_items[i].path;
@@ -413,7 +413,7 @@ bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     File f = LittleFS.open(T20::C10_Path::LFS_FILE_CFG, "r");
     // File f = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "r");
     if (!f) return false;
-    
+
     String json_text = f.readString();
     f.close();
 
@@ -425,12 +425,12 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
 
     char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
     if (!T20_buildRuntimeConfigJsonText(p, json, sizeof(json))) return false;
-    
+
     File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "w");
     // File file = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "w");
-    
+
     if (!file) return false;
-    
+
     file.print(json);
     file.close();
     return true;
@@ -438,42 +438,42 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
 
 bool T20_tryMountSdmmcRecorderBackend(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    
+
     if (p->sdmmc_profile_applied && p->sdmmc_profile.clk_pin != T20::C10_Rec::SDMMC_PIN_UNASSIGNED) {
         SD_MMC.setPins(
-               p->sdmmc_profile.clk_pin, 
-               p->sdmmc_profile.cmd_pin, 
-               p->sdmmc_profile.d0_pin, 
-               p->sdmmc_profile.d1_pin, 
-               p->sdmmc_profile.d2_pin, 
+               p->sdmmc_profile.clk_pin,
+               p->sdmmc_profile.cmd_pin,
+               p->sdmmc_profile.d0_pin,
+               p->sdmmc_profile.d1_pin,
+               p->sdmmc_profile.d2_pin,
                p->sdmmc_profile.d3_pin
         );
     }
-    
-    if (SD_MMC.begin(T20::C10_Path::MOUNT_SDMMC, true)) { 
+
+    if (SD_MMC.begin(T20::C10_Path::MOUNT_SDMMC, true)) {
         p->recorder_sdmmc_mounted = true;
         p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
-    
+
         // [NEW] SD 카드 초기 폴더 트리 생성
         if (!SD_MMC.exists(T20::C10_Path::SD_DIR_ROOT)) SD_MMC.mkdir(T20::C10_Path::SD_DIR_ROOT);
         if (!SD_MMC.exists(T20::C10_Path::SD_DIR_BIN))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_BIN);
         if (!SD_MMC.exists(T20::C10_Path::SD_DIR_CSV))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_CSV);
         if (!SD_MMC.exists(T20::C10_Path::SD_DIR_LOG))  SD_MMC.mkdir(T20::C10_Path::SD_DIR_LOG);
-    
+
         T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
         return true;
     }
 
 
     /*
-    if (SD_MMC.begin(T20::C10_Rec::SDMMC_MOUNT_PATH, true)) { 
+    if (SD_MMC.begin(T20::C10_Rec::SDMMC_MOUNT_PATH, true)) {
         p->recorder_sdmmc_mounted = true;
         p->recorder_storage_backend = EN_T20_STORAGE_SDMMC;
         T20_recorderWriteEvent(p, "sd_mount_1bit_ok");
         return true;
     }
     */
-    
+
     p->recorder_fallback_active = true;
     T20_recorderWriteEvent(p, "sd_mount_fail_fallback_fs");
     return false;
@@ -500,7 +500,7 @@ bool T20_recorderSelectActivePath(CL_T20_Mfcc::ST_Impl* p, char* p_out, uint16_t
     */
 
     strlcpy(p->recorder_active_path, p_out, sizeof(p->recorder_active_path));
-    return true; 
+    return true;
 }
 
 File T20_openRecorderFileByBackend(EM_T20_StorageBackend_t p_backend, const char* p_path, const char* p_mode) {
@@ -511,7 +511,7 @@ File T20_openRecorderFileByBackend(EM_T20_StorageBackend_t p_backend, const char
 bool T20_recorderWriteEvent(CL_T20_Mfcc::ST_Impl* p, const char* p_text) {
     if (p == nullptr || p_text == nullptr) return false;
     strlcpy(p->recorder_last_error, p_text, sizeof(p->recorder_last_error));
-    return true; 
+    return true;
 }
 
 void T20_recorderSetLastError(CL_T20_Mfcc::ST_Impl* p, const char* p_text) {
@@ -523,7 +523,7 @@ bool T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
     p->recorder_last_flush_ms = millis();
-    
+
     if (p->recorder_session_open && p->recorder_session_open_ms == 0) {
         p->recorder_session_open_ms = millis();
     }
@@ -532,22 +532,22 @@ bool T20_recorderWriteMetadataHeartbeat(CL_T20_Mfcc::ST_Impl* p) {
 
 bool T20_writeRecorderBinaryHeader(File& p_file, const ST_T20_Config_t* p_cfg) {
     if (!p_file || !p_cfg) return false;
-    
+
     ST_T20_RecorderBinaryHeader_t hdr;
     memset(&hdr, 0, sizeof(hdr));
-    
+
     hdr.magic = T20::C10_Rec::BINARY_MAGIC;
     hdr.version = T20::C10_Rec::BINARY_VERSION;
     hdr.header_size = sizeof(ST_T20_RecorderBinaryHeader_t);
-    
+
     hdr.sample_rate_hz = (uint32_t)p_cfg->feature.sample_rate_hz;
     hdr.fft_size = p_cfg->feature.fft_size;
     hdr.mfcc_dim = p_cfg->feature.mfcc_coeffs;
     hdr.mel_filters = p_cfg->feature.mel_filters;
     hdr.sequence_frames = p_cfg->output.sequence_frames;
-    
-    hdr.record_count = 0; 
-    
+
+    hdr.record_count = 0;
+
     return p_file.write((const uint8_t*)&hdr, sizeof(hdr)) == sizeof(hdr);
 }
 
