@@ -265,8 +265,8 @@ bool T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p) {
     p->bmi.performGyroOffsetCalibration();
 
     // 2. Direct SPI로 7바이트 오프셋 추출
-    uint8_t offsets[T20::C10_BMI::REG_OFFSET_LEN] = {0};
-    if (!T20_bmi270_ReadRegs_Direct(p, T20::C10_BMI::REG_OFFSET_START, offsets, T20::C10_BMI::REG_OFFSET_LEN)) {
+    uint8_t offsets[T20::C10_BMI::REG_CALIB_OFFSET_LEN] = {0};
+    if (!T20_bmi270_ReadRegs_Direct(p, T20::C10_BMI::REG_CALIB_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
         p->measurement_active = was_measuring;
         return false;
     }
@@ -276,7 +276,7 @@ bool T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p) {
     doc["calibrated"] = true;
     doc["timestamp"] = millis();
     JsonArray offset_array = doc["offsets"].to<JsonArray>();
-    for (uint8_t i = 0; i < T20::C10_BMI::REG_OFFSET_LEN; i++) {
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_CALIB_OFFSET_LEN; i++) {
         offset_array.add(offsets[i]);
     }
 
@@ -307,15 +307,15 @@ bool T20_bmi270_ApplyStoredCalibration(CL_T20_Mfcc::ST_Impl* p) {
     if (deserializeJson(doc, json_text)) return false;
 
     JsonArray offset_array = doc["offsets"].as<JsonArray>();
-    if (offset_array.size() != T20::C10_BMI::REG_OFFSET_LEN) return false;
+    if (offset_array.size() != T20::C10_BMI::REG_CALIB_OFFSET_LEN) return false;
 
-    uint8_t offsets[T20::C10_BMI::REG_OFFSET_LEN] = {0};
-    for (uint8_t i = 0; i < T20::C10_BMI::REG_OFFSET_LEN; i++) {
+    uint8_t offsets[T20::C10_BMI::REG_CALIB_OFFSET_LEN] = {0};
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_CALIB_OFFSET_LEN; i++) {
         offsets[i] = (uint8_t)offset_array[i];
     }
 
     // Direct SPI를 통해 센서 레지스터에 강제 주입
-    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_OFFSET_START, offsets, T20::C10_BMI::REG_OFFSET_LEN)) {
+    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_CALIB_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
         strlcpy(p->bmi270_status_text, "Calib_Injected", T20::C10_BMI::STATUS_TEXT_MAX);
         return true;
     }
