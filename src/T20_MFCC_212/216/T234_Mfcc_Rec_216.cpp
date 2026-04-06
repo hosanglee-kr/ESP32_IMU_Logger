@@ -333,9 +333,9 @@ void T20_rotateListPrune(CL_T20_Mfcc::ST_Impl* p) {
 // 시스템 재부팅 시 기존 저장된 파일 목록을 읽어오는 로직
 bool T20_loadRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_IDX)) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_REC_IDX_JSON)) return false;
 
-    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "r");
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_REC_IDX_JSON, "r");
     if (!file) return false;
 
     String json_text = file.readString();
@@ -363,7 +363,7 @@ bool T20_loadRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
 bool T20_saveRecorderIndex(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
 
-    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "w");
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_REC_IDX_JSON, "w");
     if (!file) return false;
 
     JsonDocument doc;
@@ -407,10 +407,10 @@ bool T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
 
 bool T20_loadRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     if (p == nullptr) return false;
-    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_CFG)) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_CFG_JSON)) return false;
     // if (!LittleFS.exists(T20::C10_Rec::RUNTIME_CFG_PATH)) return false;
 
-    File f = LittleFS.open(T20::C10_Path::LFS_FILE_CFG, "r");
+    File f = LittleFS.open(T20::C10_Path::LFS_FILE_CFG_JSON, "r");
     // File f = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "r");
     if (!f) return false;
 
@@ -426,7 +426,7 @@ bool T20_saveRuntimeConfigFile(CL_T20_Mfcc::ST_Impl* p) {
     char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
     if (!T20_buildRuntimeConfigJsonText(p, json, sizeof(json))) return false;
 
-    File file = LittleFS.open(T20::C10_Path::LFS_FILE_IDX, "w");
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_REC_IDX_JSON, "w");
     // File file = LittleFS.open(T20::C10_Rec::RUNTIME_CFG_PATH, "w");
 
     if (!file) return false;

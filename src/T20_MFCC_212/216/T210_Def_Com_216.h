@@ -46,46 +46,46 @@ namespace T20 {
 
     // --- 4. DSP & 수학 연산 한계치 ---
     namespace C10_DSP {
-        inline constexpr float    MATH_PI          = 3.14159265358979323846f;
-        inline constexpr float    EPSILON          = 1.0e-12f;
+        inline constexpr float    MATH_PI          			= 3.14159265358979323846f;
+        inline constexpr float    EPSILON          			= 1.0e-12f;
 
-        inline constexpr uint16_t FFT_SIZE         = 256U;
+        inline constexpr uint16_t FFT_SIZE         			= 256U;
 		// [계산식] FFT 절반(Nyquist) + 1 (DC 성분)
-        inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U;
+        inline constexpr uint16_t FFT_BINS         			= (FFT_SIZE / 2U) + 1U;
 
-        inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;
-        inline constexpr uint16_t MEL_FILTERS      = 26U;
+        inline constexpr float    SAMPLE_RATE_HZ   			= 1600.0f;
+        inline constexpr uint16_t MEL_FILTERS      			= 26U;
 
-        inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;
-        inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;
+        inline constexpr uint16_t MFCC_COEFFS_DEF  			= 13U;
+        inline constexpr uint16_t MFCC_COEFFS_MAX  			= 32U;
 
 		// [계산식] 특징 벡터 파생 공식 (MFCC + Delta + Delta2 = x3)
-        inline constexpr uint16_t FEATURE_MULTIPLIER = 3U;
-        inline constexpr uint16_t FEATURE_DIM_MAX  = MFCC_COEFFS_MAX * FEATURE_MULTIPLIER; // 96
-        inline constexpr uint16_t FEATURE_DIM_DEF  = MFCC_COEFFS_DEF * FEATURE_MULTIPLIER; // 39
+        inline constexpr uint16_t FEATURE_MULTIPLIER 		= 3U;
+        inline constexpr uint16_t FEATURE_DIM_MAX  			= MFCC_COEFFS_MAX * FEATURE_MULTIPLIER; // 96
+        inline constexpr uint16_t FEATURE_DIM_DEF  			= MFCC_COEFFS_DEF * FEATURE_MULTIPLIER; // 39
 
-        inline constexpr uint16_t MFCC_HISTORY     = 5U;
-        inline constexpr uint8_t  PREPROCESS_STAGE_MAX = 8U;
-        inline constexpr uint16_t NOISE_MIN_FRAMES = 8U;
+        inline constexpr uint16_t MFCC_HISTORY     			= 5U;
+        inline constexpr uint8_t  PREPROCESS_STAGE_MAX 		= 8U;
+        inline constexpr uint16_t NOISE_MIN_FRAMES 			= 8U;
     }
 
     // --- 5. BMI270 센서 드라이버 ---
     namespace C10_BMI {
-        inline constexpr uint32_t SPI_FREQ_HZ      = 10000000UL;
-        inline constexpr uint8_t  CHIP_ID_EXPECTED = 0x24U;
-        inline constexpr uint8_t  BURST_AXIS_COUNT = 3U;
-        inline constexpr uint8_t  STATUS_TEXT_MAX  = 48U;
+        inline constexpr uint32_t SPI_FREQ_HZ      			= 10000000UL;
+        inline constexpr uint8_t  CHIP_ID_EXPECTED 			= 0x24U;
+        inline constexpr uint8_t  BURST_AXIS_COUNT 			= 3U;
+        inline constexpr uint8_t  STATUS_TEXT_MAX  			= 48U;
 
-        inline constexpr uint8_t AXIS_MODE_GYRO_Z    = 0U;
-        inline constexpr uint8_t AXIS_MODE_ACC_Z     = 1U;
-        inline constexpr uint8_t AXIS_MODE_GYRO_NORM = 2U;
+        inline constexpr uint8_t AXIS_MODE_GYRO_Z    		= 0U;
+        inline constexpr uint8_t AXIS_MODE_ACC_Z     		= 1U;
+        inline constexpr uint8_t AXIS_MODE_GYRO_NORM 		= 2U;
 
-        inline constexpr uint8_t REG_CHIP_ID      = 0x00U;
-        inline constexpr uint8_t REG_STATUS       = 0x03U;
-        inline constexpr uint8_t REG_GYR_X_LSB    = 0x0CU;
-        inline constexpr uint8_t REG_ACC_X_LSB    = 0x12U;
-        inline constexpr uint8_t REG_INT_STATUS_1 = 0x1DU;
-        inline constexpr uint8_t REG_READ_FLAG    = 0x80U;
+        inline constexpr uint8_t REG_CHIP_ID      			= 0x00U;
+        inline constexpr uint8_t REG_STATUS       			= 0x03U;
+        inline constexpr uint8_t REG_GYR_X_LSB    			= 0x0CU;
+        inline constexpr uint8_t REG_ACC_X_LSB    			= 0x12U;
+        inline constexpr uint8_t REG_INT_STATUS_1 			= 0x1DU;
+        inline constexpr uint8_t REG_READ_FLAG    			= 0x80U;
     }
 
     // --- 6. SDMMC 레코더 & 파일 시스템 상태 ---
@@ -105,26 +105,26 @@ namespace T20 {
             		+ sizeof(uint16_t)  			// mel_filters
             		+ sizeof(uint16_t);  			// sequence_frames
 
-        inline constexpr uint8_t  DMA_SLOT_COUNT     = 3U;
-        inline constexpr uint32_t DMA_SLOT_BYTES     = 1024U;
+        inline constexpr uint8_t  DMA_SLOT_COUNT     		= 3U;
+        inline constexpr uint32_t DMA_SLOT_BYTES     		= 1024U;
 
-        inline constexpr uint16_t BATCH_VECTOR_MAX   = 16U;
-        inline constexpr uint16_t BATCH_WMARK_LOW    = 2U;
-        inline constexpr uint16_t BATCH_WMARK_HIGH   = 8U;
-        inline constexpr uint32_t BATCH_IDLE_FLUSH_MS= 250U;
-        inline constexpr uint32_t FLUSH_MS           = 1000U;
+        inline constexpr uint16_t BATCH_VECTOR_MAX   		= 16U;
+        inline constexpr uint16_t BATCH_WMARK_LOW    		= 2U;
+        inline constexpr uint16_t BATCH_WMARK_HIGH   		= 8U;
+        inline constexpr uint32_t BATCH_IDLE_FLUSH_MS		= 250U;
+        inline constexpr uint32_t FLUSH_MS           		= 1000U;
 
-        inline constexpr uint8_t  ROTATE_MAX         = 8U;
-        inline constexpr uint8_t  ROTATE_KEEP_MAX    = 8U;
-        inline constexpr uint16_t MAX_ROTATE_LIST    = 16U;
+        inline constexpr uint8_t  ROTATE_MAX         		= 8U;
+        inline constexpr uint8_t  ROTATE_KEEP_MAX    		= 8U;
+        inline constexpr uint16_t MAX_ROTATE_LIST    		= 16U;
 
-        inline constexpr uint16_t FILE_PATH_MAX      = 192U;
-        inline constexpr uint16_t SESSION_NAME_MAX   = 48U;
-        inline constexpr uint16_t LAST_ERROR_MAX     = 128U;
+        inline constexpr uint16_t FILE_PATH_MAX      		= 192U;
+        inline constexpr uint16_t SESSION_NAME_MAX   		= 48U;
+        inline constexpr uint16_t LAST_ERROR_MAX     		= 128U;
 
-        inline constexpr uint8_t  SDMMC_PIN_UNASSIGNED   = 0xFFU;
-        inline constexpr uint16_t SDMMC_PROFILE_COUNT    = 3U;
-        inline constexpr uint16_t SDMMC_PROFILE_NAME_MAX = 32U;
+        inline constexpr uint8_t  SDMMC_PIN_UNASSIGNED   	= 0xFFU;
+        inline constexpr uint16_t SDMMC_PROFILE_COUNT    	= 3U;
+        inline constexpr uint16_t SDMMC_PROFILE_NAME_MAX 	= 32U;
     }
 
     // --- 7. 뷰어 및 CSV 관리 ---
@@ -167,7 +167,7 @@ namespace T20 {
         inline constexpr char const* JSON_OK           = "{\"ok\":true}";
         inline constexpr char const* JSON_FAIL         = "{\"ok\":false}";
 
-        inline constexpr char const* INDEX_FILE        = "index_214_003.html";
+        // inline constexpr char const* INDEX_FILE        = "index_214_003.html";
         inline constexpr char const* CACHE_CTRL        = "max-age=3600";
         inline constexpr char const* WS_URI            = "/api/t20/ws";
 
@@ -182,29 +182,29 @@ namespace T20 {
     // --- 9. [NEW] 폴더 아키텍처 및 파일 경로 관리 ---
     namespace C10_Path {
         // [9.1] 마운트 포인트
-        inline constexpr char const* MOUNT_SDMMC      = "/sdcard";
+        inline constexpr char const* MOUNT_SDMMC      		= "/sdcard";
 
         // [9.2] LittleFS 경로 (시스템, 웹, 안전 백업)
-        inline constexpr char const* LFS_DIR_SYS      = "/sys";
-        inline constexpr char const* LFS_DIR_WEB      = "/www";
-        inline constexpr char const* LFS_DIR_FALLBACK = "/fallback";
+        inline constexpr char const* LFS_DIR_SYS      		= "/sys";
+        inline constexpr char const* LFS_DIR_WEB      		= "/www";
+        inline constexpr char const* LFS_DIR_FALLBACK 		= "/fallback";
 
-        inline constexpr char const* LFS_FILE_CFG     = "/sys/runtime_cfg.json";
-        inline constexpr char const* LFS_FILE_IDX     = "/sys/recorder_index.json";
-        inline constexpr char const* LFS_FILE_WEB_IDX = "index_214_003.html"; // ServeStatic용
-        inline constexpr char const* LFS_FILE_FALLBACK= "/fallback/rec_fallback.bin";
-        inline constexpr char const* LFS_FILE_DEFAULT = "/fallback/default_rec.bin";
+        inline constexpr char const* LFS_FILE_CFG_JSON     	= "/sys/runtime_cfg.json";
+        inline constexpr char const* LFS_FILE_REC_IDX_JSON  = "/sys/recorder_index.json";
+        inline constexpr char const* LFS_FILE_WEB_INDEX 	= "index_214_003.html"; // ServeStatic용
+        inline constexpr char const* LFS_FILE_FALLBACK		= "/fallback/rec_fallback.bin";
+        inline constexpr char const* LFS_FILE_DEFAULT 		= "/fallback/default_rec.bin";
 
         // [9.3] SD_MMC 경로 (대용량 로깅 및 내보내기)
-        inline constexpr char const* SD_DIR_ROOT      = "/t20_data";
-        inline constexpr char const* SD_DIR_BIN       = "/t20_data/bin";
-        inline constexpr char const* SD_DIR_CSV       = "/t20_data/csv";
-        inline constexpr char const* SD_DIR_LOG       = "/t20_data/log";
+        inline constexpr char const* SD_DIR_ROOT      		= "/t20_data";
+        inline constexpr char const* SD_DIR_BIN       		= "/t20_data/bin";
+        inline constexpr char const* SD_DIR_CSV       		= "/t20_data/csv";
+        inline constexpr char const* SD_DIR_LOG       		= "/t20_data/log";
 
-        inline constexpr char const* SD_PREFIX_BIN    = "/t20_data/bin/rec_";
-        inline constexpr char const* SD_EXT_BIN       = ".bin";
-        inline constexpr char const* SD_PREFIX_CSV    = "/t20_data/csv/exp_";
-        inline constexpr char const* SD_EXT_CSV       = ".csv";
+        inline constexpr char const* SD_PREFIX_BIN    		= "/t20_data/bin/rec_";
+        inline constexpr char const* SD_EXT_BIN       		= ".bin";
+        inline constexpr char const* SD_PREFIX_CSV    		= "/t20_data/csv/exp_";
+        inline constexpr char const* SD_EXT_CSV       		= ".csv";
     }
 }
 
