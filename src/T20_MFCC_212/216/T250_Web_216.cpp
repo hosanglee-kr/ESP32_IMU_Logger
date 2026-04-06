@@ -371,23 +371,3 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
 
 
 
-    // [수정 후] 파일 영구 저장 로직 추가
-    v_server->addHandler(new AsyncCallbackJsonWebHandler((base + "/runtime_config").c_str(), 
-        [p](AsyncWebServerRequest *request, JsonVariant &jsonVariant) {
-            JsonDocument doc;
-            doc.set(jsonVariant);
-            char json_text[T20::C10_Web::JSON_BUF_SIZE];
-            serializeJson(doc, json_text, sizeof(json_text));
-            
-            // 1. 전달받은 JSON을 파싱하여 메모리(RAM) 구조체에 적용하고, 
-            //    센서 측정 범위가 바뀌었다면 내부적으로 하드웨어 재초기화(Re-init) 수행
-            bool ok = T20_applyRuntimeConfigJsonText(p, json_text);
-            
-            // 2. 적용이 성공했다면 LittleFS의 runtime_cfg.json 파일에 영구 저장 (누락 복구)
-            if (ok) {
-                T20_saveRuntimeConfigFile(p);
-            }
-            
-            T20_sendJsonText(request, ok, T20::C10_Web::JSON_OK);
-        }
-    ));
