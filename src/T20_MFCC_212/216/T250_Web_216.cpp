@@ -109,7 +109,7 @@ void T20_registerControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_serv
     });
     
     // bmi 센서 수동 캘리브레이션 API
-    v_server->on((base + "/calibrate_sensor").c_str(), HTTP_POST, [p](AsyncWebServerRequest* request) {
+    v_server->on((base + "/calibrate").c_str(), HTTP_POST, [p](AsyncWebServerRequest* request) {
         bool ok = T20_bmi270_RunAndSaveCalibration(p);
         if (ok) {
             T20_sendJsonText(request, true, "{\"ok\":true,\"msg\":\"calibration_saved\"}");
