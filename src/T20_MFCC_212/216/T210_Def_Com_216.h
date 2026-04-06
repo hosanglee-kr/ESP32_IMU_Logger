@@ -153,6 +153,7 @@ namespace T20 {
         inline constexpr char const* MIME_OCTET        = "application/octet-stream";
         inline constexpr char const* MIME_HTML         = "text/html";
         inline constexpr char const* MIME_TEXT         = "text/plain";
+    }
         
 
     // --- 9. [NEW] 폴더 아키텍처 및 파일 경로 관리 ---
