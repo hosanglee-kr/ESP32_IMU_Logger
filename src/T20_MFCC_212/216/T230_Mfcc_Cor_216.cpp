@@ -36,7 +36,13 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     _impl->recorder_queue = xQueueCreate(32, sizeof(ST_T20_RecorderVectorMessage_t)); 
 
     // [Step 3] 하드웨어 물리 연결 (SPI)
-    _impl->spi.begin(T20::C10_Pin::SPI_SCK, T20::C10_Pin::SPI_MISO, T20::C10_Pin::SPI_MOSI, T20::C10_Pin::BMI_CS);
+    _impl->spi.begin(
+        T20::C10_Pin::BMI_SCK, 
+        T20::C10_Pin::BMI_MISO, 
+        T20::C10_Pin::BMI_MOSI, 
+        T20::C10_Pin::BMI_CS
+    );
+
     
     // [Step 4] 센서 펌웨어 설정 적용 
     if (!T20_bmi270_LoadProductionConfig(_impl)) {

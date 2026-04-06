@@ -214,6 +214,7 @@ struct CL_T20_Mfcc::ST_Impl {
 
         // [2] 설정/프로필 초기화
         cfg = T20_makeDefaultConfig();
+        
         memset(profiles, 0, sizeof(profiles));
         current_profile_index = 0;
         memset(runtime_cfg_profile_name, 0, sizeof(runtime_cfg_profile_name));
@@ -317,9 +318,23 @@ struct CL_T20_Mfcc::ST_Impl {
         // [8] SDMMC 프로필 초기화
         memset(&sdmmc_profile, 0, sizeof(sdmmc_profile));
         memset(sdmmc_profiles, 0, sizeof(sdmmc_profiles));
+        
+        // C10_Pin에 정의된 하드웨어 배선 규격을 Default 프로필로 로드
+        strlcpy(sdmmc_profile.profile_name, "default_hw", sizeof(sdmmc_profile.profile_name));
+        sdmmc_profile.clk_pin = T20::C10_Pin::SDMMC_CLK;
+        sdmmc_profile.cmd_pin = T20::C10_Pin::SDMMC_CMD;
+        sdmmc_profile.d0_pin  = T20::C10_Pin::SDMMC_D0;
+        sdmmc_profile.d1_pin  = T20::C10_Pin::SDMMC_D1;
+        sdmmc_profile.d2_pin  = T20::C10_Pin::SDMMC_D2;
+        sdmmc_profile.d3_pin  = T20::C10_Pin::SDMMC_D3;
+        
+        // D1 핀 할당 여부에 따라 1-bit / 4-bit 모드 자동 판별
+        sdmmc_profile.use_1bit_mode = (T20::C10_Pin::SDMMC_D1 == T20::C10_Pin::PIN_UNASSIGNED);
+        sdmmc_profile.enabled = true;
+        
         sdmmc_profile_applied = false;
         strlcpy(sdmmc_last_apply_reason, "init", sizeof(sdmmc_last_apply_reason));
-        strlcpy(sdmmc_profile.profile_name, "default", sizeof(sdmmc_profile.profile_name));
+        
     }
 };
 
