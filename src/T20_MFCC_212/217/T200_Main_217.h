@@ -12,8 +12,8 @@ inline CL_T20_Mfcc& T20_instance() {
     return instance;
 }
 
-inline void T20_setup() {
-    Serial.begin(115200);
+inline void T20_init() {
+    
     
     auto& mfcc = T20_instance();
     ST_T20_Config_t cfg = T20_makeDefaultConfig();
@@ -26,7 +26,7 @@ inline void T20_setup() {
     }
 }
 
-inline void T20_loop() {
+inline void T20_run() {
     static uint32_t last_ms = 0;
     if (millis() - last_ms > 2000) {
         last_ms = millis();
