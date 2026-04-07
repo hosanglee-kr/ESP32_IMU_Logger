@@ -15,9 +15,15 @@ struct CL_T20_Mfcc::ST_Impl {
     CL_T20_DspPipeline    dsp;
     CL_T20_StorageService storage;
     CL_T20_CommService    comm;
+    
+    // 핑퐁 버퍼 및 인덱스 제어 변수 
+    alignas(16) float raw_buffer[T20::C10_Sys::RAW_FRAME_BUFFERS][T20::C10_DSP::FFT_SIZE];
+    uint8_t  write_idx = 0;
+    uint16_t sample_idx = 0;
+
 
     // RTOS 자원
-    TaskHandle_t      sensor_task;
+    TaskHandle_t      sensor_task = nullptr;
     TaskHandle_t      process_task;
     QueueHandle_t     frame_queue;
     SemaphoreHandle_t mutex;

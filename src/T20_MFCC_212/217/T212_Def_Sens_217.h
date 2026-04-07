@@ -1,6 +1,25 @@
 #pragma once
 #include "T210_Def_Com_217.h"
 
+typedef struct {
+    uint16_t fft_size;
+    uint16_t hop_size;
+    uint16_t mfcc_coeffs;
+    uint16_t mel_filters;
+} ST_T20_FeatureConfig_t;
+
+typedef struct {
+    bool enable;
+    float alpha;
+} ST_T20_PreEmphasisConfig_t;
+
+typedef struct {
+    ST_T20_PreEmphasisConfig_t preemphasis;
+    // 필요한 다른 전처리 설정들...
+} ST_T20_PreprocessConfig_t;
+
+
+
 // 센서 축 및 측정 범위 (유지)
 typedef enum {
     EN_T20_AXIS_ACCEL_X = 0, EN_T20_AXIS_ACCEL_Y, EN_T20_AXIS_ACCEL_Z,

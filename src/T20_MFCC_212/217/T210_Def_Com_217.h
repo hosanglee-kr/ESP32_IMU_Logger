@@ -50,8 +50,15 @@ namespace T20 {
         
         inline constexpr uint16_t FEATURE_DIM_DEF        = MFCC_COEFFS_DEF * 3U; // 39
         inline constexpr uint16_t MFCC_HISTORY_LEN       = 5U;
+        
     }
-
+    
+    // 센서 관련 상수 네임스페이스 복구
+    namespace C10_BMI {
+        inline constexpr uint32_t SPI_FREQ_HZ = 10000000UL;
+        inline constexpr uint8_t  REG_CALIB_OFFSET_START = 0x71U;
+    }
+    
     // --- [4] 파일 시스템 경로 (Path) ---
     namespace C10_Path {
         inline constexpr char const* MOUNT_SD            = "/sdcard";

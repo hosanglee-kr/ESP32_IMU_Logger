@@ -21,6 +21,12 @@ public:
     bool openSession(const ST_T20_RecorderBinaryHeader_t& header);
     void closeSession();
     
+
+    // 마스터 컨트롤러 상태 출력용 인터페이스
+    bool isOpen() const { return _session_open; }
+    uint32_t getRecordCount() const { return _record_count; }
+
+    
     // 데이터 기록 (DMA 슬롯 기반)
     bool writeRecord(const void* p_data, size_t len);
     

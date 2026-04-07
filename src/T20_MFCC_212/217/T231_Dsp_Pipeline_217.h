@@ -13,8 +13,9 @@ public:
     ~CL_T20_DspPipeline() = default;
 
     // 엔진 초기화 (필터 및 윈도우 생성)
-    bool begin(const ST_T20_FeatureConfig_t& f_cfg, const ST_T20_PreprocessConfig_t& p_cfg);
-    
+    bool begin(const ST_T20_Config_t& cfg);
+
+
     // 단일 프레임 처리 (Time Domain -> MFCC Vector)
     bool processFrame(const float* p_time_in, ST_T20_FeatureVector_t* p_vec_out);
 
@@ -34,8 +35,8 @@ private:
     void _build39DVector(ST_T20_FeatureVector_t* p_vec_out);
 
 private:
-    ST_T20_FeatureConfig_t    _f_cfg;
-    ST_T20_PreprocessConfig_t _p_cfg;
+    ST_T20_Config_t _cfg;
+    
 
     // SIMD 정렬 버퍼 (격리됨)
     alignas(16) float _work_frame[T20::C10_DSP::FFT_SIZE];
@@ -47,6 +48,9 @@ private:
     alignas(16) float _dct_matrix[T20::C10_DSP::MFCC_COEFFS_MAX][T20::C10_DSP::MEL_FILTERS];
     alignas(16) float _mfcc_history[T20::C10_DSP::MFCC_HISTORY_LEN][T20::C10_DSP::MFCC_COEFFS_MAX];
 
+    float _biquad_coeffs[5];
+    float _biquad_state[2];
+    
     // 상태 변수
     float    _prev_sample = 0.0f;
     uint16_t _history_count = 0;

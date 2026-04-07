@@ -2,6 +2,19 @@
 #include "T212_Def_Sens_217.h"
 #include "T217_Def_Net_217.h"
 
+
+typedef enum {
+    EN_T20_STORAGE_LITTLEFS = 0,
+    EN_T20_STORAGE_SDMMC
+} EM_T20_StorageBackend_t;
+
+typedef struct {
+    char profile_name[32];
+    bool use_1bit_mode;
+    uint8_t clk_pin, cmd_pin, d0_pin, d1_pin, d2_pin, d3_pin;
+} ST_T20_SdmmcProfile_t;
+
+
 typedef struct {
     ST_T20_ConfigSensor_t  sensor;
     ST_T20_ConfigWiFi_t    wifi;
