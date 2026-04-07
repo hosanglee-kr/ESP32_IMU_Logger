@@ -179,21 +179,50 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
         }
     });
 
-    _server.addHandler(new AsyncCallbackJsonWebHandler("/api/t20/runtime_config", 
-        [this](AsyncWebServerRequest *request, JsonVariant &jsonVariant) {
-            JsonDocument doc;
-            doc.set(jsonVariant);
+    _server.on("/api/t20/runtime_config", HTTP_POST, 
+        [](AsyncWebServerRequest *request) {
+            // 본문 처리가 완료되지 않았을 때의 Fallback 응답
+            request->send(400, "application/json", "{\"ok\":false,\"msg\":\"no_body\"}");
+        },
+        NULL, // Upload 핸들러 사용 안 함
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            // ArduinoJson V7 호환성을 위해 AsyncJson 우회 및 직접 파싱
+            if (index == 0) { 
+                request->_tempObject = malloc(total + 1); // 메모리 할당
+            }
             
-            File f = LittleFS.open("/sys/runtime_cfg.json", "w");
-            if (f) {
-                serializeJson(doc, f);
-                f.close();
-                request->send(200, "application/json", "{\"ok\":true}");
+            uint8_t* buffer = (uint8_t*)request->_tempObject;
+            if (buffer) {
+                memcpy(buffer + index, data, len); // 청크 조립
+                
+                // 데이터 수신 완료 시
+                if (index + len == total) {
+                    buffer[total] = '\0'; // 문자열 끝(Null) 처리
+                    
+                    JsonDocument doc;
+                    DeserializationError err = deserializeJson(doc, buffer);
+                    
+                    if (!err) {
+                        File f = LittleFS.open("/sys/runtime_cfg.json", "w");
+                        if (f) {
+                            serializeJson(doc, f);
+                            f.close();
+                            request->send(200, "application/json", "{\"ok\":true}");
+                        } else {
+                            request->send(500, "application/json", "{\"ok\":false,\"msg\":\"fs_error\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_error\"}");
+                    }
+                    free(buffer); // 메모리 해제
+                    request->_tempObject = NULL;
+                }
             } else {
-                request->send(500, "application/json", "{\"ok\":false}");
+                request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom\"}");
             }
         }
-    ));
+    );
+
 
     // ========================================================================
     // 5. 프론트엔드 정적 파일 서빙

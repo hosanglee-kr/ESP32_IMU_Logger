@@ -8,7 +8,6 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <ESPAsyncWebServer.h>
-#include <AsyncJson.h>
 #include <ArduinoJson.h>
 
 #include "T210_Def_Com_217.h"
