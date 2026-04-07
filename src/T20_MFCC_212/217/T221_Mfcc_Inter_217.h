@@ -29,6 +29,8 @@ struct CL_T20_Mfcc::ST_Impl {
     SemaphoreHandle_t mutex;
 
     ST_T20_Config_t   cfg;
+
+    
     bool              running = false;
 
     // 생성자에서 SPI 버스 주입 및 초기화

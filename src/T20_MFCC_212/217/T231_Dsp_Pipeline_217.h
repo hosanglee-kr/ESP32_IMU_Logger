@@ -6,6 +6,9 @@
 
 #include "T210_Def_Com_217.h"
 #include "T212_Def_Sens_217.h" // 기존 Enum 재사용
+#include "T214_Def_Rec_217.h" // ST_T20_Config_t 가 정의된 헤더 포함 필수
+
+
 
 class CL_T20_DspPipeline {
 public:
@@ -37,7 +40,6 @@ private:
 private:
     ST_T20_Config_t _cfg;
     
-
     // SIMD 정렬 버퍼 (격리됨)
     alignas(16) float _work_frame[T20::C10_DSP::FFT_SIZE];
     alignas(16) float _window[T20::C10_DSP::FFT_SIZE];

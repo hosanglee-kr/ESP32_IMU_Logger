@@ -7,6 +7,8 @@
 #include "T210_Def_Com_217.h"
 #include "SparkFun_BMI270_Arduino_Library.h"
 #include <SPI.h>
+#include "T212_Def_Sens_217.h" // 타입 정의 포함
+
 
 class CL_T20_SensorEngine {
 public:
@@ -31,6 +33,11 @@ private:
     // Direct SPI Helpers (캡슐화됨)
     bool _readRegs(uint8_t reg, uint8_t* data, uint16_t len);
     bool _writeRegs(uint8_t reg, const uint8_t* data, uint16_t len);
+    
+    
+    uint8_t _mapAccelRange(EM_T20_AccelRange_t r); // 누락된 헬퍼 선언 추가
+    uint8_t _mapGyroRange(EM_T20_GyroRange_t r);   // 누락된 헬퍼 선언 추가
+
 
 private:
     SPIClass& _spi;

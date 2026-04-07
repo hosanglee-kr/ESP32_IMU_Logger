@@ -35,9 +35,12 @@ public:
     bool saveIndexJson();
 
 private:
+    
     File _active_file;
-    EM_T20_StorageBackend_t _backend = EN_T20_STORAGE_LITTLEFS;
+    EM_T20_StorageBackend_t _backend = EN_T20_STORAGE_LITTLEFS; 
+    char _active_path[128]; // 추가
     uint32_t _record_count = 0;
     bool _session_open = false;
+
 };
 
