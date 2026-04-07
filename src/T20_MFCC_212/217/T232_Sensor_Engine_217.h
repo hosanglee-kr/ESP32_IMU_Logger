@@ -4,10 +4,11 @@
  * ========================================================================== */
 #pragma once
 
-#include "T210_Def_Com_217.h"
 #include "SparkFun_BMI270_Arduino_Library.h"
 #include <SPI.h>
-#include "T212_Def_Sens_217.h" // 타입 정의 포함
+
+#include "T210_Def_Com_217.h"
+#include "T214_Def_Rec_217.h" 
 
 
 class CL_T20_SensorEngine {

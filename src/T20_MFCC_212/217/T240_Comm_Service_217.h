@@ -5,13 +5,14 @@
  * ========================================================================== */
 #pragma once
 
-#include "T210_Def_Com_217.h"
-#include "T217_Def_Net_217.h"
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
+
+#include "T210_Def_Com_217.h"
+#include "T214_Def_Rec_217.h" 
 
 class CL_T20_CommService {
 public:
