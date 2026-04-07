@@ -107,6 +107,30 @@ void T20_registerControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_serv
         char json[T20::C10_Web::JSON_BUF_SIZE] = {0};
         T20_sendJsonText(request, T20_buildRecorderFinalizeBundleJsonText(p, json, sizeof(json)), json);
     });
+    
+    // bmi 센서 수동 캘리브레이션 API
+    v_server->on((base + "/calibrate").c_str(), HTTP_POST, [p](AsyncWebServerRequest* request) {
+        bool ok = T20_bmi270_RunAndSaveCalibration(p);
+        if (ok) {
+            T20_sendJsonText(request, true, "{\"ok\":true,\"msg\":\"calibration_saved\"}");
+        } else {
+            T20_sendJsonText(request, false, "{\"ok\":false,\"msg\":\"calib_failed\"}");
+        }
+    });
+    
+    
+    v_server->on((base + "/reboot").c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {
+        // 프론트엔드에 성공 메시지(200 OK)를 먼저 전송
+        request->send(200, T20::C10_Web::MIME_JSON, "{\"ok\":true}");
+        
+        // 비동기 웹서버가 응답을 온전히 보낼 수 있도록 타이머를 이용해 1초 뒤 재부팅
+        static TimerHandle_t rebootTimer = xTimerCreate("Reboot", pdMS_TO_TICKS(1000), pdFALSE, 0, [](TimerHandle_t xTimer){
+            ESP.restart();
+        });
+        xTimerStart(rebootTimer, 0);
+    });
+
+
 }
 
 /* ----------------------------------------------------------------------------
@@ -203,8 +227,17 @@ void T20_registerDataHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server,
             doc.set(jsonVariant);
             char json_text[T20::C10_Web::JSON_BUF_SIZE];
             serializeJson(doc, json_text, sizeof(json_text));
-
+            
+            // 1. 전달받은 JSON을 파싱하여 메모리(RAM) 구조체에 적용하고, 
+            //    센서 측정 범위가 바뀌었다면 내부적으로 하드웨어 재초기화(Re-init) 수행
             bool ok = T20_applyRuntimeConfigJsonText(p, json_text);
+            
+            // 2. 적용이 성공했다면 LittleFS의 runtime_cfg.json 파일에 영구 저장
+            if (ok) {
+                T20_saveRuntimeConfigFile(p);
+            }
+
+        
             T20_sendJsonText(request, ok, T20::C10_Web::JSON_OK);
         }
     ));
@@ -348,3 +381,6 @@ void T20_registerWebHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_server, 
     // 정적 프론트엔드 라우트 및 글로벌 OPTIONS(CORS) 처리는 가장 마지막에 등록
     T20_registerStaticFrontendHandlers(v_server);
 }
+
+
+

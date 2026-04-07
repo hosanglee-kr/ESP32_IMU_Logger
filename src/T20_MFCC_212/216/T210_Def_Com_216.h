@@ -116,7 +116,11 @@ namespace T20 {
         inline constexpr uint8_t REG_ACC_X_LSB    			= 0x12U;
         inline constexpr uint8_t REG_INT_STATUS_1 			= 0x1DU;
         inline constexpr uint8_t REG_READ_FLAG    			= 0x80U;
+        
+        inline constexpr uint8_t REG_CALIB_OFFSET_START = 0x71U; // 보정값이 저장되는 시작 레지스터
+        inline constexpr uint8_t REG_CALIB_OFFSET_LEN   = 7U;    // 보정값 총 길이 (7 bytes)
     }
+
 
     // --- 6. SDMMC 레코더 & 파일 시스템 상태 ---
     namespace C10_Rec {
@@ -235,7 +239,19 @@ namespace T20 {
         inline constexpr char const* SD_EXT_BIN       		= ".bin";
         inline constexpr char const* SD_PREFIX_CSV    		= "/t20_data/csv/exp_";
         inline constexpr char const* SD_EXT_CSV       		= ".csv";
+        
+        inline constexpr char const* LFS_FILE_BMI_CALIB     = "/sys/bmi_calib.json"; // 보정값 저장 파일
     }
+    
+        // --- 10. [NEW] 네트워크 및 Wi-Fi 설정 ---
+    namespace C10_Net {
+        inline constexpr uint8_t  WIFI_MULTI_MAX     = 3U;      // 등록 가능한 AP 최대 개수
+        inline constexpr uint32_t WIFI_TIMEOUT_MS    = 10000U;  // STA 연결 시도 대기 시간
+        
+        inline constexpr char const* AP_SSID_DEFAULT = "T20_MFCC_AP";
+        inline constexpr char const* AP_PASS_DEFAULT = "12345678"; // 8자리 이상 필수
+    }
+
 }
 
 /* ----------------------------------------------------------------------------

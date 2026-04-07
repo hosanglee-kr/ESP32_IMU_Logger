@@ -11,6 +11,34 @@
  
 #include "T221_Mfcc_Inter_216.h" // 216 버전 헤더 포함
 
+
+// Enum 값을 SparkFun BMI270 라이브러리 상수로 안전하게 매핑
+static uint8_t T20_getBmiAccelRangeConfig(EM_T20_AccelRange_t range) {
+    switch(range) {
+        case EN_T20_ACCEL_RANGE_2G:  return BMI2_ACC_RANGE_2G;
+        case EN_T20_ACCEL_RANGE_4G:  return BMI2_ACC_RANGE_4G;
+        case EN_T20_ACCEL_RANGE_8G:  return BMI2_ACC_RANGE_8G;
+        case EN_T20_ACCEL_RANGE_16G: return BMI2_ACC_RANGE_16G;
+        default:                     return BMI2_ACC_RANGE_8G;
+    }
+}
+
+static uint8_t T20_getBmiGyroRangeConfig(EM_T20_GyroRange_t range) {
+    switch(range) {
+        case EN_T20_GYRO_RANGE_125:  return BMI2_GYR_RANGE_125;
+        case EN_T20_GYRO_RANGE_250:  return BMI2_GYR_RANGE_250;
+        case EN_T20_GYRO_RANGE_500:  return BMI2_GYR_RANGE_500;
+        case EN_T20_GYRO_RANGE_1000: return BMI2_GYR_RANGE_1000;
+        case EN_T20_GYRO_RANGE_2000: return BMI2_GYR_RANGE_2000;
+        default:                     return BMI2_GYR_RANGE_2000;
+    }
+}
+
+
+
+
+
+
 // 라이브러리 함수를 사용하여 센서 초기화
 // [라이브러리 기반 초기화] 
 // 공식 예제 4(Filtering) 및 5(FIFO)의 방식을 결합하여 구현
@@ -25,13 +53,14 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
         return false;
     }
 
+
     // 2. 가속도계 설정 (bmi2_sens_config 구조체 사용 - 예제 4 방식)
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
     accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE; 
-    accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
+    accelConfig.cfg.acc.range = T20_getBmiAccelRangeConfig(p->cfg.sensor.accel_range);
     p->bmi.setConfig(accelConfig);
 
     // 3. 자이로스코프 설정
@@ -41,7 +70,7 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
-    gyroConfig.cfg.gyr.range = BMI2_GYR_RANGE_2000;
+    gyroConfig.cfg.gyr.range = T20_getBmiGyroRangeConfig(p->cfg.sensor.gyro_range);
     p->bmi.setConfig(gyroConfig);
 
     // 4. FIFO 설정 (예제 5 방식)
@@ -66,6 +95,11 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     intPinConfig.pin_cfg[0].output_en = BMI2_INT_OUTPUT_ENABLE;
     intPinConfig.pin_cfg[0].input_en = BMI2_INT_INPUT_DISABLE;
     p->bmi.setInterruptPinConfig(intPinConfig);
+    
+    
+    // 6. Calibration 보정값이 있으면 센서에 보정값
+    T20_bmi270_ApplyStoredCalibration(p);
+
 
     p->bmi_state.init = EN_T20_STATE_DONE;
     strlcpy(p->bmi270_status_text, "1600Hz_FIFO_Active", T20::C10_BMI::STATUS_TEXT_MAX);
@@ -84,32 +118,6 @@ void IRAM_ATTR T20_onBmiDrdyISR() {
             portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
     }
-}
-
-// 라이브러리 데이터 구조를 사용하여 샘플 읽기
-// [최적화된 데이터 읽기] 
-// FIFO를 사용할 경우 단일 샘플이 아닌 배치 단위로 읽어 링버퍼에 채웁니다. 
-/* [데이터 읽기] 
-   sensorTask에서 호출됨. 라이브러리의 getSensorData를 통해 float 변환된 데이터 획득 */
-bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
-    if (p == nullptr || p_out_sample == nullptr) return false;
-
-    // 라이브러리가 내부적으로 SPI Burst Read 및 float 스케일링 수행
-    if (p->bmi.getSensorData() != BMI2_OK) return false;
-
-    // 설정된 축 모드에 따라 분석용 샘플 선택
-    if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
-        *p_out_sample = p->bmi.data.accelZ;
-    } else {
-        *p_out_sample = p->bmi.data.gyroZ; // 기본값: Gyro Z
-    }
-
-    // 웹 모니터링용 실시간 값 갱신
-    p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
-    p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
-    p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
-    
-    return true;
 }
 
 bool T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p) {
@@ -138,7 +146,33 @@ bool T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p) {
     return T20_initBMI270_SPI(p);
 }
 
-// [v216] FIFO 일괄 읽기 로직 보완 (핑퐁 버퍼 스위칭 연동)
+
+// 라이브러리 데이터 구조를 사용하여 단건 샘플 읽기
+// FIFO를 사용할 경우 단일 샘플이 아닌 배치 단위로 읽어 링버퍼에 채웁니다. 
+/* [데이터 읽기] 
+   sensorTask에서 호출됨. 라이브러리의 getSensorData를 통해 float 변환된 데이터 획득 */
+bool T20_bmi270ReadVectorSample(CL_T20_Mfcc::ST_Impl* p, float* p_out_sample) {
+    if (p == nullptr || p_out_sample == nullptr) return false;
+
+    // 라이브러리가 내부적으로 SPI Burst Read 및 float 스케일링 수행
+    if (p->bmi.getSensorData() != BMI2_OK) return false;
+
+    // 설정된 축 모드에 따라 분석용 샘플 선택
+    if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
+        *p_out_sample = p->bmi.data.accelZ;
+    } else {
+        *p_out_sample = p->bmi.data.gyroZ; // 기본값: Gyro Z
+    }
+
+    // 웹 모니터링용 실시간 값 갱신
+    p->bmi270_last_axis_values[0] = p->bmi.data.gyroX;
+    p->bmi270_last_axis_values[1] = p->bmi.data.gyroY;
+    p->bmi270_last_axis_values[2] = p->bmi.data.gyroZ;
+    
+    return true;
+}
+
+// FIFO 일괄 읽기 로직 보완 (핑퐁 버퍼 스위칭 연동)
 /* ============================================================================
  * Function: T20_bmi270ReadFifoBatch
  * Summary: BMI270 FIFO 버스트 읽기 및 핑퐁 버퍼 투입 (v216 최적화)
@@ -166,14 +200,18 @@ bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
     for (uint16_t i = 0; i < frames_to_read; ++i) {
         float sample = 0.0f;
 
-        // 설정된 분석 축에 따라 샘플 추출
-        if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
-            sample = fifo_buffer[i].accelZ;
-        } else {
-            sample = fifo_buffer[i].gyroZ;
+        // [변경] 사용자가 웹에서 설정한 축(Axis) 동적 추출
+        switch (p->cfg.sensor.axis) {
+            case EN_T20_AXIS_ACCEL_X: sample = fifo_buffer[i].accelX; break;
+            case EN_T20_AXIS_ACCEL_Y: sample = fifo_buffer[i].accelY; break;
+            case EN_T20_AXIS_ACCEL_Z: sample = fifo_buffer[i].accelZ; break;
+            case EN_T20_AXIS_GYRO_X:  sample = fifo_buffer[i].gyroX;  break;
+            case EN_T20_AXIS_GYRO_Y:  sample = fifo_buffer[i].gyroY;  break;
+            case EN_T20_AXIS_GYRO_Z:  sample = fifo_buffer[i].gyroZ;  break;
+            default:                  sample = fifo_buffer[i].accelZ; break;
         }
 
-        /* [v216 최적화] 핑퐁 버퍼 연동 및 인덱스 관리 */
+        /* 핑퐁 버퍼 연동 및 인덱스 관리 */
         uint8_t write_idx = p->active_fill_buffer; // 핑퐁 버퍼 쓰기 인덱스
         uint16_t sample_idx = p->active_sample_index % T20::C10_DSP::FFT_SIZE;
         
@@ -201,3 +239,119 @@ bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
     return (frames_to_read > 0);
 }
 
+
+
+/* ============================================================================
+ * [Direct SPI Helpers] 라이브러리 private 은닉 우회를 위한 직접 통신 함수
+ * ========================================================================== */
+
+// BMI270 SPI Read 규격: (주소 | 0x80) 전송 -> Dummy 바이트(0x00) 전송 -> 수신
+static bool T20_bmi270_ReadRegs_Direct(CL_T20_Mfcc::ST_Impl* p, uint8_t reg, uint8_t* data, uint16_t len) {
+    if (p == nullptr) return false;
+    
+    p->spi.beginTransaction(SPISettings(T20::C10_BMI::SPI_FREQ_HZ, MSBFIRST, SPI_MODE0));
+    digitalWrite(T20::C10_Pin::BMI_CS, LOW);
+    
+    p->spi.transfer(reg | 0x80); // Read 플래그 (MSB 1)
+    p->spi.transfer(0x00);       // Dummy 바이트 필수
+    
+    for (uint16_t i = 0; i < len; i++) {
+        data[i] = p->spi.transfer(0x00);
+    }
+    
+    digitalWrite(T20::C10_Pin::BMI_CS, HIGH);
+    p->spi.endTransaction();
+    return true;
+}
+
+// BMI270 SPI Write 규격: (주소 & 0x7F) 전송 -> 데이터 연속 송신
+static bool T20_bmi270_WriteRegs_Direct(CL_T20_Mfcc::ST_Impl* p, uint8_t reg, const uint8_t* data, uint16_t len) {
+    if (p == nullptr) return false;
+
+    p->spi.beginTransaction(SPISettings(T20::C10_BMI::SPI_FREQ_HZ, MSBFIRST, SPI_MODE0));
+    digitalWrite(T20::C10_Pin::BMI_CS, LOW);
+    
+    p->spi.transfer(reg & 0x7F); // Write 플래그 (MSB 0)
+    
+    for (uint16_t i = 0; i < len; i++) {
+        p->spi.transfer(data[i]);
+    }
+    
+    digitalWrite(T20::C10_Pin::BMI_CS, HIGH);
+    p->spi.endTransaction();
+    return true;
+}
+
+/* ============================================================================
+ * [1] 캘리브레이션 실행 및 결과를 LittleFS에 JSON으로 저장 (수동 트리거)
+ * ========================================================================== */
+bool T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+
+    // 측정 중단 및 센서 안정화 대기
+    bool was_measuring = p->measurement_active;
+    p->measurement_active = false;
+    vTaskDelay(pdMS_TO_TICKS(100)); 
+
+    // 1. 센서 내장 캘리브레이션 엔진 구동
+    p->bmi.performComponentRetrim();
+    p->bmi.performAccelOffsetCalibration(BMI2_GRAVITY_POS_Z); // Z축을 중력 방향으로 상정
+    p->bmi.performGyroOffsetCalibration();
+
+    // 2. Direct SPI로 7바이트 오프셋 추출
+    uint8_t offsets[T20::C10_BMI::REG_CALIB_OFFSET_LEN] = {0};
+    if (!T20_bmi270_ReadRegs_Direct(p, T20::C10_BMI::REG_CALIB_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
+        p->measurement_active = was_measuring;
+        return false;
+    }
+
+    // 3. 추출된 값을 LittleFS에 영구 저장
+    JsonDocument doc;
+    doc["calibrated"] = true;
+    doc["timestamp"] = millis();
+    JsonArray offset_array = doc["offsets"].to<JsonArray>();
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_CALIB_OFFSET_LEN; i++) {
+        offset_array.add(offsets[i]);
+    }
+
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_BMI_CALIB, "w");
+    if (file) {
+        serializeJson(doc, file);
+        file.close();
+    }
+
+    p->measurement_active = was_measuring;
+    return true;
+}
+
+/* ============================================================================
+ * [2] LittleFS에서 보정값을 읽어와 BMI270 센서에 주입 (부팅 시 자동 실행)
+ * ========================================================================== */
+bool T20_bmi270_ApplyStoredCalibration(CL_T20_Mfcc::ST_Impl* p) {
+    if (p == nullptr) return false;
+    if (!LittleFS.exists(T20::C10_Path::LFS_FILE_BMI_CALIB)) return false;
+
+    File file = LittleFS.open(T20::C10_Path::LFS_FILE_BMI_CALIB, "r");
+    if (!file) return false;
+
+    String json_text = file.readString();
+    file.close();
+
+    JsonDocument doc;
+    if (deserializeJson(doc, json_text)) return false;
+
+    JsonArray offset_array = doc["offsets"].as<JsonArray>();
+    if (offset_array.size() != T20::C10_BMI::REG_CALIB_OFFSET_LEN) return false;
+
+    uint8_t offsets[T20::C10_BMI::REG_CALIB_OFFSET_LEN] = {0};
+    for (uint8_t i = 0; i < T20::C10_BMI::REG_CALIB_OFFSET_LEN; i++) {
+        offsets[i] = (uint8_t)offset_array[i];
+    }
+
+    // Direct SPI를 통해 센서 레지스터에 강제 주입
+    if (T20_bmi270_WriteRegs_Direct(p, T20::C10_BMI::REG_CALIB_OFFSET_START, offsets, T20::C10_BMI::REG_CALIB_OFFSET_LEN)) {
+        strlcpy(p->bmi270_status_text, "Calib_Injected", T20::C10_BMI::STATUS_TEXT_MAX);
+        return true;
+    }
+    return false;
+}

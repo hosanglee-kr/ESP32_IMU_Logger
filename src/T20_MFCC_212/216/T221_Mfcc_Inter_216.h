@@ -384,6 +384,9 @@ bool    T20_bmi270InstallDrdyHook(CL_T20_Mfcc::ST_Impl* p);
 bool    T20_tryBMI270Reinit(CL_T20_Mfcc::ST_Impl* p);
 bool    T20_bmi270_LoadProductionConfig(CL_T20_Mfcc::ST_Impl* p);
 void IRAM_ATTR T20_onBmiDrdyISR();
+bool    T20_bmi270_ApplyStoredCalibration(CL_T20_Mfcc::ST_Impl* p);
+bool    T20_bmi270_RunAndSaveCalibration(CL_T20_Mfcc::ST_Impl* p);
+
 
 // --- 4. Recorder & Storage (T234) ---
 File    T20_openRecorderFileByBackend(EM_T20_StorageBackend_t p_backend, const char* p_path, const char* p_mode);
@@ -433,3 +436,5 @@ bool    T20_buildBuildSanityJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, u
 bool    T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
 
 
+// --- 6. Network & WiFi (T240 신규 그룹) ---
+bool    T20_initNetwork(CL_T20_Mfcc::ST_Impl* p);
