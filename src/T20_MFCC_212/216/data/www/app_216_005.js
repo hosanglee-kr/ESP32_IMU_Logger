@@ -118,11 +118,8 @@ document.getElementById('btn-calibrate').onclick = async () => {
     finally { document.getElementById('btn-calibrate').disabled = false; }
 };
 
-// 원격 재부팅 로직
 async function rebootDevice() {
-    if (!confirm("Are you sure you want to reboot the device?\nNetwork connection will be lost temporarily.")) {
-        return;
-    }
+    if (!confirm("Are you sure you want to reboot the device?\nNetwork connection will be lost temporarily.")) return;
     try {
         await fetch(`${API}/reboot`, { method: 'POST' });
         showToast("Rebooting device... Please wait.");
@@ -139,10 +136,12 @@ async function loadSettings() {
         const cfg = await res.json();
         const form = document.getElementById('form-config');
         
-        // Sensor & DSP
+        // Sensor
         if (cfg.sensor_axis !== undefined) form.sensor_axis.value = cfg.sensor_axis;
         if (cfg.accel_range !== undefined) form.accel_range.value = cfg.accel_range;
         if (cfg.gyro_range !== undefined) form.gyro_range.value = cfg.gyro_range;
+        
+        // DSP
         if (cfg.hop_size !== undefined) form.hop_size.value = cfg.hop_size;
         if (cfg.mfcc_coeffs !== undefined) form.mfcc_coeffs.value = cfg.mfcc_coeffs;
         if (cfg.pre_alpha !== undefined) form.pre_alpha.value = cfg.pre_alpha;
@@ -156,7 +155,7 @@ async function loadSettings() {
         if (cfg.wifi_ap_pass !== undefined) form.wifi_ap_pass.value = cfg.wifi_ap_pass;
         if (cfg.wifi_use_static !== undefined) {
             form.wifi_use_static.value = cfg.wifi_use_static ? "true" : "false";
-            toggleStaticIpFields(); // UI 토글 동기화
+            toggleStaticIpFields(); 
         }
         if (cfg.wifi_local_ip !== undefined) form.wifi_local_ip.value = cfg.wifi_local_ip;
         if (cfg.wifi_gateway !== undefined) form.wifi_gateway.value = cfg.wifi_gateway;
@@ -164,7 +163,7 @@ async function loadSettings() {
         if (cfg.wifi_dns1 !== undefined) form.wifi_dns1.value = cfg.wifi_dns1;
         if (cfg.wifi_dns2 !== undefined) form.wifi_dns2.value = cfg.wifi_dns2;
 
-        // WiFi Multi Array 역직렬화
+        // WiFi Multi Array
         if (cfg.wifi_multi_ap && Array.isArray(cfg.wifi_multi_ap)) {
             cfg.wifi_multi_ap.forEach((ap, idx) => {
                 if (idx < 3) {
@@ -199,7 +198,7 @@ async function saveSettings() {
 
     configData.wifi_multi_ap = multiApArray.filter(ap => ap && ap.ssid && ap.ssid.trim() !== "");
 
-    showToast("Applying settings... (Network changes require hardware reboot)", false);
+    showToast("Applying settings... Please wait.", false);
 
     try {
         const res = await fetch(`${API}/runtime_config`, {
@@ -249,4 +248,3 @@ async function fetchDiagnostics() {
 }
 
 window.onload = () => { initCharts(); connectWebSocket(); loadSettings(); refreshFileList(); };
-

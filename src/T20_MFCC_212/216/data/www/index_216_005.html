@@ -114,15 +114,15 @@
                         <input type="number" step="0.1" name="sub_strength" min="0" max="5">
                     </div>
 
-                    <h3 style="margin-top: 30px; color: var(--accent);">Network & Wi-Fi Configuration</h3>
+                    <h3 style="margin-top: 30px; color: var(--accent);">Wi-Fi Configuration</h3>
                     <p style="font-size: 0.85em; color: #888; margin-bottom: 15px;">* 네트워크 설정을 변경하면 안전을 위해 기기를 수동으로 재부팅해야 완전히 적용됩니다.</p>
                     
                     <div class="form-group">
-                        <label>Wi-Fi Operating Mode</label>
+                        <label>Wi-Fi Mode</label>
                         <select name="wifi_mode">
-                            <option value="0">STA Only (Router)</option>
-                            <option value="1">AP Only (Direct)</option>
-                            <option value="2">AP + STA (Dual Mode)</option>
+                            <option value="0">STA Only</option>
+                            <option value="1">AP Only</option>
+                            <option value="2">AP + STA</option>
                             <option value="3">Auto Fallback (STA -> AP)</option>
                         </select>
                     </div>
@@ -137,12 +137,12 @@
                         <input type="password" name="wifi_ap_pass" maxlength="63" placeholder="12345678">
                     </div>
 
-                    <h4 style="color: #bbb;">Static IP Settings</h4>
+                    <h4 style="color: #bbb;">IP Settings</h4>
                     <div class="form-group">
-                        <label>Use Static IP (Disable DHCP)</label>
+                        <label>DHCP / Static</label>
                         <select name="wifi_use_static" id="wifi_use_static" onchange="toggleStaticIpFields()">
-                            <option value="false">Disable (DHCP)</option>
-                            <option value="true">Enable</option>
+                            <option value="false">DHCP</option>
+                            <option value="true">Static IP</option>
                         </select>
                     </div>
                     <div id="static_ip_fields" style="display: none; background: #222; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
