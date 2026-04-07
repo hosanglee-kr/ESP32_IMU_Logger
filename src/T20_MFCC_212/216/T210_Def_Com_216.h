@@ -242,6 +242,16 @@ namespace T20 {
         
         inline constexpr char const* LFS_FILE_BMI_CALIB     = "/sys/bmi_calib.json"; // 보정값 저장 파일
     }
+    
+        // --- 10. [NEW] 네트워크 및 Wi-Fi 설정 ---
+    namespace C10_Net {
+        inline constexpr uint8_t  WIFI_MULTI_MAX     = 3U;      // 등록 가능한 AP 최대 개수
+        inline constexpr uint32_t WIFI_TIMEOUT_MS    = 10000U;  // STA 연결 시도 대기 시간
+        
+        inline constexpr char const* AP_SSID_DEFAULT = "T20_MFCC_AP";
+        inline constexpr char const* AP_PASS_DEFAULT = "12345678"; // 8자리 이상 필수
+    }
+
 }
 
 /* ----------------------------------------------------------------------------

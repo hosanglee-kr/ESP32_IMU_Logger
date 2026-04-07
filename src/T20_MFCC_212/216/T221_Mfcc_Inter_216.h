@@ -436,3 +436,5 @@ bool    T20_buildBuildSanityJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, u
 bool    T20_buildRecorderIndexJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len);
 
 
+// --- 6. Network & WiFi (T240 신규 그룹) ---
+bool    T20_initNetwork(CL_T20_Mfcc::ST_Impl* p);

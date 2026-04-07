@@ -52,15 +52,23 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     
     LittleFS.begin(false);
     
-    // [Step 5] DSP 및 파일 시스템 준비
+    // [Step 5] DSP 및 설정 파일 로드
     T20_initDSP(_impl);
+    
+    // 여기서 LittleFS의 runtime_cfg.json을 읽어와 cfg 구조체를 덮어씀 (Wi-Fi 설정 포함)
     T20_loadRuntimeConfigFile(_impl);
+    
     T20_tryMountSdmmcRecorderBackend(_impl); 
+    
+    // [Step 6] 네트워크 초기화 (반드시 T20_loadRuntimeConfigFile 이후에 호출!)
+    T20_initNetwork(_impl);
 
     _impl->initialized = true;
     _impl->bmi_state.init = EN_T20_STATE_DONE;
     return true;
 }
+
+
 
 bool CL_T20_Mfcc::start(void) {
     if (_impl == nullptr || !_impl->initialized || _impl->running) return false;
@@ -447,6 +455,37 @@ bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_
             hw_reinit_required = true; // 측정 범위 변경은 하드웨어 재초기화 필요
         }
     }
+    
+
+    // [NEW] Network Config 적용 (Import)
+    if (doc["wifi_mode"].is<int>()) p->cfg.wifi.mode = static_cast<EM_T20_WiFiMode_t>(doc["wifi_mode"].as<int>());
+    
+    if (doc["wifi_ap_ssid"].is<const char*>()) strlcpy(p->cfg.wifi.ap_ssid, doc["wifi_ap_ssid"], 32);
+    if (doc["wifi_ap_pass"].is<const char*>()) strlcpy(p->cfg.wifi.ap_password, doc["wifi_ap_pass"], 64);
+    
+    if (doc["wifi_use_static"].is<bool>()) p->cfg.wifi.use_static_ip = doc["wifi_use_static"].as<bool>();
+    
+    if (doc["wifi_local_ip"].is<const char*>()) strlcpy(p->cfg.wifi.local_ip, doc["wifi_local_ip"], 16);
+    if (doc["wifi_gateway"].is<const char*>())  strlcpy(p->cfg.wifi.gateway, doc["wifi_gateway"], 16);
+    if (doc["wifi_subnet"].is<const char*>())   strlcpy(p->cfg.wifi.subnet, doc["wifi_subnet"], 16);
+    if (doc["wifi_dns1"].is<const char*>())     strlcpy(p->cfg.wifi.dns1, doc["wifi_dns1"], 16);
+    if (doc["wifi_dns2"].is<const char*>())     strlcpy(p->cfg.wifi.dns2, doc["wifi_dns2"], 16); // [NEW] DNS2 파싱
+
+    JsonArray multi_ap = doc["wifi_multi_ap"].as<JsonArray>();
+    if (!multi_ap.isNull()) {
+        // 1. 기존에 저장된 AP 배열을 모두 빈 문자열로 초기화 (찌꺼기 데이터 삭제)
+        for (uint8_t i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
+            p->cfg.wifi.multi_ap[i].ssid[0] = '\0';
+            p->cfg.wifi.multi_ap[i].password[0] = '\0';
+        }
+        
+        // 2. 웹에서 수신한 새 데이터로 덮어쓰기
+        for (uint8_t i = 0; i < T20::C10_Net::WIFI_MULTI_MAX && i < multi_ap.size(); i++) {
+            strlcpy(p->cfg.wifi.multi_ap[i].ssid, multi_ap[i]["ssid"] | "", 32);
+            strlcpy(p->cfg.wifi.multi_ap[i].password, multi_ap[i]["pass"] | "", 64);
+        }
+    }
+
 
     // 하드웨어 설정이 바뀌었다면 센서를 즉시 재부팅하여 새 레지스터 적용
     if (hw_reinit_required && p->initialized) {
@@ -457,6 +496,9 @@ bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_
     
     return true;
 }
+
+
+
 
 bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, uint16_t p_len) {
     if (p == nullptr || p_out_buf == nullptr || p_len == 0) return false;
@@ -501,6 +543,25 @@ bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     doc["accel_range"] = static_cast<int>(p->cfg.sensor.accel_range);
     doc["gyro_range"]  = static_cast<int>(p->cfg.sensor.gyro_range);
 
+    // [NEW] Network Config 반환 (Export)
+    doc["wifi_mode"]       = static_cast<int>(p->cfg.wifi.mode);
+    doc["wifi_ap_ssid"]    = p->cfg.wifi.ap_ssid;
+    doc["wifi_ap_pass"]    = p->cfg.wifi.ap_password;
+    doc["wifi_use_static"] = p->cfg.wifi.use_static_ip;
+    doc["wifi_local_ip"]   = p->cfg.wifi.local_ip;
+    doc["wifi_gateway"]    = p->cfg.wifi.gateway;
+    doc["wifi_subnet"]     = p->cfg.wifi.subnet;
+    doc["wifi_dns1"]       = p->cfg.wifi.dns1;
+    doc["wifi_dns2"]       = p->cfg.wifi.dns2; // [NEW] DNS2 내보내기
+
+    JsonArray multi_ap = doc["wifi_multi_ap"].to<JsonArray>();
+    for (uint8_t i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
+        JsonObject ap_obj = multi_ap.add<JsonObject>();
+        ap_obj["ssid"] = p->cfg.wifi.multi_ap[i].ssid;
+        ap_obj["pass"] = p->cfg.wifi.multi_ap[i].password;
+    }
+
+
     size_t need = measureJson(doc) + 1U;
     if (need > p_len) return false;
     
@@ -508,11 +569,3 @@ bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     return true;
 }
 
-
-
-
-
-
-    
-
-  

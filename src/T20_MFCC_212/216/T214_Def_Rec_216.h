@@ -10,6 +10,7 @@
 
 #include "T210_Def_Com_216.h"
 #include "T212_Def_Sens_216.h"
+#include "T217_Def_Net_216.h"
 
 // ----------------------------------------------------------------------------
 // 1. Enum Definitions
@@ -61,6 +62,7 @@ typedef struct {
 typedef struct {
     ST_T20_PreprocessConfig_t preprocess;
     ST_T20_ConfigSensor_t     sensor; // 가속도/자이로 축 및 측정범위 설정
+    ST_T20_ConfigWiFi_t       wifi; 
     ST_T20_FeatureConfig_t    feature;
     ST_T20_OutputConfig_t     output;
     ST_T20_SystemConfig_t     system;
