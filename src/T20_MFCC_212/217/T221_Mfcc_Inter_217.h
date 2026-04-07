@@ -35,7 +35,7 @@ struct CL_T20_Mfcc::ST_Impl {
     bool              running = false;
 
     // 생성자에서 SPI 버스 주입 및 초기화
-    ST_Impl() : sensor(FSPI), comm() {
+    ST_Impl() : sensor(SPI), comm() {
         frame_queue = xQueueCreate(T20::C10_Sys::QUEUE_LEN, sizeof(uint8_t));
         mutex = xSemaphoreCreateMutex();
     }

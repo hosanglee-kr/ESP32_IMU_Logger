@@ -84,6 +84,10 @@ namespace T20 {
     namespace C10_Rec {
         inline constexpr uint32_t BINARY_MAGIC = 0x54323042UL;
     }
+    
+    namespace C10_Net {
+        inline constexpr uint8_t WIFI_MULTI_MAX = 3U;
+    }
 
 }
 

@@ -94,9 +94,10 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (!_impl->dsp.begin(_impl->cfg)) return false;
 
     // 3. 스토리지 엔진 초기화 (SD_MMC 마운트)
-    ST_T20_SdmmcProfile_t sd_prof = { "default", true, false, 
+    ST_T20_SdmmcProfile_t sd_prof = { "default", true, 
         T20::C10_Pin::SDMMC_CLK, T20::C10_Pin::SDMMC_CMD, T20::C10_Pin::SDMMC_D0,
         T20::C10_Pin::SDMMC_D1, T20::C10_Pin::SDMMC_D2, T20::C10_Pin::SDMMC_D3 };
+
     _impl->storage.begin(sd_prof);
 
     // 4. 통신 엔진 초기화 (WiFi & Web)

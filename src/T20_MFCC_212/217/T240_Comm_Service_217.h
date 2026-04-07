@@ -32,6 +32,11 @@ public:
 
     // 시스템 상태 해시 계산 (v216 로직 유지)
     uint32_t calcStatusHash(uint32_t frame_id, uint32_t rec_count, float z_axis, bool measuring);
+    
+    
+    // 상태 확인용 메서드
+    bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
+
 
 private:
     // 내부 WiFi 및 서버 객체
