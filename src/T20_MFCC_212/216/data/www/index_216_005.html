@@ -122,7 +122,8 @@
                         <select name="wifi_mode">
                             <option value="0">STA Only (Router)</option>
                             <option value="1">AP Only (Direct)</option>
-                            <option value="2">Auto Fallback (STA -> AP)</option>
+                            <option value="2">AP + STA (Dual Mode)</option>
+                            <option value="3">Auto Fallback (STA -> AP)</option>
                         </select>
                     </div>
 
@@ -175,7 +176,8 @@
                     </div>
 
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="button" onclick="saveSettings()" class="btn primary" style="flex: 1;">SAVE ALL SETTINGS</button>
+                        <button type="button" onclick="saveSettings()" class="btn primary" style="flex: 2;">SAVE ALL SETTINGS</button>
+                        <button type="button" onclick="rebootDevice()" class="btn danger" style="flex: 1;">REBOOT SYSTEM</button>
                     </div>
                 </form>
 

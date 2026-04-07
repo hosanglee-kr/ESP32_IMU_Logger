@@ -117,6 +117,19 @@ void T20_registerControlHandlers(CL_T20_Mfcc::ST_Impl* p, AsyncWebServer* v_serv
             T20_sendJsonText(request, false, "{\"ok\":false,\"msg\":\"calib_failed\"}");
         }
     });
+    
+    
+    v_server->on((base + "/reboot").c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {
+        // 프론트엔드에 성공 메시지(200 OK)를 먼저 전송
+        request->send(200, T20::C10_Web::MIME_JSON, "{\"ok\":true}");
+        
+        // 비동기 웹서버가 응답을 온전히 보낼 수 있도록 타이머를 이용해 1초 뒤 재부팅
+        static TimerHandle_t rebootTimer = xTimerCreate("Reboot", pdMS_TO_TICKS(1000), pdFALSE, 0, [](TimerHandle_t xTimer){
+            ESP.restart();
+        });
+        xTimerStart(rebootTimer, 0);
+    });
+
 
 }
 

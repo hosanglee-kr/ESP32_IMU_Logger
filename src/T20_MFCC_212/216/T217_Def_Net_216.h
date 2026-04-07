@@ -9,6 +9,7 @@
 typedef enum {
     EN_T20_WIFI_STA_ONLY = 0,   // 공유기 접속만 시도
     EN_T20_WIFI_AP_ONLY,        // 자체 AP 모드만 켬
+    EN_T20_WIFI_AP_STA,         // 자체AP 및 외부공유기 접속
     EN_T20_WIFI_AUTO_FALLBACK   // STA 시도 후 실패 시 AP 전환 (권장)
 } EM_T20_WiFiMode_t;
 

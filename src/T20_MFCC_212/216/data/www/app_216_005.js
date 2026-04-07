@@ -39,7 +39,7 @@ function toggleStaticIpFields() {
 }
 
 // ==========================================
-// 2. Chart.js & Waterfall 초기화 (기존 동일)
+// 2. Chart.js & Waterfall 초기화
 // ==========================================
 function initCharts() {
     const opt = { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, elements: { point: { radius: 0 } } };
@@ -79,7 +79,7 @@ const waterfallSpec = new WaterfallChart('chart-waterfall-spec', 129, 0.0, 15.0)
 const waterfallMfcc = new WaterfallChart('chart-waterfall-mfcc', 39, -20.0, 20.0);
 
 // ==========================================
-// 3. WebSocket 로직 (기존 동일)
+// 3. WebSocket 로직
 // ==========================================
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -101,7 +101,7 @@ function connectWebSocket() {
 }
 
 // ==========================================
-// 4. API 제어 및 동적 설정 (Wi-Fi 추가됨)
+// 4. API 제어 및 동적 설정
 // ==========================================
 document.getElementById('btn-start').onclick = () => fetch(`${API}/recorder_begin`, {method: 'POST'}).then(() => showToast("Measurement Started"));
 document.getElementById('btn-stop').onclick = () => fetch(`${API}/recorder_end`, {method: 'POST'}).then(() => showToast("Measurement Stopped"));
@@ -117,6 +117,21 @@ document.getElementById('btn-calibrate').onclick = async () => {
     } catch(e) { showToast("Network error during calibration", true); } 
     finally { document.getElementById('btn-calibrate').disabled = false; }
 };
+
+// 원격 재부팅 로직
+async function rebootDevice() {
+    if (!confirm("Are you sure you want to reboot the device?\nNetwork connection will be lost temporarily.")) {
+        return;
+    }
+    try {
+        await fetch(`${API}/reboot`, { method: 'POST' });
+        showToast("Rebooting device... Please wait.");
+        setTimeout(() => location.reload(), 6000);
+    } catch(e) {
+        showToast("Reboot command sent.", true);
+        setTimeout(() => location.reload(), 6000);
+    }
+}
 
 async function loadSettings() {
     try {
@@ -164,27 +179,24 @@ async function loadSettings() {
 async function saveSettings() {
     const formData = new FormData(document.getElementById('form-config'));
     const configData = {};
-    const multiApArray = []; // Multi WiFi 전용 배열
+    const multiApArray = []; 
     
     formData.forEach((value, key) => {
-        // Multi WiFi 텍스트 필드를 가로채서 배열 객체로 변환
         if (key.startsWith('multi_ssid_')) {
-            const idx = key.split('_')[2];
+            const idx = parseInt(key.split('_')[2]);
             if (!multiApArray[idx]) multiApArray[idx] = {};
             multiApArray[idx].ssid = value;
         } else if (key.startsWith('multi_pass_')) {
-            const idx = key.split('_')[2];
+            const idx = parseInt(key.split('_')[2]);
             if (!multiApArray[idx]) multiApArray[idx] = {};
             multiApArray[idx].pass = value;
         } else if (key === 'wifi_use_static') {
-            configData[key] = (value === 'true'); // Boolean 캐스팅
+            configData[key] = (value === 'true');
         } else {
-            // 그 외 센서 및 네트워크 필드
             configData[key] = isNaN(value) || value === '' ? value : Number(value);
         }
     });
 
-    // ssid가 입력된 항목만 필터링하여 JSON 페이로드에 연결
     configData.wifi_multi_ap = multiApArray.filter(ap => ap && ap.ssid && ap.ssid.trim() !== "");
 
     showToast("Applying settings... (Network changes require hardware reboot)", false);
@@ -206,7 +218,7 @@ async function saveSettings() {
 }
 
 // ==========================================
-// 5. 스토리지 및 진단 기능 (기존 동일)
+// 5. 스토리지 및 진단 기능
 // ==========================================
 async function refreshFileList() {
     const list = document.getElementById('file-list');
@@ -237,3 +249,4 @@ async function fetchDiagnostics() {
 }
 
 window.onload = () => { initCharts(); connectWebSocket(); loadSettings(); refreshFileList(); };
+
