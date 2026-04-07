@@ -4,6 +4,7 @@
  * ========================================================================== */
 #pragma once
 
+#include "T220_Mfcc_217.h"
 #include "T231_Dsp_Pipeline_217.h"
 #include "T232_Sensor_Engine_217.h"
 #include "T234_Storage_Service_217.h"

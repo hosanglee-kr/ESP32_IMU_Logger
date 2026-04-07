@@ -11,6 +11,10 @@
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
 
+#include "T217_Def_Net_217.h"
+
+
+
 class CL_T20_CommService {
 public:
     CL_T20_CommService();

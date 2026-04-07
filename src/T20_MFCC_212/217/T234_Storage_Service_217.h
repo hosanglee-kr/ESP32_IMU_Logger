@@ -9,6 +9,11 @@
 #include <SD_MMC.h>
 #include <LittleFS.h>
 
+#include "T214_Def_Rec_217.h" // [추가] 레코더 타입 정의 인클루드
+
+
+
+
 class CL_T20_StorageService {
 public:
     CL_T20_StorageService();

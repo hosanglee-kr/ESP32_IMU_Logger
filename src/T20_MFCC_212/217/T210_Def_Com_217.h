@@ -75,6 +75,16 @@ namespace T20 {
         inline constexpr char const* SD_DIR_BIN          = "/t20_data/bin";
         inline constexpr char const* SD_PREFIX_BIN       = "/t20_data/bin/rec_";
     }
+    
+    // 통신 및 로깅 필수 상수 복구
+    namespace C10_Web {
+        inline constexpr char const* WS_URI = "/api/t20/ws";
+        inline constexpr uint16_t JSON_BUF_SIZE = 2048U;
+    }
+    namespace C10_Rec {
+        inline constexpr uint32_t BINARY_MAGIC = 0x54323042UL;
+    }
+
 }
 
 // 공통 열거형 (State/Result)
@@ -85,3 +95,9 @@ typedef enum {
     EN_T20_STATE_ERROR,
     EN_T20_STATE_BUSY
 } EM_T20_State_t;
+
+
+
+
+    
+    
