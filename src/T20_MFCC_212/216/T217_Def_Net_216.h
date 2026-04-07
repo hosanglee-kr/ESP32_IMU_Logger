@@ -1,4 +1,5 @@
 /* /src/T20_MFCC_212/216/T217_Def_Net_216.h */
+#pragma once
 
 #include "T210_Def_Com_216.h"
 
