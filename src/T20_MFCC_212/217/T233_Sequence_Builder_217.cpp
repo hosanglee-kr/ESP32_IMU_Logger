@@ -4,9 +4,11 @@
  * ========================================================================== */
 #include "T233_Sequence_Builder_217.h"
 
+
+
 CL_T20_SequenceBuilder::CL_T20_SequenceBuilder() {
     _frames = T20::C10_Sys::SEQUENCE_FRAMES_MAX;
-    _dim = T20::C10_DSP::FEATURE_DIM_DEF; // 39
+    _dim = T20::C10_DSP::MFCC_COEFFS_DEF * 3U; // [수정] 기본 계수 * 3 (MFCC + Delta + Delta2)로 직접 계산
     _head = 0;
     _is_full = false;
     memset(_data, 0, sizeof(_data));
