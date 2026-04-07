@@ -44,6 +44,7 @@ void T20_sensorTask(void* p_arg) {
     }
 }
 
+
 // --- [2] Core 1: DSP 연산 및 브로드캐스트 ---
 void T20_processTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
@@ -51,17 +52,37 @@ void T20_processTask(void* p_arg) {
     ST_T20_FeatureVector_t feature;
     uint32_t frame_id = 0;
 
+    // 시퀀스 플랫 데이터를 담을 임시 버퍼 할당
+    alignas(16) float seq_buffer[T20::C10_Sys::SEQUENCE_FRAMES_MAX * (T20::C10_DSP::MFCC_COEFFS_MAX * 3)];
+
     for (;;) {
         if (xQueueReceive(p->frame_queue, &read_idx, portMAX_DELAY) == pdTRUE) {
+            // [1] DSP: 39차원 단일 벡터 추출
             if (p->dsp.processFrame(p->raw_buffer[read_idx], &feature)) {
                 feature.frame_id = ++frame_id;
                 
-                // Web 브로드캐스트 (즉시 처리)
-                p->comm.broadcastBinary(feature.vector, feature.vector_len);
+                // [2] Sequence Builder에 1프레임 푸시 (Sliding Window 갱신)
+                p->seq_builder.pushVector(feature.vector);
 
-                // 스토리지 저장을 위해 Recorder 큐로 전송 (비블로킹)
-                if (p->cfg.output.enabled) {
-                    xQueueSend(p->recorder_queue, &feature, 0);
+                // [3] 분기: 사용자가 웹에서 설정한 모드에 따라 처리
+                if (p->cfg.output.output_sequence) {
+                    // 시퀀스 모드: TinyML 추론을 위해 버퍼가 16프레임 꽉 찼을 때만 동작
+                    if (p->seq_builder.isReady()) {
+                        p->seq_builder.getSequenceFlat(seq_buffer);
+                        
+                        // 향후 여기에 TinyML 모델 추론 로직 삽입
+                        // float result = my_tinyml_model.predict(seq_buffer);
+                        
+                        // 현재는 테스트용으로 시퀀스 전체를 웹소켓 브로드캐스트
+                        uint16_t total_len = p->seq_builder.getSequenceFrames() * p->seq_builder.getFeatureDim();
+                        p->comm.broadcastBinary(seq_buffer, total_len);
+                    }
+                } else {
+                    // 단일 벡터 모드: 기존 로깅 및 웹 차트 모니터링용 (v216 100% 동일)
+                    p->comm.broadcastBinary(feature.vector, feature.vector_len);
+                    if (p->cfg.output.enabled) {
+                        xQueueSend(p->recorder_queue, &feature, 0);
+                    }
                 }
             }
         }
@@ -100,6 +121,10 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
 
     if (!_impl->sensor.begin(_impl->cfg.sensor)) return false;
     if (!_impl->dsp.begin(_impl->cfg)) return false;
+    
+    // Sequence Builder 설정 적용
+    _impl->seq_builder.begin(_impl->cfg.output.sequence_frames, _impl->cfg.feature.mfcc_coeffs * 3);
+    
 
     ST_T20_SdmmcProfile_t sd_prof = { "default", true, 
         T20::C10_Pin::SDMMC_CLK, T20::C10_Pin::SDMMC_CMD, T20::C10_Pin::SDMMC_D0,

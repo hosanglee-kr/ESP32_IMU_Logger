@@ -9,9 +9,13 @@
 #include "T234_Storage_Service_217.h"
 #include "T240_Comm_Service_217.h"
 
+#include "T233_Sequence_Builder_217.h" 
+
+
 struct CL_T20_Mfcc::ST_Impl {
     CL_T20_SensorEngine   sensor;
     CL_T20_DspPipeline    dsp;
+    CL_T20_SequenceBuilder seq_builder;
     CL_T20_StorageService storage;
     CL_T20_CommService    comm;
 

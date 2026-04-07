@@ -73,6 +73,12 @@ typedef struct {
     ST_T20_ConfigSensor_t     sensor;
     ST_T20_ConfigWiFi_t       wifi;
     struct { uint16_t hop_size; uint16_t mfcc_coeffs; } feature;
-    struct { bool enabled; uint16_t sequence_frames; } output;
+    struct { bool enabled; 
+             bool output_sequence; // true: 시퀀스 텐서 모드 / false: 단일 벡터 모드
+             uint16_t sequence_frames; 
+    } output;
     struct { bool auto_start; uint8_t button_pin; } system;
 } ST_T20_Config_t;
+
+
+
