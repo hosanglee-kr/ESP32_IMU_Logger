@@ -424,6 +424,35 @@ bool T20_applyRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, const char* p_json_
     T20_seqInit(&p->seq_rb, p->cfg.output.sequence_frames, (uint16_t)(p->cfg.feature.mfcc_coeffs * 3U));
     
     T20_configureRuntimeFilter(p);
+    
+    // 웹에서 전달받은 센서 설정 적용 (Import)
+    bool hw_reinit_required = false;
+
+    if (doc["sensor_axis"].is<int>()) {
+        p->cfg.sensor.axis = static_cast<EM_T20_SensorAxis_t>(doc["sensor_axis"].as<int>());
+    }
+    
+    if (doc["accel_range"].is<int>()) {
+        EM_T20_AccelRange_t new_ar = static_cast<EM_T20_AccelRange_t>(doc["accel_range"].as<int>());
+        if (p->cfg.sensor.accel_range != new_ar) {
+            p->cfg.sensor.accel_range = new_ar;
+            hw_reinit_required = true; // 측정 범위 변경은 하드웨어 재초기화 필요
+        }
+    }
+
+    if (doc["gyro_range"].is<int>()) {
+        EM_T20_GyroRange_t new_gr = static_cast<EM_T20_GyroRange_t>(doc["gyro_range"].as<int>());
+        if (p->cfg.sensor.gyro_range != new_gr) {
+            p->cfg.sensor.gyro_range = new_gr;
+            hw_reinit_required = true; // 측정 범위 변경은 하드웨어 재초기화 필요
+        }
+    }
+
+    // 하드웨어 설정이 바뀌었다면 센서를 즉시 재부팅하여 새 레지스터 적용
+    if (hw_reinit_required && p->initialized) {
+        T20_tryBMI270Reinit(p);
+    }
+    
     T20_syncDerivedViewState(p);
     
     return true;
@@ -466,6 +495,11 @@ bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     doc["batch_watermark_low"]             = p->recorder_batch_watermark_low;
     doc["batch_watermark_high"]            = p->recorder_batch_watermark_high;
     doc["batch_idle_flush_ms"]             = p->recorder_batch_idle_flush_ms;
+    
+    //  웹 프론트엔드로 현재 센서 설정값 내보내기 (Export)
+    doc["sensor_axis"] = static_cast<int>(p->cfg.sensor.axis);
+    doc["accel_range"] = static_cast<int>(p->cfg.sensor.accel_range);
+    doc["gyro_range"]  = static_cast<int>(p->cfg.sensor.gyro_range);
 
     size_t need = measureJson(doc) + 1U;
     if (need > p_len) return false;
@@ -473,3 +507,12 @@ bool T20_buildRuntimeConfigJsonText(CL_T20_Mfcc::ST_Impl* p, char* p_out_buf, ui
     serializeJson(doc, p_out_buf, p_len);
     return true;
 }
+
+
+
+
+
+
+    
+
+  

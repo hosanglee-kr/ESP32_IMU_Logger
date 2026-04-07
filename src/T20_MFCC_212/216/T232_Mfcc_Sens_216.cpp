@@ -11,6 +11,34 @@
  
 #include "T221_Mfcc_Inter_216.h" // 216 버전 헤더 포함
 
+
+// Enum 값을 SparkFun BMI270 라이브러리 상수로 안전하게 매핑
+static uint8_t T20_getBmiAccelRangeConfig(EM_T20_AccelRange_t range) {
+    switch(range) {
+        case EN_T20_ACCEL_RANGE_2G:  return BMI2_ACC_RANGE_2G;
+        case EN_T20_ACCEL_RANGE_4G:  return BMI2_ACC_RANGE_4G;
+        case EN_T20_ACCEL_RANGE_8G:  return BMI2_ACC_RANGE_8G;
+        case EN_T20_ACCEL_RANGE_16G: return BMI2_ACC_RANGE_16G;
+        default:                     return BMI2_ACC_RANGE_8G;
+    }
+}
+
+static uint8_t T20_getBmiGyroRangeConfig(EM_T20_GyroRange_t range) {
+    switch(range) {
+        case EN_T20_GYRO_RANGE_125:  return BMI2_GYR_RANGE_125;
+        case EN_T20_GYRO_RANGE_250:  return BMI2_GYR_RANGE_250;
+        case EN_T20_GYRO_RANGE_500:  return BMI2_GYR_RANGE_500;
+        case EN_T20_GYRO_RANGE_1000: return BMI2_GYR_RANGE_1000;
+        case EN_T20_GYRO_RANGE_2000: return BMI2_GYR_RANGE_2000;
+        default:                     return BMI2_GYR_RANGE_2000;
+    }
+}
+
+
+
+
+
+
 // 라이브러리 함수를 사용하여 센서 초기화
 // [라이브러리 기반 초기화] 
 // 공식 예제 4(Filtering) 및 5(FIFO)의 방식을 결합하여 구현
@@ -25,13 +53,14 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
         return false;
     }
 
+
     // 2. 가속도계 설정 (bmi2_sens_config 구조체 사용 - 예제 4 방식)
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
     accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE; 
-    accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
+    accelConfig.cfg.acc.range = T20_getBmiAccelRangeConfig(p->cfg.sensor.accel_range);
     p->bmi.setConfig(accelConfig);
 
     // 3. 자이로스코프 설정
@@ -41,7 +70,7 @@ bool T20_initBMI270_SPI(CL_T20_Mfcc::ST_Impl* p) {
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
-    gyroConfig.cfg.gyr.range = BMI2_GYR_RANGE_2000;
+    gyroConfig.cfg.gyr.range = T20_getBmiGyroRangeConfig(p->cfg.sensor.gyro_range);
     p->bmi.setConfig(gyroConfig);
 
     // 4. FIFO 설정 (예제 5 방식)
@@ -171,14 +200,18 @@ bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
     for (uint16_t i = 0; i < frames_to_read; ++i) {
         float sample = 0.0f;
 
-        // 설정된 분석 축에 따라 샘플 추출
-        if (p->bmi270_axis_mode == T20::C10_BMI::AXIS_MODE_ACC_Z) {
-            sample = fifo_buffer[i].accelZ;
-        } else {
-            sample = fifo_buffer[i].gyroZ;
+        // [변경] 사용자가 웹에서 설정한 축(Axis) 동적 추출
+        switch (p->cfg.sensor.axis) {
+            case EN_T20_AXIS_ACCEL_X: sample = fifo_buffer[i].accelX; break;
+            case EN_T20_AXIS_ACCEL_Y: sample = fifo_buffer[i].accelY; break;
+            case EN_T20_AXIS_ACCEL_Z: sample = fifo_buffer[i].accelZ; break;
+            case EN_T20_AXIS_GYRO_X:  sample = fifo_buffer[i].gyroX;  break;
+            case EN_T20_AXIS_GYRO_Y:  sample = fifo_buffer[i].gyroY;  break;
+            case EN_T20_AXIS_GYRO_Z:  sample = fifo_buffer[i].gyroZ;  break;
+            default:                  sample = fifo_buffer[i].accelZ; break;
         }
 
-        /* [v216 최적화] 핑퐁 버퍼 연동 및 인덱스 관리 */
+        /* 핑퐁 버퍼 연동 및 인덱스 관리 */
         uint8_t write_idx = p->active_fill_buffer; // 핑퐁 버퍼 쓰기 인덱스
         uint16_t sample_idx = p->active_sample_index % T20::C10_DSP::FFT_SIZE;
         
@@ -205,6 +238,7 @@ bool T20_bmi270ReadFifoBatch(CL_T20_Mfcc::ST_Impl* p) {
 
     return (frames_to_read > 0);
 }
+
 
 
 /* ============================================================================
