@@ -14,9 +14,7 @@ function showTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
     
-    if(event && event.target) {
-        event.target.classList.add('active');
-    }
+    if(event && event.target) event.target.classList.add('active');
 
     if (tabId === 'tab-diag') {
         fetchDiagnostics();
@@ -33,13 +31,11 @@ function showToast(msg, isError = false) {
     setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
 }
 
-// Wi-Fi 모드에 따른 화면 토글 (AP / STA 숨김 처리)
 function toggleWifiFields() {
     const mode = document.getElementById("wifi_mode").value;
     const apSection = document.getElementById("section_ap_config");
     const staSection = document.getElementById("section_sta_config");
 
-    // 0: STA Only, 1: AP Only, 2: AP+STA, 3: Auto Fallback
     if (mode === "0") {
         apSection.style.display = "none";
         staSection.style.display = "block";
@@ -52,7 +48,6 @@ function toggleWifiFields() {
     }
 }
 
-// 동적 라우터 폼 렌더링
 function renderRouterHTML(idx) {
     return `
     <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
@@ -74,13 +69,10 @@ function renderRouterHTML(idx) {
     </div>`;
 }
 
-// 초기 UI 생성
 function initUI() {
     const container = document.getElementById('routers_container');
-    if(container) {
-        container.innerHTML = [0, 1, 2].map(renderRouterHTML).join('');
-    }
-    toggleWifiFields(); // 초기 상태 반영
+    if(container) { container.innerHTML = [0, 1, 2].map(renderRouterHTML).join(''); }
+    toggleWifiFields(); 
 }
 
 // ==========================================
@@ -88,9 +80,13 @@ function initUI() {
 // ==========================================
 function initCharts() {
     const opt = { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, elements: { point: { radius: 0 } } };
+    
+    // MFCC 막대 차트의 색상을 그룹별(13개씩) 다르게 지정
+    const mfccColors = Array(13).fill('#4caf50').concat(Array(13).fill('#ff9800')).concat(Array(13).fill('#f44336'));
+    
     charts.wave = new Chart(document.getElementById('chart-waveform'), { type: 'line', data: { labels: Array(256).fill(''), datasets: [{ data: [], borderColor: '#4caf50', borderWidth: 1 }] }, options: { ...opt, scales: { y: { min: -2.0, max: 2.0 } } } });
     charts.spec = new Chart(document.getElementById('chart-spectrum'), { type: 'line', data: { labels: Array(129).fill(''), datasets: [{ data: [], borderColor: '#ff9800', borderWidth: 1, fill: true, backgroundColor: 'rgba(255,152,0,0.1)' }] }, options: opt });
-    charts.mfcc = new Chart(document.getElementById('chart-mfcc'), { type: 'bar', data: { labels: Array(39).fill(''), datasets: [{ data: [], backgroundColor: '#2196f3' }] }, options: opt });
+    charts.mfcc = new Chart(document.getElementById('chart-mfcc'), { type: 'bar', data: { labels: Array(39).fill(''), datasets: [{ data: [], backgroundColor: mfccColors }] }, options: opt });
 }
 
 function getHeatmapColor(value, min, max) {
@@ -120,11 +116,21 @@ class WaterfallChart {
     }
 }
 
+// 3개의 그룹으로 캔버스 분할 (변화량인 Delta 값들은 스케일을 좁혀 민감하게 렌더링)
 const waterfallSpec = new WaterfallChart('chart-waterfall-spec', 129, 0.0, 15.0); 
-const waterfallMfcc = new WaterfallChart('chart-waterfall-mfcc', 39, -20.0, 20.0);
+const waterfallMfccStatic = new WaterfallChart('chart-waterfall-mfcc-static', 13, -20.0, 20.0);
+const waterfallMfccDelta = new WaterfallChart('chart-waterfall-mfcc-delta', 13, -5.0, 5.0);
+const waterfallMfccDeltaDelta = new WaterfallChart('chart-waterfall-mfcc-deltadelta', 13, -2.0, 2.0);
+
+// 그룹별 워터폴 그리기 헬퍼 함수
+function drawMfccWaterfalls(floats39) {
+    waterfallMfccStatic.draw(floats39.slice(0, 13));
+    waterfallMfccDelta.draw(floats39.slice(13, 26));
+    waterfallMfccDeltaDelta.draw(floats39.slice(26, 39));
+}
 
 // ==========================================
-// 3. WebSocket 로직 (v217 패킷 규격 대응)
+// 3. WebSocket 로직 (분리된 워터폴 렌더링 적용)
 // ==========================================
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -136,25 +142,25 @@ function connectWebSocket() {
         if (event.data instanceof ArrayBuffer) {
             const floats = new Float32Array(event.data);
             
-            if (floats.length === 39) {
+            if (floats.length === 39) { // Single Vector Mode
                 charts.mfcc.data.datasets[0].data = floats;
                 charts.mfcc.update('none');
-                waterfallMfcc.draw(floats);
+                drawMfccWaterfalls(floats);
             } 
-            else if (floats.length === 624) {
+            else if (floats.length === 624) { // Sequence Tensor Mode (16x39)
                 const latestFrame = floats.slice(624 - 39, 624);
                 charts.mfcc.data.datasets[0].data = latestFrame;
                 charts.mfcc.update('none');
                 
                 for(let i=0; i<16; i++) {
-                    waterfallMfcc.draw(floats.slice(i * 39, (i + 1) * 39));
+                    drawMfccWaterfalls(floats.slice(i * 39, (i + 1) * 39));
                 }
             } 
-            else if (floats.length === 424) {
+            else if (floats.length === 424) { // Legacy Fallback
                 const waveData = floats.slice(0, 256), specData = floats.slice(256, 385), mfccData = floats.slice(385, 424);
                 charts.wave.data.datasets[0].data = waveData; charts.spec.data.datasets[0].data = specData; charts.mfcc.data.datasets[0].data = mfccData;
                 charts.wave.update('none'); charts.spec.update('none'); charts.mfcc.update('none');
-                waterfallSpec.draw(specData); waterfallMfcc.draw(mfccData);
+                waterfallSpec.draw(specData); drawMfccWaterfalls(mfccData);
             }
         }
     };
@@ -197,7 +203,6 @@ async function loadSettings() {
         const cfg = await res.json();
         const form = document.getElementById('form-config');
         
-        // Sensor & DSP
         if (cfg.sensor_axis !== undefined) form.sensor_axis.value = cfg.sensor_axis;
         if (cfg.accel_range !== undefined) form.accel_range.value = cfg.accel_range;
         if (cfg.gyro_range !== undefined) form.gyro_range.value = cfg.gyro_range;
@@ -209,16 +214,14 @@ async function loadSettings() {
         if (cfg.sub_strength !== undefined) form.sub_strength.value = cfg.sub_strength;
         if (cfg.output_sequence !== undefined) form.output_sequence.value = cfg.output_sequence ? "true" : "false";
 
-        // WiFi AP
         if (cfg.wifi_mode !== undefined) {
             form.wifi_mode.value = cfg.wifi_mode;
-            toggleWifiFields(); // 데이터 로드 후 화면 UI 동기화
+            toggleWifiFields(); 
         }
         if (cfg.wifi_ap_ssid !== undefined) form.wifi_ap_ssid.value = cfg.wifi_ap_ssid;
         if (cfg.wifi_ap_pass !== undefined) form.wifi_ap_pass.value = cfg.wifi_ap_pass;
         if (cfg.wifi_ap_ip !== undefined) form.wifi_ap_ip.value = cfg.wifi_ap_ip;
 
-        // WiFi Multi 값 채우기
         if (cfg.wifi_multi_ap && Array.isArray(cfg.wifi_multi_ap)) {
             cfg.wifi_multi_ap.forEach((ap, idx) => {
                 if (idx < 3) {

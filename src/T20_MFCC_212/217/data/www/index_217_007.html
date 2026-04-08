@@ -39,13 +39,30 @@
                 <div class="chart-container"><canvas id="chart-mfcc"></canvas></div>
             </div>
 
-            <h4 style="margin: 15px 0 5px 0; color: #888;">Spectrogram (Waterfall)</h4>
+            <h4 style="margin: 15px 0 5px 0; color: #888;">Time-Series Waterfalls (Spectrogram & MFCC Groups)</h4>
             <div class="grid">
-                <div class="chart-container" style="height: 150px;">
-                    <canvas id="chart-waterfall-spec"></canvas>
+                <div class="chart-container" style="height: 300px; display: flex; flex-direction: column;">
+                    <div style="color: #aaa; font-size: 12px; margin-bottom: 5px; font-weight: bold;">Mel-Spectrogram (129 Bins)</div>
+                    <canvas id="chart-waterfall-spec" style="flex: 1;"></canvas>
                 </div>
-                <div class="chart-container" style="height: 150px;">
-                    <canvas id="chart-waterfall-mfcc"></canvas>
+                
+                <div class="chart-container" style="height: 300px; display: flex; flex-direction: column; gap: 5px; background: transparent; border: none; padding: 0;">
+                    
+                    <div style="flex: 1; display: flex; flex-direction: column; background: var(--card); border: 1px solid #333; border-radius: 8px; padding: 5px;">
+                        <div style="color: #4caf50; font-size: 11px; font-weight: bold;">1. Static (C0~C12) - Energy & Shape</div>
+                        <canvas id="chart-waterfall-mfcc-static" style="flex: 1;"></canvas>
+                    </div>
+                    
+                    <div style="flex: 1; display: flex; flex-direction: column; background: var(--card); border: 1px solid #333; border-radius: 8px; padding: 5px;">
+                        <div style="color: #ff9800; font-size: 11px; font-weight: bold;">2. Delta (D1~D13) - Velocity</div>
+                        <canvas id="chart-waterfall-mfcc-delta" style="flex: 1;"></canvas>
+                    </div>
+                    
+                    <div style="flex: 1; display: flex; flex-direction: column; background: var(--card); border: 1px solid #333; border-radius: 8px; padding: 5px;">
+                        <div style="color: #f44336; font-size: 11px; font-weight: bold;">3. Delta-Delta (DD1~DD13) - Acceleration</div>
+                        <canvas id="chart-waterfall-mfcc-deltadelta" style="flex: 1;"></canvas>
+                    </div>
+
                 </div>
             </div>
         </section>
@@ -63,66 +80,17 @@
                     </div>
 
                     <h3 style="margin-top: 30px;">Sensor & Hardware Configuration</h3>
-                    <div class="form-group">
-                        <label>Analysis Axis</label>
-                        <select name="sensor_axis">
-                            <option value="0">Accel X</option>
-                            <option value="1">Accel Y</option>
-                            <option value="2">Accel Z (Default)</option>
-                            <option value="3">Gyro X</option>
-                            <option value="4">Gyro Y</option>
-                            <option value="5">Gyro Z</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Accel Range (G)</label>
-                        <select name="accel_range">
-                            <option value="0">± 2G</option>
-                            <option value="1">± 4G</option>
-                            <option value="2">± 8G (Default)</option>
-                            <option value="3">± 16G</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Gyro Range (dps)</label>
-                        <select name="gyro_range">
-                            <option value="0">± 125</option>
-                            <option value="1">± 250</option>
-                            <option value="2">± 500</option>
-                            <option value="3">± 1000</option>
-                            <option value="4">± 2000 (Default)</option>
-                        </select>
-                    </div>
+                    <div class="form-group"><label>Analysis Axis</label><select name="sensor_axis"><option value="0">Accel X</option><option value="1">Accel Y</option><option value="2">Accel Z (Default)</option><option value="3">Gyro X</option><option value="4">Gyro Y</option><option value="5">Gyro Z</option></select></div>
+                    <div class="form-group"><label>Accel Range (G)</label><select name="accel_range"><option value="0">± 2G</option><option value="1">± 4G</option><option value="2">± 8G (Default)</option><option value="3">± 16G</option></select></div>
+                    <div class="form-group"><label>Gyro Range (dps)</label><select name="gyro_range"><option value="0">± 125</option><option value="1">± 250</option><option value="2">± 500</option><option value="3">± 1000</option><option value="4">± 2000 (Default)</option></select></div>
 
                     <h3 style="margin-top: 30px;">DSP & Feature Configuration</h3>
-                    <div class="form-group">
-                        <label>Hop Size (Samples)</label>
-                        <input type="number" name="hop_size" min="64" max="512">
-                    </div>
-                    <div class="form-group">
-                        <label>MFCC Coefficients</label>
-                        <input type="number" name="mfcc_coeffs" min="1" max="32">
-                    </div>
-                    <div class="form-group">
-                        <label>Pre-emphasis Alpha</label>
-                        <input type="number" step="0.01" name="pre_alpha" min="0" max="1">
-                    </div>
-                    <div class="form-group">
-                        <label>Filter Cutoff (Hz)</label>
-                        <input type="number" name="filter_cutoff" min="0" max="800">
-                    </div>
-                    <div class="form-group">
-                        <label>Noise Mode</label>
-                        <select name="noise_mode">
-                            <option value="0">OFF</option>
-                            <option value="1">FIXED</option>
-                            <option value="2">ADAPTIVE</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Subtract Strength</label>
-                        <input type="number" step="0.1" name="sub_strength" min="0" max="5">
-                    </div>
+                    <div class="form-group"><label>Hop Size (Samples)</label><input type="number" name="hop_size" min="64" max="512"></div>
+                    <div class="form-group"><label>MFCC Coefficients</label><input type="number" name="mfcc_coeffs" min="1" max="32"></div>
+                    <div class="form-group"><label>Pre-emphasis Alpha</label><input type="number" step="0.01" name="pre_alpha" min="0" max="1"></div>
+                    <div class="form-group"><label>Filter Cutoff (Hz)</label><input type="number" name="filter_cutoff" min="0" max="800"></div>
+                    <div class="form-group"><label>Noise Mode</label><select name="noise_mode"><option value="0">OFF</option><option value="1">FIXED</option><option value="2">ADAPTIVE</option></select></div>
+                    <div class="form-group"><label>Subtract Strength</label><input type="number" step="0.1" name="sub_strength" min="0" max="5"></div>
 
                     <h3 style="margin-top: 30px; color: var(--accent);">Wi-Fi Configuration</h3>
                     <p style="font-size: 0.85em; color: #888; margin-bottom: 15px;">* 네트워크 설정을 변경하면 안전을 위해 기기를 수동으로 재부팅해야 완전히 적용됩니다.</p>
@@ -146,8 +114,7 @@
 
                     <div id="section_sta_config">
                         <h4 style="color: #bbb;">WiFi Multi (STA) Target Routers</h4>
-                        <div id="routers_container" style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                            </div>
+                        <div id="routers_container" style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 15px;"></div>
                     </div>
 
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -192,7 +159,6 @@
     </main>
 
     <div id="toast" class="toast"></div>
-
     <script src="app_217_007.js"></script>
 </body>
 </html>
