@@ -20,45 +20,66 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
     WiFi.mode(WIFI_OFF);
     delay(50);
 
-    // [1] AP 모드 및 Fallback 설정
+    // [1] AP 모드 및 커스텀 IP 설정
     if (w_cfg.mode == EN_T20_WIFI_AP_ONLY || w_cfg.mode == EN_T20_WIFI_AP_STA || w_cfg.mode == EN_T20_WIFI_AUTO_FALLBACK) {
+        // 사용자가 AP IP를 지정했다면 적용
+        if (w_cfg.ap_ip[0] != '\0') {
+            IPAddress apIP;
+            if (apIP.fromString(w_cfg.ap_ip)) {
+                // 서브넷은 255.255.255.0으로 고정
+                WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+            }
+        }
         WiFi.softAP(w_cfg.ap_ssid, w_cfg.ap_password);
     }
 
-    // [2] STA 모드 및 고정 IP 설정
+    // [2] STA 모드 (개별 라우터별 고정IP/DHCP 적용 및 순차 접속)
     if (w_cfg.mode != EN_T20_WIFI_AP_ONLY) {
         WiFi.mode(w_cfg.mode == EN_T20_WIFI_AP_STA ? WIFI_AP_STA : WIFI_STA);
         
-        if (w_cfg.use_static_ip) {
-            IPAddress ip, gw, sn, d1, d2;
-            if (ip.fromString(w_cfg.local_ip) && gw.fromString(w_cfg.gateway) && sn.fromString(w_cfg.subnet)) {
-                if (w_cfg.dns1[0] != '\0') d1.fromString(w_cfg.dns1);
-                if (w_cfg.dns2[0] != '\0') d2.fromString(w_cfg.dns2);
-                WiFi.config(ip, gw, sn, d1, d2);
-            }
-        }
-
-        // 다중 AP 등록 (WiFi Multi)
         for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
             if (w_cfg.multi_ap[i].ssid[0] != '\0') {
-                _wifi_multi.addAP(w_cfg.multi_ap[i].ssid, w_cfg.multi_ap[i].password);
-            }
-        }
+                
+                WiFi.disconnect(); // 이전 접속 시도 초기화
+                delay(100);
 
-        // 접속 시도
-        uint32_t start_ms = millis();
-        while (_wifi_multi.run() != WL_CONNECTED && (millis() - start_ms < 5000)) {
-            delay(200);
+                // 라우터별 고정 IP / DHCP 스위칭
+                if (w_cfg.multi_ap[i].use_static_ip) {
+                    IPAddress ip, gw, sn, d1, d2;
+                    ip.fromString(w_cfg.multi_ap[i].local_ip);
+                    gw.fromString(w_cfg.multi_ap[i].gateway);
+                    sn.fromString(w_cfg.multi_ap[i].subnet);
+                    if (w_cfg.multi_ap[i].dns1[0] != '\0') d1.fromString(w_cfg.multi_ap[i].dns1);
+                    if (w_cfg.multi_ap[i].dns2[0] != '\0') d2.fromString(w_cfg.multi_ap[i].dns2);
+                    WiFi.config(ip, gw, sn, d1, d2);
+                } else {
+                    // DHCP 사용 시 이전 config 초기화
+                    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); 
+                }
+
+                WiFi.begin(w_cfg.multi_ap[i].ssid, w_cfg.multi_ap[i].password);
+                
+                uint32_t start_ms = millis();
+                // 타임아웃 4초 대기
+                while (WiFi.status() != WL_CONNECTED && (millis() - start_ms < 4000)) {
+                    delay(200);
+                }
+                
+                // 연결 성공 시 더 이상 다른 공유기를 찾지 않고 반복문 종료
+                if (WiFi.status() == WL_CONNECTED) {
+                    break; 
+                }
+            }
         }
     }
 
     // [3] WebSocket 바인딩
     _ws.onEvent([](AsyncWebSocket* s, AsyncWebSocketClient* c, AwsEventType t, void* a, uint8_t* d, size_t l) {
-        // WS 연결 이벤트 핸들링 (v216과 동일)
+        // WS 연결 이벤트 핸들링
     });
     _server.addHandler(&_ws);
 
-    // [4] CORS Preflight 전역 허용 (v216 누락분 복원)
+    // [4] CORS Preflight 전역 허용
     _server.onNotFound([this](AsyncWebServerRequest *request) {
         if (request->method() == HTTP_OPTIONS) {
             AsyncWebServerResponse *response = request->beginResponse(200);
@@ -72,6 +93,7 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
     _server.begin();
     return true;
 }
+
 
 void CL_T20_CommService::initHandlers(void* p_master_impl) {
     CL_T20_Mfcc::ST_Impl* p = (CL_T20_Mfcc::ST_Impl*)p_master_impl;

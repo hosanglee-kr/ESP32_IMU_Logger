@@ -37,9 +37,12 @@ typedef struct {
 typedef enum { EN_T20_WIFI_STA_ONLY = 0, EN_T20_WIFI_AP_ONLY, EN_T20_WIFI_AP_STA, EN_T20_WIFI_AUTO_FALLBACK } EM_T20_WiFiMode_t;
 typedef enum { EN_T20_STORAGE_LITTLEFS = 0, EN_T20_STORAGE_SDMMC } EM_T20_StorageBackend_t;
 
+
 typedef struct {
     char ssid[32];
     char password[64];
+    bool use_static_ip;         // [추가] 공유기별 고정 IP 여부
+    char local_ip[16], gateway[16], subnet[16], dns1[16], dns2[16]; // [이동]
 } ST_T20_WiFiCredential_t;
 
 typedef struct {
@@ -47,9 +50,9 @@ typedef struct {
     ST_T20_WiFiCredential_t multi_ap[T20::C10_Net::WIFI_MULTI_MAX];
     char ap_ssid[32];
     char ap_password[64];
-    bool use_static_ip;
-    char local_ip[16], gateway[16], subnet[16], dns1[16], dns2[16];
+    char ap_ip[16];             // [추가] AP 모드 커스텀 IP
 } ST_T20_ConfigWiFi_t;
+
 
 typedef struct {
     char profile_name[32];

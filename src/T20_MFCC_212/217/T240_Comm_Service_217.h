@@ -6,7 +6,7 @@
 #pragma once
 
 #include <WiFi.h>
-#include <WiFiMulti.h>
+// #include <WiFiMulti.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -37,7 +37,7 @@ private:
     void _sendJson(AsyncWebServerRequest* request, const JsonDocument& doc);
 
 private:
-    WiFiMulti        _wifi_multi;
+    // WiFiMulti        _wifi_multi;
     AsyncWebServer   _server;
     AsyncWebSocket   _ws;
 };

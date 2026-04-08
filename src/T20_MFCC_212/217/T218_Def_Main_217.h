@@ -30,8 +30,10 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.sensor.gyro_range = EN_T20_GYRO_2000;
     
     cfg.wifi.mode = EN_T20_WIFI_AUTO_FALLBACK;
+    
     strlcpy(cfg.wifi.ap_ssid, "T20_MFCC_AP", 32);
     strlcpy(cfg.wifi.ap_password, "12345678", 64);
+    strlcpy(cfg.wifi.ap_ip, "192.168.4.1", 16); // [추가] 기본 AP IP
 
     cfg.feature.hop_size = T20::C10_DSP::FFT_SIZE;
     cfg.feature.mfcc_coeffs = T20::C10_DSP::MFCC_COEFFS_DEF;
