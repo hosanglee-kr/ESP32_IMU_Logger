@@ -1,17 +1,17 @@
-<!-- index_216_005.html -->
+<!-- index_217_006.html -->
 
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T20 MFCC v216 Control</title>
-    <link rel="stylesheet" href="style_216_005.css">
+    <title>T20 MFCC v217 Control</title>
+    <link rel="stylesheet" href="style_217_006.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
-        <div class="logo">T20 MFCC <span>v216</span></div>
+        <div class="logo">T20 MFCC <span>v217</span></div>
         <div id="status-tag" class="tag offline">OFFLINE</div>
     </header>
 
@@ -31,9 +31,10 @@
                 <div class="mini-stat">
                     FPS: <span id="val-fps">0.0</span> | 
                     Dropped: <span id="val-dropped">0</span> | 
-                    Samples: <span id="val-samples">0</span>
+                    Status Hash: <span id="val-samples">0</span>
                 </div>
             </div>
+            
             <div class="grid">
                 <div class="chart-container"><canvas id="chart-waveform"></canvas></div>
                 <div class="chart-container"><canvas id="chart-spectrum"></canvas></div>
@@ -54,7 +55,16 @@
         <section id="tab-settings" class="tab-content">
             <div class="card">
                 <form id="form-config">
-                    <h3>Sensor & Hardware Configuration</h3>
+                    <h3 style="color: var(--accent);">Output & Edge AI Configuration</h3>
+                    <div class="form-group" style="background: rgba(76, 175, 80, 0.1); padding: 10px; border-radius: 4px; border-left: 4px solid var(--accent);">
+                        <label style="font-weight: bold; color: #fff;">Output Mode (TinyML)</label>
+                        <select name="output_sequence" style="border-color: var(--accent);">
+                            <option value="false">Single Vector (39D)</option>
+                            <option value="true">Sequence Tensor (16x39)</option>
+                        </select>
+                    </div>
+
+                    <h3 style="margin-top: 30px;">Sensor & Hardware Configuration</h3>
                     <div class="form-group">
                         <label>Analysis Axis</label>
                         <select name="sensor_axis">
@@ -207,7 +217,7 @@
         <section id="tab-diag" class="tab-content">
             <div class="grid">
                 <div class="card">
-                    <h3>System Health</h3>
+                    <h3>System Health (v217 Status API)</h3>
                     <pre id="diag-health" class="log-box">Waiting for data...</pre>
                 </div>
                 <div class="card">
@@ -220,6 +230,6 @@
 
     <div id="toast" class="toast"></div>
 
-    <script src="app_216_005.js"></script>
+    <script src="app_217_006.js"></script>
 </body>
 </html>

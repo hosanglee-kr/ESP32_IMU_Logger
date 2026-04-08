@@ -80,10 +80,10 @@ namespace T20 {
         inline constexpr char const* MOUNT_SD      = "/sdcard";
         inline constexpr char const* DIR_SYS       = "/sys";
         inline constexpr char const* DIR_WEB       = "/www";
-        inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg.json";
+        inline constexpr char const* FILE_CFG_JSON = "/sys/t20_runtime_cfg_217_006.json";
         inline constexpr char const* FILE_REC_IDX  = "/sys/recorder_index.json";
         inline constexpr char const* FILE_BMI_CALIB= "/sys/bmi_calib.json";
-        inline constexpr char const* WEB_INDEX     = "index_214_003.html";
+        inline constexpr char const* WEB_INDEX     = "index_217_006.html";
         inline constexpr char const* SD_DIR_BIN    = "/t20_data/bin";
         inline constexpr char const* SD_PREFIX_BIN = "/t20_data/bin/rec_";
     }
