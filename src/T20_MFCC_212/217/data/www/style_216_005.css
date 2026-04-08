@@ -1,0 +1,62 @@
+/* style_216_005.css */
+
+:root { 
+    --bg: #121212; --card: #1e1e1e; --text: #eee; 
+    --accent: #4caf50; --warn: #ff9800; --err: #f44336; 
+}
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+header { background: #000; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+.logo { font-size: 1.2em; font-weight: bold; }
+.logo span { color: var(--accent); font-size: 0.8em; }
+.tag { padding: 4px 10px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+.tag.online { background: var(--accent); color: #fff; }
+.tag.offline { background: #555; color: #ccc; }
+
+.container { padding: 15px; max-width: 1200px; margin: 0 auto; }
+.tab-bar { display: flex; background: #1a1a1a; border-bottom: 1px solid #333; overflow-x: auto; }
+.tab-btn { flex: 1; padding: 12px; border: none; background: none; color: #888; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: #252525; }
+.tab-content { display: none; animation: fadeIn 0.3s; }
+.tab-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.card { background: var(--card); border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #333; }
+.chart-container { background: var(--card); height: 220px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; position: relative; width: 100%; }
+
+/* 폭포수(Spectrogram) 캔버스 전용 스타일 */
+#chart-waterfall-spec, #chart-waterfall-mfcc {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated; 
+    background-color: #000;
+    border-radius: 8px;
+    display: block;
+}
+
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+.mini-stat { margin-left: auto; font-family: monospace; color: #aaa; background: #000; padding: 8px 12px; border-radius: 4px; }
+
+.btn { border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+.btn:hover:not(:disabled) { opacity: 0.8; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary { background: var(--accent); color: white; }
+.warning { background: var(--warn); color: #000; }
+.danger { background: var(--err); color: white; }
+
+.form-group { margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 10px; }
+input, select { background: #333; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; min-width: 150px; font-family: inherit; }
+
+table { width: 100%; text-align: left; border-collapse: collapse; }
+th { color: #888; font-size: 0.9em; border-bottom: 2px solid #333; padding: 10px; }
+td { padding: 10px; border-bottom: 1px solid #222; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.log-box { height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.9em; color: #4caf50; background: #000; padding: 10px; border-radius: 4px; border: 1px solid #333; white-space: pre-wrap; }
+
+/* 토스트 알림 */
+.toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1; right: 20px; bottom: 20px; border-left: 5px solid var(--accent); }
+.toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+.toast.error { border-left-color: var(--err); }
+@keyframes fadein { from { bottom: 0; opacity: 0; } to { bottom: 20px; opacity: 1; } }
+@keyframes fadeout { from { bottom: 20px; opacity: 1; } to { bottom: 0; opacity: 0; } }
+
