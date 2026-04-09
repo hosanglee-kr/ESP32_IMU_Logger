@@ -124,12 +124,15 @@ typedef struct {
 	uint32_t rotation_mb;
 	uint32_t rotation_min;	// 시간 기반 로테이션 (분)
 	bool	 save_raw;
+	uint16_t rotate_keep_max; // 최대 보존 파일 수 (0 = 무제한)
+	uint32_t idle_flush_ms;   // Idle Flush 대기 시간 (ms)
 } ST_T20_ConfigStorage_t;
 
 // --- 트리거 및 딥슬립 구조체 ---
 typedef struct {
 	bool	 use_threshold;
 	float	 threshold_rms;
+	uint16_t any_motion_duration; // Any-Motion 지속 시간 (1 = 20ms)
 	bool	 use_deep_sleep;
 	uint32_t sleep_timeout_sec;
 } ST_T20_ConfigTrigger_t;
@@ -153,5 +156,7 @@ typedef struct {
 	struct {
 		bool	auto_start;
 		uint8_t button_pin;
+		uint32_t watchdog_ms; // 워치독 타임아웃 (ms)
 	} system;
 } ST_T20_Config_t;
+

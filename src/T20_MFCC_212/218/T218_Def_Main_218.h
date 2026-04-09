@@ -49,16 +49,21 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	cfg.storage.save_raw		  = false;
 	cfg.storage.rotation_mb		  = 10;
 	cfg.storage.rotation_min	  = 60;
+	cfg.storage.rotate_keep_max = 8;    
+    cfg.storage.idle_flush_ms   = 250; 
 
 	// [6] Trigger & Power (스마트 트리거 및 딥슬립)
 	cfg.trigger.use_threshold	  = false;
 	cfg.trigger.threshold_rms	  = 0.5f;
+	cfg.trigger.any_motion_duration = 5; //(100ms)
 	cfg.trigger.use_deep_sleep	  = false;
 	cfg.trigger.sleep_timeout_sec = 300;
 
 	// [7] System
 	cfg.system.auto_start		  = true;
 	cfg.system.button_pin		  = T20::C10_Pin::BTN_CONTROL;
+	cfg.system.watchdog_ms      = 2000; // (2초)
 
 	return cfg;
 }
+

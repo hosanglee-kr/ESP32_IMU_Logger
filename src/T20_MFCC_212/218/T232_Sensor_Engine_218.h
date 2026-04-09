@@ -27,8 +27,7 @@ public:
     bool applyStoredCalibration();
 
     // 딥슬립 전 Any-Motion (충격 감지) 인터럽트 활성화
-    bool enableWakeOnMotion(float threshold_g);
-
+    bool enableWakeOnMotion(float threshold_g, uint16_t duration);
 
     // 상태 조회
     const char* getStatusText() const { return _status_text; }

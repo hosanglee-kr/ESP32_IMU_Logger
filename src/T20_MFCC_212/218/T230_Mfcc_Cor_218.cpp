@@ -258,7 +258,7 @@ void CL_T20_Mfcc::run() {
     // 시스템 부팅 직후 바로 Watchdog이 터지는 것을 막기 위해 현재 시간으로 초기화
     static uint32_t wd_last_ms = millis();
 
-    if (millis() - wd_last_ms > 2000) {
+    if (millis() - wd_last_ms > _impl->cfg.system.watchdog_ms) {
         // 측정이 활성화되어 있는데도 샘플 카운터가 증가하지 않았다면 센서 먹통으로 간주
         if (_impl->measurement_active && wd_last_cnt == _impl->sample_counter) {
             _impl->storage.writeEvent("watchdog_sensor_stall");

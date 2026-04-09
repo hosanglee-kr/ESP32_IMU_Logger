@@ -132,6 +132,7 @@ bool CL_T20_SensorEngine::runCalibration() {
 	return true;
 }
 
+
 bool CL_T20_SensorEngine::enableWakeOnMotion(float threshold_g) {
 	if (!_initialized) return false;
 
@@ -146,7 +147,7 @@ bool CL_T20_SensorEngine::enableWakeOnMotion(float threshold_g) {
 	any_mo_cfg.type					   = BMI2_ANY_MOTION;
 
 	// 지속 시간 설정 (1 단위 = 20ms), 5 = 100ms 지속시 인터럽트 발생
-	any_mo_cfg.cfg.any_motion.duration = 5;
+	any_mo_cfg.cfg.any_motion.duration = duration;
 
 	// 임계값 설정: BMI270은 11비트 해상도(0~2047)로 0~1g 표현 (1 LSB = 1/2048 g)
 	uint16_t threshold_lsb			   = (uint16_t)(threshold_g * 2048.0f);

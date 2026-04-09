@@ -37,6 +37,11 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 			out_cfg.preprocess.filter.cutoff_hz_1 = flt["cutoff_hz_1"] | out_cfg.preprocess.filter.cutoff_hz_1;
 			out_cfg.preprocess.filter.q_factor	  = flt["q_factor"] | out_cfg.preprocess.filter.q_factor;
 		}
+		
+		JsonObjectConst pre = d["preemphasis"];
+		if (pre) {
+		    out_cfg.preprocess.preemphasis.alpha = pre["alpha"] | out_cfg.preprocess.preemphasis.alpha;
+		}
 
 		JsonObjectConst nz = d["noise"];
 		if (nz) {
@@ -44,6 +49,10 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 			out_cfg.preprocess.noise.gate_threshold_abs			= nz["gate_threshold_abs"] | out_cfg.preprocess.noise.gate_threshold_abs;
 			out_cfg.preprocess.noise.mode						= (EM_T20_NoiseMode_t)(nz["mode"] | out_cfg.preprocess.noise.mode);
 			out_cfg.preprocess.noise.spectral_subtract_strength = nz["spectral_subtract_strength"] | out_cfg.preprocess.noise.spectral_subtract_strength;
+		
+			out_cfg.preprocess.noise.adaptive_alpha = nz["adaptive_alpha"] | out_cfg.preprocess.noise.adaptive_alpha;
+		    out_cfg.preprocess.noise.noise_learn_frames = nz["noise_learn_frames"] | out_cfg.preprocess.noise.noise_learn_frames;
+		
 		}
 	}
 
@@ -67,6 +76,10 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 		out_cfg.storage.rotation_mb	 = st["rotation_mb"] | out_cfg.storage.rotation_mb;
 		out_cfg.storage.rotation_min = st["rotation_min"] | out_cfg.storage.rotation_min;
 		out_cfg.storage.save_raw	 = st["save_raw"] | out_cfg.storage.save_raw;
+		
+		out_cfg.storage.rotate_keep_max = st["rotate_keep_max"] | out_cfg.storage.rotate_keep_max;
+		out_cfg.storage.idle_flush_ms   = st["idle_flush_ms"] | out_cfg.storage.idle_flush_ms;
+		
 	}
 
 	// 5. Trigger
@@ -76,12 +89,16 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 		out_cfg.trigger.threshold_rms	  = tr["threshold_rms"] | out_cfg.trigger.threshold_rms;
 		out_cfg.trigger.use_deep_sleep	  = tr["use_deep_sleep"] | out_cfg.trigger.use_deep_sleep;
 		out_cfg.trigger.sleep_timeout_sec = tr["sleep_timeout_sec"] | out_cfg.trigger.sleep_timeout_sec;
+		
+		out_cfg.trigger.any_motion_duration = tr["any_motion_duration"] | out_cfg.trigger.any_motion_duration;
 	}
 
 	// 6. System
 	JsonObjectConst sys = doc["system"];
 	if (sys) {
 		out_cfg.system.auto_start = sys["auto_start"] | out_cfg.system.auto_start;
+		out_cfg.system.watchdog_ms = sys["watchdog_ms"] | out_cfg.system.watchdog_ms;
+
 	}
 
 	return true;
@@ -98,7 +115,10 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 
 	JsonObject d					 = out_doc["dsp"].to<JsonObject>();
 	d["remove_dc"]					 = cfg.preprocess.remove_dc;
-
+	
+	JsonObject pre = d["preemphasis"].to<JsonObject>();
+	pre["alpha"]   = cfg.preprocess.preemphasis.alpha;
+	
 	JsonObject flt					 = d["filter"].to<JsonObject>();
 	flt["enable"]					 = cfg.preprocess.filter.enable;
 	flt["type"]						 = (int)cfg.preprocess.filter.type;
@@ -110,6 +130,9 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 	nz["gate_threshold_abs"]		 = cfg.preprocess.noise.gate_threshold_abs;
 	nz["mode"]						 = (int)cfg.preprocess.noise.mode;
 	nz["spectral_subtract_strength"] = cfg.preprocess.noise.spectral_subtract_strength;
+	nz["adaptive_alpha"]     = cfg.preprocess.noise.adaptive_alpha;
+	nz["noise_learn_frames"] = cfg.preprocess.noise.noise_learn_frames;
+	
 
 	JsonObject f					 = out_doc["feature"].to<JsonObject>();
 	f["hop_size"]					 = cfg.feature.hop_size;
@@ -124,15 +147,22 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 	st["rotation_mb"]				 = cfg.storage.rotation_mb;
 	st["rotation_min"]				 = cfg.storage.rotation_min;
 	st["save_raw"]					 = cfg.storage.save_raw;
+	st["rotate_keep_max"] = cfg.storage.rotate_keep_max;
+	st["idle_flush_ms"]   = cfg.storage.idle_flush_ms;
+	
 
 	JsonObject tr					 = out_doc["trigger"].to<JsonObject>();
 	tr["use_threshold"]				 = cfg.trigger.use_threshold;
 	tr["threshold_rms"]				 = cfg.trigger.threshold_rms;
 	tr["use_deep_sleep"]			 = cfg.trigger.use_deep_sleep;
 	tr["sleep_timeout_sec"]			 = cfg.trigger.sleep_timeout_sec;
+	tr["any_motion_duration"] = cfg.trigger.any_motion_duration;
+	
 
 	JsonObject sys					 = out_doc["system"].to<JsonObject>();
 	sys["auto_start"]				 = cfg.system.auto_start;
+	sys["watchdog_ms"] = cfg.system.watchdog_ms;
+	
 }
 
 void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_str) {
@@ -140,3 +170,7 @@ void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_
 	buildJson(cfg, doc);
 	serializeJson(doc, out_str);
 }
+
+
+
+

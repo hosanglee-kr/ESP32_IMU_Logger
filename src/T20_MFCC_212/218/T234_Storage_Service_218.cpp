@@ -54,6 +54,7 @@ bool CL_T20_StorageService::begin(const ST_T20_SdmmcProfile_t& profile) {
     return true;
 }
 
+
 bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     if (_session_open) return false;
     _current_cfg = cfg;
@@ -123,6 +124,9 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     _session_start_ms = millis();
     _dma_active_slot = 0;
     memset(_dma_slot_used, 0, sizeof(_dma_slot_used));
+    
+    _rotate_keep_max = cfg.storage.rotate_keep_max;
+    _idle_flush_ms   = cfg.storage.idle_flush_ms;
 
     _session_open = true;
     writeEvent("recorder_started");
@@ -237,6 +241,10 @@ void CL_T20_StorageService::_handleRotation() {
     if (_index_count <= _rotate_keep_max) return;
 
     bool any_deleted = false;
+    
+    // 0이면 무제한이므로 삭제 로직 수행 안함
+    if (_rotate_keep_max == 0) return;
+    
     while (_index_count > _rotate_keep_max) {
         char old_path[128];
         strlcpy(old_path, _index_items[0].path, sizeof(old_path));
