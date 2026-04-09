@@ -14,7 +14,7 @@ public:
     bool begin(const ST_T20_Config_t* p_cfg = nullptr);
     bool start();
     void stop();
-    void run(); // [복원] Watchdog 및 버튼 루프
+    void run(); // Watchdog 및 버튼 루프
 
     void printStatus(Stream& out) const;
 
@@ -25,7 +25,7 @@ private:
 
     friend void T20_sensorTask(void* p_arg);
     friend void T20_processTask(void* p_arg);
-    friend void T20_recorderTask(void* p_arg); // [복원] 레코더 독립 태스크
+    friend void T20_recorderTask(void* p_arg); // 레코더 독립 태스크
 };
 
 extern CL_T20_Mfcc* g_t20;

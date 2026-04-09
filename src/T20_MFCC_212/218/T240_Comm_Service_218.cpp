@@ -10,7 +10,7 @@
 #include <time.h> // NTP 처리를 위한 표준 time 라이브러리
 
 
-CL_T20_CommService::CL_T20_CommService() 
+CL_T20_CommService::CL_T20_CommService()
     : _server(80), _ws(T20::C10_Web::WS_URI) {}
 
 CL_T20_CommService::~CL_T20_CommService() {
@@ -38,10 +38,10 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
     // [2] STA 모드 (개별 라우터별 고정IP/DHCP 적용 및 순차 접속)
     if (w_cfg.mode != EN_T20_WIFI_AP_ONLY) {
         WiFi.mode(w_cfg.mode == EN_T20_WIFI_AP_STA ? WIFI_AP_STA : WIFI_STA);
-        
+
         for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
             if (w_cfg.multi_ap[i].ssid[0] != '\0') {
-                
+
                 WiFi.disconnect(); // 이전 접속 시도 초기화
                 delay(100);
 
@@ -56,29 +56,29 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
                     WiFi.config(ip, gw, sn, d1, d2);
                 } else {
                     // DHCP 사용 시 이전 config 초기화
-                    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); 
+                    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
                 }
 
                 WiFi.begin(w_cfg.multi_ap[i].ssid, w_cfg.multi_ap[i].password);
-                
+
                 uint32_t start_ms = millis();
                 // 타임아웃 4초 대기
                 while (WiFi.status() != WL_CONNECTED && (millis() - start_ms < 4000)) {
                     delay(200);
                 }
-                
+
                 // 연결 성공 시 더 이상 다른 공유기를 찾지 않고 반복문 종료
                 if (WiFi.status() == WL_CONNECTED) {
                     // [NTP 동기화 추가]
                     configTzTime(T20::C10_Time::TZ_INFO, T20::C10_Time::NTP_SERVER_1, T20::C10_Time::NTP_SERVER_2);
-                    
+
                     // 동기화 대기 (최대 5초)
                     struct tm timeinfo;
                     uint32_t start_time = millis();
                     while (!getLocalTime(&timeinfo, 100) && (millis() - start_time < T20::C10_Time::SYNC_TIMEOUT_MS)) {
                         delay(100);
                     }
-                    break; 
+                    break;
                 }
             }
         }
@@ -153,7 +153,7 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
             return;
         }
         String path = request->getParam("path")->value();
-        
+
         // SD_MMC 최우선, 없으면 LittleFS 확인
         if (SD_MMC.exists(path)) {
             AsyncWebServerResponse *response = request->beginResponse(SD_MMC, path, "application/octet-stream");
@@ -169,7 +169,7 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     });
 
     // ========================================================================
-    // 3. 센서 제어 및 진단 API (v216 누락분 복원)
+    // 3. 센서 제어 및 진단 API
     // ========================================================================
     _server.on("/api/t20/calibrate", HTTP_POST, [p, this](AsyncWebServerRequest* request) {
         bool ok = p->sensor.runCalibration();
@@ -206,24 +206,24 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
         }
     });
 
-    _server.on("/api/t20/runtime_config", HTTP_POST, 
+    _server.on("/api/t20/runtime_config", HTTP_POST,
         [](AsyncWebServerRequest *request) {
             request->send(400, "application/json", "{\"ok\":false,\"msg\":\"no_body\"}");
         },
         NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            if (index == 0) { 
-                request->_tempObject = malloc(total + 1); 
+            if (index == 0) {
+                request->_tempObject = malloc(total + 1);
             }
             uint8_t* buffer = (uint8_t*)request->_tempObject;
             if (buffer) {
-                memcpy(buffer + index, data, len); 
+                memcpy(buffer + index, data, len);
                 if (index + len == total) {
-                    buffer[total] = '\0'; 
-                    
+                    buffer[total] = '\0';
+
                     JsonDocument doc;
                     DeserializationError err = deserializeJson(doc, buffer);
-                    
+
                     if (!err) {
                         File f = LittleFS.open(T20::C10_Path::FILE_CFG_JSON, "w");
                         if (f) {
@@ -239,7 +239,7 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
                     } else {
                         request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_error\"}");
                     }
-                    free(buffer); 
+                    free(buffer);
                     request->_tempObject = NULL;
                 }
             } else {
@@ -252,12 +252,12 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     // ========================================================================
     // 5. 프론트엔드 정적 파일 서빙
     // ========================================================================
-    _server.serveStatic("/", LittleFS, "/www").setDefaultFile("index_214_003.html");
+    _server.serveStatic("/", LittleFS, "/www").setDefaultFile(T20::C10_Path::WEB_INDEX);
 }
 
 void CL_T20_CommService::broadcastBinary(const float* p_buffer, size_t len) {
     if (_ws.count() == 0 || !p_buffer) return;
-    
+
     if (_ws.availableForWriteAll()) {
         _ws.binaryAll((uint8_t*)p_buffer, len * sizeof(float));
     }
@@ -288,4 +288,4 @@ void CL_T20_CommService::_sendJson(AsyncWebServerRequest* request, const JsonDoc
 
 
 
-    
+

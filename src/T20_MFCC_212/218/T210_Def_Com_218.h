@@ -10,7 +10,7 @@
 
 namespace T20 {
     namespace C10_Sys {
-        inline constexpr char const* VERSION_STR           = "T20_Mfcc_v217";
+        inline constexpr char const* VERSION_STR           = "T20_Mfcc_v218";
         inline constexpr uint16_t QUEUE_LEN                = 8U;
         inline constexpr uint16_t CFG_PROFILE_COUNT        = 4U;
         inline constexpr uint16_t RAW_FRAME_BUFFERS        = 4U;
@@ -67,21 +67,21 @@ namespace T20 {
     }
 
     namespace C10_Web {
-        inline constexpr char const* WS_URI        = "/api/t20/ws";
-        inline constexpr uint16_t JSON_BUF_SIZE    = 2048U;
-        inline constexpr uint16_t LARGE_JSON_BUF_SIZE = 8192U;
-        inline constexpr uint32_t BTN_DEBOUNCE_MS  = 500U;
+        inline constexpr char const* WS_URI        		= "/api/t20/ws";
+        inline constexpr uint16_t JSON_BUF_SIZE    		= 2048U;
+        inline constexpr uint16_t LARGE_JSON_BUF_SIZE 	= 8192U;
+        inline constexpr uint32_t BTN_DEBOUNCE_MS  		= 500U;
     }
 
     namespace C10_Net {
-        inline constexpr uint8_t WIFI_MULTI_MAX    = 3U;
+        inline constexpr uint8_t WIFI_MULTI_MAX    		= 3U;
     }
-    
+
     namespace C10_Time {
-        inline constexpr char const* NTP_SERVER_1 = "pool.ntp.org";
-        inline constexpr char const* NTP_SERVER_2 = "time.nist.gov";
-        inline constexpr char const* TZ_INFO      = "KST-9"; // 한국 표준시 (UTC+9)
-        inline constexpr uint32_t SYNC_TIMEOUT_MS = 5000U;
+        inline constexpr char const* NTP_SERVER_1 		= "pool.ntp.org";
+        inline constexpr char const* NTP_SERVER_2 		= "time.nist.gov";
+        inline constexpr char const* TZ_INFO      		= "KST-9";
+        inline constexpr uint32_t SYNC_TIMEOUT_MS 		= 5000U;
     }
 
     namespace C10_NVS {
@@ -103,7 +103,7 @@ namespace T20 {
         inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg_218_007.json";
         inline constexpr char const* FILE_REC_IDX  = "/sys/recorder_index.json";
         inline constexpr char const* FILE_BMI_CALIB= "/sys/bmi_calib.json";
-        inline constexpr char const* WEB_INDEX     = "index_217_006.html";
+        inline constexpr char const* WEB_INDEX     = "index_218_008.html";
         inline constexpr char const* SD_DIR_BIN    = "/t20_data/bin";
         inline constexpr char const* SD_PREFIX_BIN = "/t20_data/bin/rec_";
     }

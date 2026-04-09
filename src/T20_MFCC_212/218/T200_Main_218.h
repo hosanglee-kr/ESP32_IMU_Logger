@@ -14,8 +14,6 @@ inline CL_T20_Mfcc& T20_instance() {
 }
 
 inline void T20_init() {
-    Serial.begin(115200);
-    delay(500);
 
     auto& mfcc = T20_instance();
     ST_T20_Config_t cfg = T20_makeDefaultConfig();
