@@ -133,7 +133,7 @@ bool CL_T20_SensorEngine::runCalibration() {
 }
 
 
-bool CL_T20_SensorEngine::enableWakeOnMotion(float threshold_g) {
+bool CL_T20_SensorEngine::enableWakeOnMotion(float threshold_g, uint16_t duration) {
 	if (!_initialized) return false;
 
 	// 1. 가속도 센서를 전력 최적화(저전력) 모드로 설정
