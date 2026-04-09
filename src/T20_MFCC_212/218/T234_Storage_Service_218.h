@@ -20,16 +20,23 @@ public:
     // 스토리지 마운트 및 초기화
     bool begin(const ST_T20_SdmmcProfile_t& profile);
     
-    // 로깅 세션 제어
-    bool openSession(const ST_T20_RecorderBinaryHeader_t& header);
+    // 설정 구조체를 직접 전달받아 내부에서 헤더와 파일명을 자동 생성
+    bool openSession(const ST_T20_Config_t& cfg);
     void closeSession(const char* reason = "end_normal");
     
     // Zero-Copy DMA 슬롯 기반 고속 기록
     bool pushVector(const ST_T20_FeatureVector_t* p_vec);
+    // Raw 파형 저장
+    bool pushRaw(const float* p_raw, uint16_t len);
+    
     
     // 타임아웃 및 강제 플러시
     bool flush();
     void checkIdleFlush();
+    
+    // 용량/시간 기반 로테이션 검사
+    void checkRotation(); 
+    
 
     // 상태 및 감사(Audit) 트래킹 API
     void writeEvent(const char* event_msg);
@@ -48,12 +55,18 @@ private:
 private:
     EM_T20_StorageBackend_t _backend;
     File     _active_file;
+    File     _raw_file; // Raw 데이터 기록용 파일 핸들
+    
     bool     _session_open;
     uint32_t _record_count;
     char     _active_path[128];
     char     _last_error[128];
+    
+    ST_T20_Config_t _current_cfg; // 현재 세션의 설정값
+    uint32_t _session_start_ms;   // 세션 시작 시간 (시간 로테이션용)
+    uint32_t _written_bytes;      // 기록된 바이트 수 (용량 로테이션용)
 
-    // --- v216 DMA 버퍼링 복원 ---
+    // --- DMA 버퍼링 복원 ---
     static constexpr uint8_t  DMA_SLOT_COUNT = 3;
     static constexpr uint32_t DMA_SLOT_BYTES = 1024;
     
@@ -61,13 +74,13 @@ private:
     uint16_t _dma_slot_used[DMA_SLOT_COUNT];
     uint8_t  _dma_active_slot;
     
-    // --- v216 배치 및 플러시 조건 복원 ---
+    // --- 배치 및 플러시 조건 복원 ---
     uint16_t _batch_count;
     uint16_t _watermark_high;
     uint32_t _last_push_ms;
     uint32_t _idle_flush_ms;
 
-    // --- v216 파일 로테이션 인덱스 복원 ---
+    // --- 파일 로테이션 인덱스 복원 ---
     static constexpr uint16_t MAX_ROTATE_LIST = 16;
     struct ST_IndexItem {
         char     path[128];
@@ -79,3 +92,4 @@ private:
     uint16_t _index_count;
     uint16_t _rotate_keep_max;
 };
+

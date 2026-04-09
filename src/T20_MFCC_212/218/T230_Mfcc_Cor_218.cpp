@@ -45,6 +45,7 @@ void T20_sensorTask(void* p_arg) {
 }
 
 
+
 // --- [2] Core 1: DSP 연산 및 브로드캐스트 ---
 void T20_processTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
@@ -57,14 +58,19 @@ void T20_processTask(void* p_arg) {
 
     for (;;) {
         if (xQueueReceive(p->frame_queue, &read_idx, portMAX_DELAY) == pdTRUE) {
-            // [1] DSP: 39차원 단일 벡터 추출
+            // [1] Raw 파형 저장 옵션이 켜져 있으면, DSP 처리 전 256 샘플 통째로 넘김
+            if (p->cfg.storage.save_raw) {
+                p->storage.pushRaw(p->raw_buffer[read_idx], T20::C10_DSP::FFT_SIZE);
+            }
+            
+            // [2] DSP: 39차원 단일 벡터 추출
             if (p->dsp.processFrame(p->raw_buffer[read_idx], &feature)) {
                 feature.frame_id = ++frame_id;
                 
-                // [2] Sequence Builder에 1프레임 푸시 (Sliding Window 갱신)
+                // [3] Sequence Builder에 1프레임 푸시 (Sliding Window 갱신)
                 p->seq_builder.pushVector(feature.vector);
 
-                // [3] 분기: 사용자가 웹에서 설정한 모드에 따라 처리
+                // [4] 분기: 사용자가 웹에서 설정한 모드에 따라 처리
                 if (p->cfg.output.output_sequence) {
                     // 시퀀스 모드: TinyML 추론을 위해 버퍼가 16프레임 꽉 찼을 때만 동작
                     if (p->seq_builder.isReady()) {
@@ -89,7 +95,7 @@ void T20_processTask(void* p_arg) {
     }
 }
 
-// --- [3] Core 1: 레코더 전담 태스크 (v216 복원) ---
+// --- [3] Core 1: 레코더 전담 태스크  ---
 void T20_recorderTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
     ST_T20_FeatureVector_t msg;
@@ -159,9 +165,13 @@ void CL_T20_Mfcc::stop() {
     _impl->storage.closeSession();
 }
 
-// Watchdog 및 Button 로직 (v216 복원)
+
+
+// Watchdog 및 Button 로직
 void CL_T20_Mfcc::run() {
     if (!_impl->running) return;
+    
+    
 
     // 1. 버튼 디바운스 및 제어
     if (digitalRead(_impl->cfg.system.button_pin) == LOW) {
@@ -193,3 +203,5 @@ void CL_T20_Mfcc::printStatus(Stream& out) const {
     out.printf("WiFi: %s\n", _impl->comm.isConnected() ? "Connected" : "Disconnected");
     out.println("-------------------------");
 }
+
+

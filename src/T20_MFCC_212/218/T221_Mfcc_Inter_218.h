@@ -1,6 +1,6 @@
 /* ============================================================================
  * File: T221_Mfcc_Inter_218.h
- * Summary: v217 통합 내부 구현체 (Pimpl)
+ * Summary: 통합 내부 구현체 (Pimpl)
  * ========================================================================== */
 #pragma once
 #include "T220_Mfcc_218.h"
@@ -10,6 +10,7 @@
 #include "T240_Comm_Service_218.h"
 
 #include "T233_Sequence_Builder_218.h" 
+
 
 
 struct CL_T20_Mfcc::ST_Impl {
@@ -32,7 +33,11 @@ struct CL_T20_Mfcc::ST_Impl {
     uint8_t  active_fill_buffer = 0;
     uint16_t active_sample_index = 0;
     
-    // Watchdog & Button (v216 복원)
+    // --- 트리거 및 딥슬립 상태 관리 ---
+    uint32_t last_trigger_ms = 0;
+    uint16_t trigger_hold_frames = 0;
+    
+    // Watchdog & Button
     bool     measurement_active = false;
     uint32_t sample_counter = 0;
     uint32_t last_btn_ms = 0;

@@ -5,6 +5,7 @@
 #pragma once
 #include "T210_Def_Com_218.h"
 
+
 // --- [1] Sensor Types ---
 typedef enum { EN_T20_AXIS_ACCEL_X = 0, EN_T20_AXIS_ACCEL_Y, EN_T20_AXIS_ACCEL_Z, EN_T20_AXIS_GYRO_X, EN_T20_AXIS_GYRO_Y, EN_T20_AXIS_GYRO_Z } EM_T20_SensorAxis_t;
 typedef enum { EN_T20_ACCEL_2G = 0, EN_T20_ACCEL_4G, EN_T20_ACCEL_8G, EN_T20_ACCEL_16G } EM_T20_AccelRange_t;
@@ -60,6 +61,8 @@ typedef struct {
     uint8_t clk_pin, cmd_pin, d0_pin, d1_pin, d2_pin, d3_pin;
 } ST_T20_SdmmcProfile_t;
 
+
+// --- [3] Network & Recorder Types --- 하단의 ST_T20_RecorderBinaryHeader_t 수정
 typedef struct {
     uint32_t magic;
     uint16_t version;
@@ -68,7 +71,24 @@ typedef struct {
     uint16_t fft_size;
     uint16_t mfcc_dim;
     uint32_t record_count;
+    char     config_dump[1024]; // [추가] JSON 설정 텍스트 보관용 패딩 영역
 } ST_T20_RecorderBinaryHeader_t;
+
+// --- 스토리지 및 로테이션 구조체 ---
+typedef struct {
+    uint32_t rotation_mb;
+    uint32_t rotation_min; // [추가] 시간 기반 로테이션 (분)
+    bool     save_raw;
+} ST_T20_ConfigStorage_t;
+
+// --- 트리거 및 딥슬립 구조체 ---
+typedef struct {
+    bool     use_threshold;      // 변수명 통일
+    float    threshold_rms;      // 변수명 통일
+    bool     use_deep_sleep;     // 변수명 통일
+    uint32_t sleep_timeout_sec;  // 변수명 통일
+} ST_T20_ConfigTrigger_t;
+
 
 // --- [4] Master Config ---
 typedef struct {
@@ -80,8 +100,8 @@ typedef struct {
              bool output_sequence; // true: 시퀀스 텐서 모드 / false: 단일 벡터 모드
              uint16_t sequence_frames; 
     } output;
+    ST_T20_ConfigStorage_t    storage; 
+    ST_T20_ConfigTrigger_t    trigger; 
     struct { bool auto_start; uint8_t button_pin; } system;
 } ST_T20_Config_t;
-
-
 

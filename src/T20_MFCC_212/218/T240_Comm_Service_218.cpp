@@ -7,6 +7,8 @@
 #include "T221_Mfcc_Inter_218.h" // ST_Impl 의존성 (엔진간 상호작용 용도)
 #include <LittleFS.h>
 #include <SD_MMC.h>
+#include <time.h> // NTP 처리를 위한 표준 time 라이브러리
+
 
 CL_T20_CommService::CL_T20_CommService() 
     : _server(80), _ws(T20::C10_Web::WS_URI) {}
@@ -67,6 +69,15 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
                 
                 // 연결 성공 시 더 이상 다른 공유기를 찾지 않고 반복문 종료
                 if (WiFi.status() == WL_CONNECTED) {
+                    // [NTP 동기화 추가]
+                    configTzTime(T20::C10_Time::TZ_INFO, T20::C10_Time::NTP_SERVER_1, T20::C10_Time::NTP_SERVER_2);
+                    
+                    // 동기화 대기 (최대 5초)
+                    struct tm timeinfo;
+                    uint32_t start_time = millis();
+                    while (!getLocalTime(&timeinfo, 100) && (millis() - start_time < T20::C10_Time::SYNC_TIMEOUT_MS)) {
+                        delay(100);
+                    }
                     break; 
                 }
             }
@@ -112,22 +123,15 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     });
 
     // ========================================================================
-    // 2. 레코더 및 파일 스트리밍 API (v216 누락분 복원)
+    // 2. 레코더 및 파일 스트리밍 API
     // ========================================================================
     _server.on("/api/t20/recorder_begin", HTTP_POST, [p](AsyncWebServerRequest* request) {
-        ST_T20_RecorderBinaryHeader_t hdr;
-        memset(&hdr, 0, sizeof(hdr));
-        hdr.magic = T20::C10_Rec::BINARY_MAGIC;
-        hdr.sample_rate_hz = (uint32_t)T20::C10_DSP::SAMPLE_RATE_HZ;
-        hdr.fft_size = T20::C10_DSP::FFT_SIZE;
-        hdr.mfcc_dim = p->cfg.feature.mfcc_coeffs;
-
-        bool ok = p->storage.openSession(hdr);
-        request->send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+        p->measurement_active = true; // 플래그만 세팅하면 T230의 run()이 알아서 세션을 엽니다.
+        request->send(200, "application/json", "{\"ok\":true}");
     });
 
     _server.on("/api/t20/recorder_end", HTTP_POST, [p](AsyncWebServerRequest* request) {
-        p->storage.closeSession("end_by_api");
+        p->measurement_active = false;
         request->send(200, "application/json", "{\"ok\":true}");
     });
 
@@ -191,9 +195,10 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     // ========================================================================
     // 4. 설정 로드/저장 API
     // ========================================================================
-    _server.on("/api/t20/runtime_config", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/sys/runtime_cfg.json")) {
-            AsyncWebServerResponse* response = request->beginResponse(LittleFS, "/sys/runtime_cfg.json", "application/json");
+        _server.on("/api/t20/runtime_config", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        // T210의 상수를 이용해 파일 오픈
+        if (LittleFS.exists(T20::C10_Path::FILE_CFG_JSON)) {
+            AsyncWebServerResponse* response = request->beginResponse(LittleFS, T20::C10_Path::FILE_CFG_JSON, "application/json");
             _setCorsHeaders(response);
             request->send(response);
         } else {
@@ -203,40 +208,38 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
 
     _server.on("/api/t20/runtime_config", HTTP_POST, 
         [](AsyncWebServerRequest *request) {
-            // 본문 처리가 완료되지 않았을 때의 Fallback 응답
             request->send(400, "application/json", "{\"ok\":false,\"msg\":\"no_body\"}");
         },
-        NULL, // Upload 핸들러 사용 안 함
+        NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            // ArduinoJson V7 호환성을 위해 AsyncJson 우회 및 직접 파싱
             if (index == 0) { 
-                request->_tempObject = malloc(total + 1); // 메모리 할당
+                request->_tempObject = malloc(total + 1); 
             }
-            
             uint8_t* buffer = (uint8_t*)request->_tempObject;
             if (buffer) {
-                memcpy(buffer + index, data, len); // 청크 조립
-                
-                // 데이터 수신 완료 시
+                memcpy(buffer + index, data, len); 
                 if (index + len == total) {
-                    buffer[total] = '\0'; // 문자열 끝(Null) 처리
+                    buffer[total] = '\0'; 
                     
                     JsonDocument doc;
                     DeserializationError err = deserializeJson(doc, buffer);
                     
                     if (!err) {
-                        File f = LittleFS.open("/sys/runtime_cfg.json", "w");
+                        File f = LittleFS.open(T20::C10_Path::FILE_CFG_JSON, "w");
                         if (f) {
                             serializeJson(doc, f);
                             f.close();
-                            request->send(200, "application/json", "{\"ok\":true}");
+                            // 응답 후 0.5초 뒤 ESP 재시작 (설정 즉시 적용)
+                            request->send(200, "application/json", "{\"ok\":true,\"msg\":\"rebooting\"}");
+                            delay(500);
+                            ESP.restart();
                         } else {
                             request->send(500, "application/json", "{\"ok\":false,\"msg\":\"fs_error\"}");
                         }
                     } else {
                         request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_error\"}");
                     }
-                    free(buffer); // 메모리 해제
+                    free(buffer); 
                     request->_tempObject = NULL;
                 }
             } else {
@@ -280,3 +283,9 @@ void CL_T20_CommService::_sendJson(AsyncWebServerRequest* request, const JsonDoc
     serializeJson(doc, *stream);
     request->send(stream);
 }
+
+
+
+
+
+    

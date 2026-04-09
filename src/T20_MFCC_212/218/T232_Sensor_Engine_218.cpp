@@ -117,6 +117,38 @@ bool CL_T20_SensorEngine::runCalibration() {
     return true;
 }
 
+// 파일 하단에 다음 함수를 추가합니다.
+bool CL_T20_SensorEngine::enableWakeOnMotion(float threshold_g) {
+    if (!_initialized) return false;
+
+    // 1. 센서 동작 모드를 저전력으로 변경
+    _bmi.setConfigMode(BMI2_POWER_OPT_MODE);
+
+    // 2. Any-Motion 기능 설정
+    bmi2_sens_config any_mo_cfg;
+    any_mo_cfg.type = BMI2_ANY_MOTION;
+    
+    // threshold_g 값을 센서 레지스터 스케일에 맞게 변환 (5.14mg / LSB)
+    uint16_t th_reg = (uint16_t)(threshold_g * 1000.0f / 5.14f);
+    if(th_reg > 0x03FF) th_reg = 0x03FF; // 10-bit max
+
+    any_mo_cfg.cfg.any_motion.duration = 2; // 연속 2개 샘플 초과 시 트리거
+    any_mo_cfg.cfg.any_motion.threshold = th_reg;
+    any_mo_cfg.cfg.any_motion.out_conf = 0x00; // 모든 축 활성화
+    any_mo_cfg.cfg.any_motion.axes_en = BMI2_EN_ALL_AXIS;
+
+    if (_bmi.setConfig(any_mo_cfg) != BMI2_OK) return false;
+
+    // 3. 기존 FIFO 인터럽트를 해제하고 Any-Motion 인터럽트를 INT1 핀에 매핑
+    _bmi.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT_NONE); 
+    _bmi.mapInterruptToPin(BMI2_ANY_MOT_INT, BMI2_INT1);
+
+    strlcpy(_status_text, "wake_on_motion_ready", sizeof(_status_text));
+    return true;
+}
+
+
+
 bool CL_T20_SensorEngine::applyStoredCalibration() {
     if (!LittleFS.exists(T20::C10_Path::FILE_BMI_CALIB)) return false;
 

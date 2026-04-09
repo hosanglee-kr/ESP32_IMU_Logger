@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+
 namespace T20 {
     namespace C10_Sys {
         inline constexpr char const* VERSION_STR           = "T20_Mfcc_v217";
@@ -75,12 +76,31 @@ namespace T20 {
     namespace C10_Net {
         inline constexpr uint8_t WIFI_MULTI_MAX    = 3U;
     }
+    
+    namespace C10_Time {
+        inline constexpr char const* NTP_SERVER_1 = "pool.ntp.org";
+        inline constexpr char const* NTP_SERVER_2 = "time.nist.gov";
+        inline constexpr char const* TZ_INFO      = "KST-9"; // 한국 표준시 (UTC+9)
+        inline constexpr uint32_t SYNC_TIMEOUT_MS = 5000U;
+    }
+
+    namespace C10_NVS {
+        inline constexpr char const* NAMESPACE    = "t20_sys";
+        inline constexpr char const* KEY_FILE_SEQ = "file_seq";
+    }
+
+    // 향후 Phase 2, 3에서 사용할 기본값 상수
+    namespace C10_Ext {
+        inline constexpr uint32_t ROTATION_MB_DEF = 50U;
+        inline constexpr float    THRES_RMS_DEF   = 0.5f;
+        inline constexpr uint32_t SLEEP_SEC_DEF   = 300U;
+    }
 
     namespace C10_Path {
         inline constexpr char const* MOUNT_SD      = "/sdcard";
         inline constexpr char const* DIR_SYS       = "/sys";
         inline constexpr char const* DIR_WEB       = "/www";
-        inline constexpr char const* FILE_CFG_JSON = "/sys/t20_runtime_cfg_217_006.json";
+        inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg_218_007.json";
         inline constexpr char const* FILE_REC_IDX  = "/sys/recorder_index.json";
         inline constexpr char const* FILE_BMI_CALIB= "/sys/bmi_calib.json";
         inline constexpr char const* WEB_INDEX     = "index_217_006.html";
