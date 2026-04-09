@@ -51,11 +51,14 @@ namespace T20 {
         inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;
         inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;
         inline constexpr uint16_t MFCC_HISTORY_LEN = 5U;
+		inline constexpr float    MEL_SCALE_CONST  = 2595.0f;		// Mel 스케일 변환 상수입니다. (f = 2595 * log10(1 + m/700))
+		inline constexpr float    MEL_FREQ_CONST   = 700.0f;		// Mel 스케일 변환 상수입니다. (f = 2595 * log10(1 + m/700))
     }
 
     namespace C10_BMI {
-        inline constexpr uint32_t SPI_FREQ_HZ      = 10000000UL;
-        inline constexpr uint8_t  REG_CALIB_OFFSET_START = 0x71U;
+        inline constexpr uint32_t SPI_FREQ_HZ      			= 10000000UL;
+        inline constexpr uint8_t  REG_CALIB_OFFSET_START 	= 0x71U;
+		inline constexpr float    LSB_PER_G        			= 2048.0f;
     }
 
     namespace C10_Rec {
@@ -106,5 +109,7 @@ namespace T20 {
         inline constexpr char const* WEB_INDEX     = "index_218_008.html";
         inline constexpr char const* SD_DIR_BIN    = "/t20_data/bin";
         inline constexpr char const* SD_PREFIX_BIN = "/t20_data/bin/rec_";
+		inline constexpr char const* DIR_FALLBACK  = "/fallback";
+    	inline constexpr char const* SD_DIR_RAW    = "/t20_data/raw";
     }
 }

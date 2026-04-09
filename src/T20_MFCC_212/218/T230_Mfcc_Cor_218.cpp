@@ -8,18 +8,32 @@
 
 CL_T20_Mfcc* g_t20 = nullptr;
 
+// --- ISR 전용 Task Handle 변수 ---
+static TaskHandle_t g_isr_sensor_task = nullptr;
+
+// --- IRAM에 적재되는 안전한 인터럽트 핸들러 ---
+static void IRAM_ATTR T20_bmi_isr_handler() {
+    BaseType_t woken = pdFALSE;
+    // 클래스의 _impl 포인터를 거치지 않고 직접 Task Handle에 알림을 보냅니다.
+    if(g_isr_sensor_task) {
+        vTaskNotifyGiveFromISR(g_isr_sensor_task, &woken);
+        if (woken) {
+            portYIELD_FROM_ISR();
+        }
+    }
+}
+
 // --- [1] Core 0: 고속 센서 데이터 수집 ---
 void T20_sensorTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
 
+	// 현재 실행 중인 태스크의 핸들을 ISR 전용 변수에 저장
+    // xTaskCreate의 동기화 타이밍 이슈를 완벽히 방지하기 위해 자기 자신의 핸들을 가져옵니다.
+    g_isr_sensor_task = xTaskGetCurrentTaskHandle();
+
     pinMode(T20::C10_Pin::BMI_INT1, INPUT);
-    attachInterrupt(digitalPinToInterrupt(T20::C10_Pin::BMI_INT1), [](){
-        BaseType_t woken = pdFALSE;
-        if(g_t20 && g_t20->_impl && g_t20->_impl->sensor_task) {
-            vTaskNotifyGiveFromISR(g_t20->_impl->sensor_task, &woken);
-            portYIELD_FROM_ISR(woken);
-        }
-    }, RISING);
+    // [수정] 람다 대신 정적 함수 매핑
+    attachInterrupt(digitalPinToInterrupt(T20::C10_Pin::BMI_INT1), T20_bmi_isr_handler, RISING);
 
     alignas(16) float raw_batch[32];
 
@@ -90,18 +104,19 @@ void T20_processTask(void* p_arg) {
 
                 // [4] 분기: 사용자가 웹에서 설정한 모드에 따라 처리
                 if (p->cfg.output.output_sequence) {
-                    // 시퀀스 모드: TinyML 추론을 위해 버퍼가 설정된 프레임 수만큼 꽉 찼을 때만 동작
                     if (p->seq_builder.isReady()) {
-                        p->seq_builder.getSequenceFlat(seq_buffer);
+                        // 수정: 설정된 시퀀스 프레임(예: 16)이 완전히 새로 채워졌을 때만(Overlap 없이) 전송하여 UI 과부하 방지
+                        if (feature.frame_id % p->cfg.output.sequence_frames == 0) {
+                            p->seq_builder.getSequenceFlat(seq_buffer);
 
-                        // 향후 여기에 TinyML 모델 추론 로직 삽입
-                        // float result = my_tinyml_model.predict(seq_buffer);
+							// [ *** 삭제 금지 *** ] 향후 여기에 TinyML 모델 추론 로직 삽입
+							// float result = my_tinyml_model.predict(seq_buffer);
 
-                        // 현재는 테스트용으로 시퀀스 전체를 웹소켓 브로드캐스트
-                        uint16_t total_elements = p->seq_builder.getSequenceFrames() * p->seq_builder.getFeatureDim();
-
-                        // 내부에서 sizeof(float)를 곱하므로 원소 개수만 전달하면 됨
-                        p->comm.broadcastBinary(seq_buffer, total_elements);
+							// 현재는 테스트용으로 시퀀스 전체를 웹소켓 브로드캐스트
+                            uint16_t total_elements = p->seq_builder.getSequenceFrames() * p->seq_builder.getFeatureDim();
+							// 내부에서 sizeof(float)를 곱하므로 원소 개수만 전달하면 됨
+                            p->comm.broadcastBinary(seq_buffer, total_elements);
+                        }
                     }
                 } else {
                     // 단일 벡터 모드: 기존 로깅 및 웹 차트 모니터링용

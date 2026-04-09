@@ -72,7 +72,7 @@ class CL_T20_StorageService {
 
 	// --- DMA 버퍼링 ---
 	static constexpr uint8_t  DMA_SLOT_COUNT = 3;
-	static constexpr uint32_t DMA_SLOT_BYTES = 1024;
+	static constexpr uint32_t DMA_SLOT_BYTES = 4096;
 
 	alignas(32) uint8_t _dma_slots[DMA_SLOT_COUNT][DMA_SLOT_BYTES];
 	uint16_t				  _dma_slot_used[DMA_SLOT_COUNT];

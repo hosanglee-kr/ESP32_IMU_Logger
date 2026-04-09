@@ -148,7 +148,7 @@ function connectWebSocket() {
                 drawMfccWaterfalls(floats);
             }
             else if (floats.length === 624) { // Sequence Tensor
-                const latestFrame = floats.slice(624 - 39, 624);
+                const latestFrame = floats.subarray(624 - 39, 624);
                 charts.mfcc.data.datasets[0].data = latestFrame;
                 charts.mfcc.update('none');
 

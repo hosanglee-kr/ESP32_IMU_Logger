@@ -21,10 +21,10 @@ CL_T20_StorageService::CL_T20_StorageService() {
     _idle_flush_ms = 250;    // T20::C10_Rec::BATCH_IDLE_FLUSH_MS
     _index_count = 0;
     _rotate_keep_max = 8;    // T20::C10_Rec::ROTATE_KEEP_MAX
-    
+
     _written_bytes = 0;
     _session_start_ms = 0;
-    
+
     memset(_active_path, 0, sizeof(_active_path));
     memset(_last_error, 0, sizeof(_last_error));
     memset(_dma_slot_used, 0, sizeof(_dma_slot_used));
@@ -36,7 +36,7 @@ bool CL_T20_StorageService::begin(const ST_T20_SdmmcProfile_t& profile) {
     _loadIndexJson();
 
     if (profile.clk_pin != 0xFFU) { // PIN_NOT_SET
-        SD_MMC.setPins(profile.clk_pin, profile.cmd_pin, profile.d0_pin, 
+        SD_MMC.setPins(profile.clk_pin, profile.cmd_pin, profile.d0_pin,
                        profile.d1_pin, profile.d2_pin, profile.d3_pin);
     }
 
@@ -113,7 +113,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
         char raw_path[128];
         if (_backend == EN_T20_STORAGE_SDMMC) snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s.bin", time_buffer);
         else snprintf(raw_path, sizeof(raw_path), "/fallback/raw_%s.bin", time_buffer);
-        
+
         _raw_file = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(raw_path, "w") : LittleFS.open(raw_path, "w");
     }
 
@@ -123,7 +123,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     _session_start_ms = millis();
     _dma_active_slot = 0;
     memset(_dma_slot_used, 0, sizeof(_dma_slot_used));
-    
+
     _session_open = true;
     writeEvent("recorder_started");
     return true;
@@ -134,8 +134,9 @@ void CL_T20_StorageService::closeSession(const char* reason) {
     flush();
 
     if (_active_file) {
-        _active_file.seek(20); // record_count 위치 오프셋
-        _active_file.write((const uint8_t*)&_record_count, sizeof(_record_count));
+		_active_file.seek(offsetof(ST_T20_RecorderBinaryHeader_t, record_count));	// record_count 위치 오프셋, 안전한 offsetof 매크로 사용
+		_active_file.write((const uint8_t*)&_record_count, sizeof(_record_count));
+
         _active_file.close();
     }
     if (_raw_file) _raw_file.close();
@@ -151,7 +152,7 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
 
     uint8_t slot = _dma_active_slot;
     uint16_t msg_size = sizeof(p_vec->frame_id) + sizeof(p_vec->vector_len) + (sizeof(float) * p_vec->vector_len);
-    
+
     // 슬롯 용량 초과 시 디스크 기록 후 슬롯 전환
     if ((_dma_slot_used[slot] + msg_size) > DMA_SLOT_BYTES) {
         if (!_commitSlot(slot)) return false;
@@ -169,10 +170,10 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     uint8_t* target_ptr = &_dma_slots[slot][_dma_slot_used[slot]];
     memcpy(target_ptr, &p_vec->frame_id, sizeof(p_vec->frame_id));
     target_ptr += sizeof(p_vec->frame_id);
-    
+
     memcpy(target_ptr, &p_vec->vector_len, sizeof(p_vec->vector_len));
     target_ptr += sizeof(p_vec->vector_len);
-    
+
     memcpy(target_ptr, p_vec->vector, sizeof(float) * p_vec->vector_len);
 
     _dma_slot_used[slot] += msg_size;
@@ -180,7 +181,7 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     _record_count++;
     _batch_count++;
     _last_push_ms = millis();
-    
+
     // High Watermark 도달 시 플러시
     if (_batch_count >= _watermark_high) {
         flush();
@@ -241,7 +242,7 @@ void CL_T20_StorageService::_handleRotation() {
         strlcpy(old_path, _index_items[0].path, sizeof(old_path));
 
         bool success = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.remove(old_path) : LittleFS.remove(old_path);
-        
+
         if (success) {
             for (uint16_t i = 1; i < _index_count; ++i) {
                 _index_items[i - 1] = _index_items[i];

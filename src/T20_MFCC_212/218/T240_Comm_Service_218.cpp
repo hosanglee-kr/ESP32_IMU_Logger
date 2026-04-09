@@ -212,36 +212,50 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
         },
         NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+
+			// 방어 코드: 연결 끊김 시 메모리 릭 방지
             if (index == 0) {
                 request->_tempObject = malloc(total + 1);
-            }
-            uint8_t* buffer = (uint8_t*)request->_tempObject;
-            if (buffer) {
-                memcpy(buffer + index, data, len);
-                if (index + len == total) {
-                    buffer[total] = '\0';
-
-                    JsonDocument doc;
-                    DeserializationError err = deserializeJson(doc, buffer);
-
-                    if (!err) {
-                        File f = LittleFS.open(T20::C10_Path::FILE_CFG_JSON, "w");
-                        if (f) {
-                            serializeJson(doc, f);
-                            f.close();
-                            // 응답 후 0.5초 뒤 ESP 재시작 (설정 즉시 적용)
-                            request->send(200, "application/json", "{\"ok\":true,\"msg\":\"rebooting\"}");
-                            delay(500);
-                            ESP.restart();
-                        } else {
-                            request->send(500, "application/json", "{\"ok\":false,\"msg\":\"fs_error\"}");
-                        }
-                    } else {
-                        request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_error\"}");
+                request->onDisconnect([request]() {
+                    if (request->_tempObject) {
+                        free(request->_tempObject);
+                        request->_tempObject = NULL;
                     }
-                    free(buffer);
-                    request->_tempObject = NULL;
-                }
+                });
+            }
+
+            uint8_t* buffer = (uint8_t*)request->_tempObject;
+            // 예외 방어: 할당 실패 시 즉시 종료
+            if (!buffer) {
+                request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom\"}");
+                return;
+            }
+
+            memcpy(buffer + index, data, len);
+
+			if (index + len == total) {
+				buffer[total] = '\0';
+
+				JsonDocument doc;
+				DeserializationError err = deserializeJson(doc, buffer);
+
+				if (!err) {
+					File f = LittleFS.open(T20::C10_Path::FILE_CFG_JSON, "w");
+					if (f) {
+						serializeJson(doc, f);
+						f.close();
+						// 응답 후 0.5초 뒤 ESP 재시작 (설정 즉시 적용)
+						request->send(200, "application/json", "{\"ok\":true,\"msg\":\"rebooting\"}");
+						delay(500);
+						ESP.restart();
+					} else {
+						request->send(500, "application/json", "{\"ok\":false,\"msg\":\"fs_error\"}");
+					}
+				} else {
+					request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_error\"}");
+				}
+				free(buffer);
+				request->_tempObject = NULL;
             } else {
                 request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom\"}");
             }
