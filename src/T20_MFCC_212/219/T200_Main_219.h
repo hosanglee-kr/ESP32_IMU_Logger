@@ -2,7 +2,15 @@
  * File: T200_Main_219.h
  * Summary: Application Entry Point Wrapper (v218 Config Auto-load)
  * ========================================================================== */
+
+// 219 v001
+// RAM:   [==        ]  16.9% (used    55,428 bytes from   327,680 bytes)
+// Flash: [====      ]  39.4% (used 1,240,981 bytes from 3,145,728 bytes)
+
+
+
 #pragma once
+
 #include "T220_Mfcc_219.h"
 #include "T218_Def_Main_219.h"
 #include "T219_Config_Json_219.h"
