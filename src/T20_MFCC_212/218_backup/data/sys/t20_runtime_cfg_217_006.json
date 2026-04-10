@@ -1,0 +1,35 @@
+{
+  "sensor_axis": 2,
+  "accel_range": 2,
+  "gyro_range": 4,
+  "hop_size": 256,
+  "mfcc_coeffs": 13,
+  "pre_alpha": 0.97,
+  "filter_cutoff": 15,
+  "noise_mode": 2,
+  "sub_strength": 1.0,
+  "output_sequence": false,
+  "wifi_mode": 3,
+  "wifi_ap_ssid": "T20_MFCC_AP",
+  "wifi_ap_pass": "12345678",
+  "wifi_use_static": false,
+  "wifi_local_ip": "192.168.0.100",
+  "wifi_gateway": "192.168.0.1",
+  "wifi_subnet": "255.255.255.0",
+  "wifi_dns1": "8.8.8.8",
+  "wifi_dns2": "8.8.4.4",
+  "wifi_multi_ap": [
+    {
+      "ssid": "",
+      "pass": ""
+    },
+    {
+      "ssid": "",
+      "pass": ""
+    },
+    {
+      "ssid": "",
+      "pass": ""
+    }
+  ]
+}
