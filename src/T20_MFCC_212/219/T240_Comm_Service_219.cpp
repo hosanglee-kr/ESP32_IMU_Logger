@@ -20,7 +20,9 @@ CL_T20_CommService::~CL_T20_CommService() {
     _server.end();
 }
 
-bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
+
+bool CL_T20_CommService::begin(const ST_T20_Config_t& cfg) {
+
     _mqtt_cfg = cfg.mqtt;
     const ST_T20_ConfigWiFi_t& w_cfg = cfg.wifi;
     
