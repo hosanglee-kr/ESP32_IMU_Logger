@@ -237,7 +237,7 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
         T20::C10_Pin::SDMMC_D1, T20::C10_Pin::SDMMC_D2, T20::C10_Pin::SDMMC_D3 };
     _impl->storage.begin(sd_prof);
 
-    _impl->comm.begin(_impl->cfg.wifi);
+    _impl->comm.begin(_impl->cfg); 
     _impl->comm.initHandlers(_impl);
 
     _impl->measurement_active = _impl->cfg.system.auto_start;
