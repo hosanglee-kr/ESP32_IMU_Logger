@@ -1,6 +1,6 @@
 /* ============================================================================
  * File: T218_Def_Main_219.h
- * Summary: Main Configuration Builder (v217 Full)
+ * Summary: Main Configuration Builder
  * ========================================================================== */
 #pragma once
 #include <string.h>
@@ -10,6 +10,7 @@
 static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	ST_T20_Config_t cfg;
 	memset(&cfg, 0, sizeof(cfg));
+
 
 	// [1] Preprocess (DSP)
 	cfg.preprocess.remove_dc						= true;
@@ -25,6 +26,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	cfg.sensor.accel_range							= EN_T20_ACCEL_8G;
 	cfg.sensor.gyro_range							= EN_T20_GYRO_2000;
 
+
 	cfg.preprocess.noise.enable_gate				= true;
 	cfg.preprocess.noise.gate_threshold_abs			= 0.002f;
 	cfg.preprocess.noise.mode						= EN_T20_NOISE_ADAPTIVE;
@@ -38,9 +40,18 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	strlcpy(cfg.wifi.ap_password, "12345678", 64);
 	strlcpy(cfg.wifi.ap_ip, "192.168.4.1", 16);
 
+    cfg.mqtt.enable = false; // 기본값 비활성
+	strlcpy(cfg.mqtt.broker, "broker.hivemq.com", 64);
+	cfg.mqtt.port = 1883;
+	strlcpy(cfg.mqtt.id, "T20_DEVICE", 16);
+	strlcpy(cfg.mqtt.topic_root, "t20/sensor", 64);
+
 	// [4] Feature & Output
 	cfg.feature.hop_size		  = T20::C10_DSP::FFT_SIZE;
 	cfg.feature.mfcc_coeffs		  = T20::C10_DSP::MFCC_COEFFS_DEF;
+	cfg.feature.fft_size = EN_T20_FFT_256;     // 기본 256
+	cfg.feature.axis_count = EN_T20_AXIS_SINGLE; // 기본 1축
+
 	cfg.output.sequence_frames	  = T20::C10_Sys::SEQUENCE_FRAMES_MAX;
 	cfg.output.enabled			  = true;
 	cfg.output.output_sequence	  = false;

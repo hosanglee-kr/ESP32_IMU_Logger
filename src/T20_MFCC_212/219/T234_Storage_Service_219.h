@@ -27,8 +27,8 @@ class CL_T20_StorageService {
 	// Zero-Copy DMA 슬롯 기반 고속 기록
 	bool		pushVector(const ST_T20_FeatureVector_t* p_vec);
 	// Raw 파형 저장
-	bool		pushRaw(const float* p_raw, uint16_t len);
-
+	bool pushRaw(const float* p_raw_x, const float* p_raw_y, const float* p_raw_z, uint16_t len, uint8_t active_axes);
+	
 	// 타임아웃 및 강제 플러시
 	bool		flush();
 	void		checkIdleFlush();

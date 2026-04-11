@@ -65,48 +65,44 @@ bool CL_T20_SensorEngine::begin(const ST_T20_ConfigSensor_t& s_cfg) {
 	return true;
 }
 
-uint16_t CL_T20_SensorEngine::readFifoBatch(float* p_out_buffer, uint16_t max_frames, EM_T20_SensorAxis_t target_axis) {
-	if (!_initialized || !p_out_buffer) return 0;
 
-	uint16_t fifo_bytes = 0;
-	if (_bmi.getFIFOLength(&fifo_bytes) != BMI2_OK || fifo_bytes == 0) return 0;
+// FIFO 데이터 일괄 획득 및 3축 분리 
+uint16_t CL_T20_SensorEngine::readFifoBatch(float* p_out_x, float* p_out_y, float* p_out_z, 
+                                            uint16_t max_frames, EM_T20_AxisCount_t axis_count, 
+                                            EM_T20_SensorAxis_t target_axis) {
+    if (!_initialized || !p_out_x) return 0;
 
-	// FIFO 프레임 일괄 획득 (Library internal scales to float)
-	static BMI270_SensorData fifo_raw[32];						  // 정적 버퍼로 스택 절약
-	uint16_t				 frames_to_read = (fifo_bytes / 12);  // Accel(6) + Gyro(6) = 12 bytes per frame
-	if (frames_to_read > 32) frames_to_read = 32;
-	if (frames_to_read > max_frames) frames_to_read = max_frames;
+    uint16_t fifo_bytes = 0;
+    if (_bmi.getFIFOLength(&fifo_bytes) != BMI2_OK || fifo_bytes == 0) return 0;
 
-	if (_bmi.getFIFOData(fifo_raw, &frames_to_read) != BMI2_OK) return 0;
+    // BMI270 FIFO 1프레임: Accel(6) + Gyro(6) = 12 bytes
+    static BMI270_SensorData fifo_raw[32]; 
+    uint16_t frames_to_read = (fifo_bytes / 12);
+    if (frames_to_read > 32) frames_to_read = 32;
+    if (frames_to_read > max_frames) frames_to_read = max_frames;
 
-	// 요청된 축(Axis)에 맞춰 데이터 추출
-	for (uint16_t i = 0; i < frames_to_read; i++) {
-		switch (target_axis) {
-			case EN_T20_AXIS_ACCEL_X:
-				p_out_buffer[i] = fifo_raw[i].accelX;
-				break;
-			case EN_T20_AXIS_ACCEL_Y:
-				p_out_buffer[i] = fifo_raw[i].accelY;
-				break;
-			case EN_T20_AXIS_ACCEL_Z:
-				p_out_buffer[i] = fifo_raw[i].accelZ;
-				break;
-			case EN_T20_AXIS_GYRO_X:
-				p_out_buffer[i] = fifo_raw[i].gyroX;
-				break;
-			case EN_T20_AXIS_GYRO_Y:
-				p_out_buffer[i] = fifo_raw[i].gyroY;
-				break;
-			case EN_T20_AXIS_GYRO_Z:
-				p_out_buffer[i] = fifo_raw[i].gyroZ;
-				break;
-			default:
-				p_out_buffer[i] = fifo_raw[i].accelZ;
-				break;
-		}
-	}
+    if (_bmi.getFIFOData(fifo_raw, &frames_to_read) != BMI2_OK) return 0;
 
-	return frames_to_read;
+    for (uint16_t i = 0; i < frames_to_read; i++) {
+        if (axis_count == EN_T20_AXIS_TRIPLE) {
+            // 3축 퓨전]: 가속도 X, Y, Z를 각각의 할당된 버퍼에 분리 저장
+            p_out_x[i] = fifo_raw[i].accelX;
+            p_out_y[i] = fifo_raw[i].accelY;
+            p_out_z[i] = fifo_raw[i].accelZ;
+        } else {
+            // [1축 모드]: 타겟 축만 p_out_x에 저장
+            switch (target_axis) {
+                case EN_T20_AXIS_ACCEL_X: p_out_x[i] = fifo_raw[i].accelX; break;
+                case EN_T20_AXIS_ACCEL_Y: p_out_x[i] = fifo_raw[i].accelY; break;
+                case EN_T20_AXIS_ACCEL_Z: p_out_x[i] = fifo_raw[i].accelZ; break;
+                case EN_T20_AXIS_GYRO_X:  p_out_x[i] = fifo_raw[i].gyroX;  break;
+                case EN_T20_AXIS_GYRO_Y:  p_out_x[i] = fifo_raw[i].gyroY;  break;
+                case EN_T20_AXIS_GYRO_Z:  p_out_x[i] = fifo_raw[i].gyroZ;  break;
+                default:                  p_out_x[i] = fifo_raw[i].accelZ; break;
+            }
+        }
+    }
+    return frames_to_read;
 }
 
 bool CL_T20_SensorEngine::runCalibration() {

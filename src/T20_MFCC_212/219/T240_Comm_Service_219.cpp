@@ -1,6 +1,6 @@
 /* ============================================================================
  * File: T240_Comm_Service_219.cpp
- * Summary: Network & Web Communication Engine Implementation (v217)
+ * Summary: Network, MQTT & OTA Implementation 
  * ========================================================================== */
 
 #include "T240_Comm_Service_219.h"
@@ -8,10 +8,12 @@
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <time.h> // NTP 처리를 위한 표준 time 라이브러리
-
+#include <Update.h> 
 
 CL_T20_CommService::CL_T20_CommService()
-    : _server(80), _ws(T20::C10_Web::WS_URI) {}
+    : _server(80), _ws(T20::C10_Web::WS_URI), _mqtt_client(_wifi_client) {
+    _last_mqtt_retry_ms = 0;
+}
 
 CL_T20_CommService::~CL_T20_CommService() {
     _ws.closeAll();
@@ -19,6 +21,9 @@ CL_T20_CommService::~CL_T20_CommService() {
 }
 
 bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
+    _mqtt_cfg = cfg.mqtt;
+    const ST_T20_ConfigWiFi_t& w_cfg = cfg.wifi;
+    
     WiFi.mode(WIFI_OFF);
     delay(50);
 
@@ -83,6 +88,12 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
             }
         }
     }
+    
+    // MQTT 서버 설정
+    if (_mqtt_cfg.enable && isConnected()) {
+        _mqtt_client.setServer(_mqtt_cfg.broker, _mqtt_cfg.port);
+        // 필요 시 Callback 설정: _mqtt_client.setCallback(...);
+    }
 
     // [3] WebSocket 바인딩
     _ws.onEvent([](AsyncWebSocket* s, AsyncWebSocketClient* c, AwsEventType t, void* a, uint8_t* d, size_t l) {
@@ -104,6 +115,7 @@ bool CL_T20_CommService::begin(const ST_T20_ConfigWiFi_t& w_cfg) {
     _server.begin();
     return true;
 }
+
 
 
 void CL_T20_CommService::initHandlers(void* p_master_impl) {
@@ -261,7 +273,45 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
             }
         }
     );
-
+    
+    // ========================================================================
+    // 6. OTA (Over-The-Air) 펌웨어 업데이트 API
+    // ========================================================================
+    _server.on("/api/t20/ota_update", HTTP_POST, 
+        // 1. 요청 완료 후 응답
+        [this](AsyncWebServerRequest *request) {
+            bool success = !Update.hasError();
+            AsyncWebServerResponse *response = request->beginResponse(success ? 200 : 500, "application/json", success ? "{\"ok\":true}" : "{\"ok\":false}");
+            _setCorsHeaders(response);
+            request->send(response);
+            if (success) {
+                delay(1000);
+                ESP.restart(); // 업데이트 성공 시 재부팅
+            }
+        },
+        // 2. 파일 청크 업로드 핸들링
+        [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (index == 0) {
+                Serial.printf("[OTA] Update Start: %s\n", filename.c_str());
+                // Flash 사이즈를 기준으로 OTA 공간 확보
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                    Update.printError(Serial);
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    Update.printError(Serial);
+                }
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("[OTA] Update Success: %u Bytes\n", index + len);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        }
+    );
 
     // ========================================================================
     // 5. 프론트엔드 정적 파일 서빙
@@ -298,8 +348,51 @@ void CL_T20_CommService::_sendJson(AsyncWebServerRequest* request, const JsonDoc
     request->send(stream);
 }
 
+// ========================================================================
+// MQTT 운영 로직
+// ========================================================================
+void CL_T20_CommService::runMqtt() {
+    if (!_mqtt_cfg.enable || !isConnected()) return;
 
+    if (!_mqtt_client.connected()) {
+        _reconnectMqtt();
+    } else {
+        _mqtt_client.loop(); // MQTT Keep-alive 및 수신 버퍼 처리
+    }
+}
 
+void CL_T20_CommService::_reconnectMqtt() {
+    // 5초 간격으로 재접속 시도 (비동기 처리)
+    if (millis() - _last_mqtt_retry_ms > 5000) {
+        Serial.print(F("[MQTT] Attempting connection..."));
+        
+        // ID 생성 및 접속 시도 (비밀번호가 있으면 활용)
+        bool connected = false;
+        if (strlen(_mqtt_cfg.password) > 0) {
+            connected = _mqtt_client.connect(_mqtt_cfg.id, _mqtt_cfg.id, _mqtt_cfg.password);
+        } else {
+            connected = _mqtt_client.connect(_mqtt_cfg.id);
+        }
 
+        if (connected) {
+            Serial.println(F(" connected"));
+            // 필요 시 토픽 구독: _mqtt_client.subscribe("t20/command");
+        } else {
+            Serial.printf(" failed, rc=%d\n", _mqtt_client.state());
+        }
+        _last_mqtt_retry_ms = millis();
+    }
+}
 
+bool CL_T20_CommService::publishMqtt(const char* sub_topic, const JsonDocument& doc) {
+    if (!_mqtt_cfg.enable || !_mqtt_client.connected()) return false;
+
+    char full_topic[128];
+    snprintf(full_topic, sizeof(full_topic), "%s/%s", _mqtt_cfg.topic_root, sub_topic);
+
+    char payload[512];
+    serializeJson(doc, payload, sizeof(payload));
+
+    return _mqtt_client.publish(full_topic, payload);
+}
 

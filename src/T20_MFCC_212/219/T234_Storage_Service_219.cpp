@@ -59,12 +59,14 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     if (_session_open) return false;
     _current_cfg = cfg;
 
+    // NVS에서 파일 시퀀스 번호 관리
     Preferences prefs;
     prefs.begin(T20::C10_NVS::NAMESPACE, false);
     uint32_t file_seq = prefs.getUInt(T20::C10_NVS::KEY_FILE_SEQ, 1);
     prefs.putUInt(T20::C10_NVS::KEY_FILE_SEQ, file_seq + 1);
     prefs.end();
 
+    // 파일명 생성 (타임스탬프 기반)
     struct tm timeinfo;
     char time_buffer[64];
     if (getLocalTime(&timeinfo, 10)) {
@@ -75,61 +77,46 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
         snprintf(time_buffer, sizeof(time_buffer), "%04lu_notime", (unsigned long)file_seq);
     }
 
-    // 파일 경로 조립
     if (_backend == EN_T20_STORAGE_SDMMC) {
         snprintf(_active_path, sizeof(_active_path), "%s/rec_%s.bin", T20::C10_Path::SD_DIR_BIN, time_buffer);
-        if (cfg.storage.save_raw && !SD_MMC.exists("/t20_data/raw")) SD_MMC.mkdir("/t20_data/raw");
     } else {
         snprintf(_active_path, sizeof(_active_path), "/fallback/rec_%s.bin", time_buffer);
     }
 
     _active_file = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(_active_path, "w") : LittleFS.open(_active_path, "w");
-    if (!_active_file) { setLastError("file_open_failed"); return false; }
+    if (!_active_file) return false;
 
-    // [중요] 헤더 생성 및 JSON 패딩
+    // 확장된 바이너리 헤더 작성
     ST_T20_RecorderBinaryHeader_t header;
     memset(&header, 0, sizeof(header));
     header.magic = T20::C10_Rec::BINARY_MAGIC;
-    header.version = T20::C10_Rec::BINARY_VERSION;
+    header.version = 219; // v219 포맷 식별용
     header.header_size = sizeof(header);
     header.sample_rate_hz = (uint32_t)T20::C10_DSP::SAMPLE_RATE_HZ;
-    header.fft_size = T20::C10_DSP::FFT_SIZE;
-    header.mfcc_dim = cfg.feature.mfcc_coeffs;
-    header.record_count = 0;
+    header.fft_size = (uint16_t)cfg.feature.fft_size; // 가변 FFT 반영
+    header.mfcc_dim = cfg.feature.mfcc_coeffs;       // 축당 계수
+    header.active_axes = (uint8_t)cfg.feature.axis_count; // 1축 또는 3축
 
     String json_str;
     CL_T20_ConfigJson::buildJsonString(cfg, json_str);
     strlcpy(header.config_dump, json_str.c_str(), sizeof(header.config_dump));
 
-    // 헤더 기록
-    size_t written = _active_file.write((const uint8_t*)&header, sizeof(header));
-    if (written != sizeof(header)) {
-        setLastError("header_write_failed");
+    if (_active_file.write((const uint8_t*)&header, sizeof(header)) != sizeof(header)) {
         _active_file.close();
         return false;
     }
 
-    // Raw 파일 동시 오픈
+    // Raw 저장 모드 시 3축 대응을 위해 파일 오픈 (현재는 분석 타겟 축 위주)
     if (cfg.storage.save_raw) {
         char raw_path[128];
-        if (_backend == EN_T20_STORAGE_SDMMC) snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s.bin", time_buffer);
-        else snprintf(raw_path, sizeof(raw_path), "/fallback/raw_%s.bin", time_buffer);
-
+        snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s.bin", time_buffer);
         _raw_file = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(raw_path, "w") : LittleFS.open(raw_path, "w");
     }
 
     _record_count = 0;
-    _batch_count = 0;
     _written_bytes = sizeof(header);
     _session_start_ms = millis();
-    _dma_active_slot = 0;
-    memset(_dma_slot_used, 0, sizeof(_dma_slot_used));
-    
-    _rotate_keep_max = cfg.storage.rotate_keep_max;
-    _idle_flush_ms   = cfg.storage.idle_flush_ms;
-
     _session_open = true;
-    writeEvent("recorder_started");
     return true;
 }
 
@@ -151,56 +138,77 @@ void CL_T20_StorageService::closeSession(const char* reason) {
     _handleRotation();
 }
 
+// 특징량 벡터 기록 (타임스탬프 + 다중 축 대응)
 bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     if (!_session_open || !p_vec) return false;
 
+    // 프레임 크기 계산: 
+    // timestamp(8) + frame_id(4) + axes(1) + (39 * active_axes * float(4))
+    const uint8_t axes = p_vec->active_axes;
+    const uint16_t feature_bytes = (39 * axes * sizeof(float));
+    const uint16_t total_frame_size = sizeof(p_vec->timestamp_ms) + 
+                                      sizeof(p_vec->frame_id) + 
+                                      sizeof(p_vec->active_axes) + 
+                                      feature_bytes;
+
     uint8_t slot = _dma_active_slot;
-    uint16_t msg_size = sizeof(p_vec->frame_id) + sizeof(p_vec->vector_len) + (sizeof(float) * p_vec->vector_len);
 
-    // 슬롯 용량 초과 시 디스크 기록 후 슬롯 전환
-    if ((_dma_slot_used[slot] + msg_size) > DMA_SLOT_BYTES) {
+    // 슬롯 교체 로직 (DMA_SLOT_BYTES=4096 내에 프레임이 들어가는지 확인)
+    if ((_dma_slot_used[slot] + total_frame_size) > DMA_SLOT_BYTES) {
         if (!_commitSlot(slot)) return false;
-
         _dma_active_slot = (slot + 1) % DMA_SLOT_COUNT;
         slot = _dma_active_slot;
-
-        if (_dma_slot_used[slot] > 0) {
-            setLastError("dma_overflow_busy");
-            return false; // I/O 지연으로 인한 프레임 드롭
-        }
+        
+        if (_dma_slot_used[slot] > 0) return false; // Buffer Busy (Drop Frame)
     }
 
-    // 메모리 복사 (직렬화)
-    uint8_t* target_ptr = &_dma_slots[slot][_dma_slot_used[slot]];
-    memcpy(target_ptr, &p_vec->frame_id, sizeof(p_vec->frame_id));
-    target_ptr += sizeof(p_vec->frame_id);
+    // 직렬화 (Serialization)
+    uint8_t* ptr = &_dma_slots[slot][_dma_slot_used[slot]];
+    
+    memcpy(ptr, &p_vec->timestamp_ms, sizeof(uint64_t)); ptr += 8;
+    memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += 4;
+    memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += 1;
+    
+    // features[3][39] 배열에서 실제 활성화된 축 데이터만 연속 기록
+    memcpy(ptr, &p_vec->features[0][0], feature_bytes);
 
-    memcpy(target_ptr, &p_vec->vector_len, sizeof(p_vec->vector_len));
-    target_ptr += sizeof(p_vec->vector_len);
-
-    memcpy(target_ptr, p_vec->vector, sizeof(float) * p_vec->vector_len);
-
-    _dma_slot_used[slot] += msg_size;
-    _written_bytes += msg_size; // 용량 트래킹 추가
+    _dma_slot_used[slot] += total_frame_size;
+    _written_bytes += total_frame_size;
     _record_count++;
     _batch_count++;
     _last_push_ms = millis();
 
-    // High Watermark 도달 시 플러시
-    if (_batch_count >= _watermark_high) {
-        flush();
-    }
+    if (_batch_count >= _watermark_high) flush();
     return true;
 }
 
-// Raw 데이터 기록
-bool CL_T20_StorageService::pushRaw(const float* p_raw, uint16_t len) {
-    if (!_session_open || !_raw_file || !p_raw) return false;
-    size_t bytes = len * sizeof(float);
-    size_t w = _raw_file.write((const uint8_t*)p_raw, bytes);
-    _written_bytes += w; // 전체 세션 용량에 합산
-    return (w == bytes);
+// Raw 데이터 기록 (3축 모드 시 3축 파형 통합 기록 대응 가능)
+bool CL_T20_StorageService::pushRaw(const float* p_raw_x, const float* p_raw_y, const float* p_raw_z, uint16_t len, uint8_t active_axes) {
+    if (!_session_open || !_raw_file || !p_raw_x) return false;
+
+    if (active_axes == 1) {
+        // 1축 모드는 기존처럼 일괄 쓰기
+        size_t bytes = len * sizeof(float);
+        size_t w = _raw_file.write((const uint8_t*)p_raw_x, bytes);
+        _written_bytes += w;
+        return (w == bytes);
+    } else {
+        // 3축 데이터 인터리빙 (Interleaving) 저장
+        // 분석 툴(Python 등)에서 3채널 오디오처럼 쉽게 읽게 만들기 위함
+        float inter_buf[3];
+        size_t total_written = 0;
+        for (uint16_t i = 0; i < len; i++) {
+            inter_buf[0] = p_raw_x[i];
+            inter_buf[1] = p_raw_y[i];
+            inter_buf[2] = p_raw_z[i];
+            total_written += _raw_file.write((const uint8_t*)inter_buf, sizeof(inter_buf));
+        }
+        _written_bytes += total_written;
+        return (total_written == len * sizeof(inter_buf));
+    }
 }
+
+
 
 bool CL_T20_StorageService::flush() {
     if (!_session_open) return false;
@@ -339,3 +347,4 @@ void CL_T20_StorageService::checkRotation() {
         openSession(_current_cfg); // 즉시 끊김 없이 재시작
     }
 }
+

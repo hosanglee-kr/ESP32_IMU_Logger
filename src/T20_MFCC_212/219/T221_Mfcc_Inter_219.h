@@ -26,10 +26,13 @@ struct CL_T20_Mfcc::ST_Impl {
 	SemaphoreHandle_t	   mutex		  = nullptr;
 
 	// 핑퐁 버퍼 및 제어 상태
-	alignas(16) float raw_buffer[T20::C10_Sys::RAW_FRAME_BUFFERS][T20::C10_DSP::FFT_SIZE];
-	uint8_t			active_fill_buffer	= 0;
-	uint16_t		active_sample_index = 0;
-
+	// 3축(X,Y,Z) x 핑퐁슬롯(4) x 최대 FFT 사이즈(4096) 대응 버퍼
+    // 내부 SRAM의 약 192KB를 점유합니다 (3 * 4 * 4096 * 4 bytes)
+    alignas(16) float raw_buffer[3][T20::C10_Sys::RAW_FRAME_BUFFERS][4096];
+    
+    uint8_t   active_fill_buffer  = 0;
+    uint16_t  active_sample_index = 0;
+    
 	// --- 트리거 및 딥슬립 상태 관리 ---
 	uint32_t		last_trigger_ms		= 0;
 	uint16_t		trigger_hold_frames = 0;
@@ -45,3 +48,4 @@ struct CL_T20_Mfcc::ST_Impl {
 	ST_Impl() : sensor(SPI), comm() {
 	}
 };
+

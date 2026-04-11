@@ -68,7 +68,18 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 	if (f) {
 		out_cfg.feature.hop_size	= f["hop_size"] | out_cfg.feature.hop_size;
 		out_cfg.feature.mfcc_coeffs = f["mfcc_coeffs"] | out_cfg.feature.mfcc_coeffs;
+		out_cfg.feature.fft_size = (EM_T20_FftSize_t)(f["fft_size"] | (int)out_cfg.feature.fft_size);
+        out_cfg.feature.axis_count = (EM_T20_AxisCount_t)(f["axis_count"] | (int)out_cfg.feature.axis_count);
 	}
+	
+	    // [MQTT] Phase 2 준비
+    JsonObjectConst mq = doc["mqtt"];
+    if (mq) {
+        out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
+        strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, 64);
+        out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
+        strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, 64);
+    }
 
 	// 4. Storage
 	JsonObjectConst st = doc["storage"];
@@ -137,11 +148,20 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 	JsonObject f					 = out_doc["feature"].to<JsonObject>();
 	f["hop_size"]					 = cfg.feature.hop_size;
 	f["mfcc_coeffs"]				 = cfg.feature.mfcc_coeffs;
+	f["fft_size"] = (int)cfg.feature.fft_size;
+    f["axis_count"] = (int)cfg.feature.axis_count;
+
 
 	JsonObject o					 = out_doc["output"].to<JsonObject>();
 	o["enabled"]					 = cfg.output.enabled;
 	o["output_sequence"]			 = cfg.output.output_sequence;
 	o["sequence_frames"]			 = cfg.output.sequence_frames;
+	
+	JsonObject mq = out_doc["mqtt"].to<JsonObject>();
+    mq["enable"] = cfg.mqtt.enable;
+    mq["broker"] = cfg.mqtt.broker;
+    mq["port"] = cfg.mqtt.port;
+    mq["topic_root"] = cfg.mqtt.topic_root;
 
 	JsonObject st					 = out_doc["storage"].to<JsonObject>();
 	st["rotation_mb"]				 = cfg.storage.rotation_mb;
@@ -170,7 +190,4 @@ void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_
 	buildJson(cfg, doc);
 	serializeJson(doc, out_str);
 }
-
-
-
 
