@@ -20,7 +20,9 @@ public:
     bool begin(const ST_T20_ConfigSensor_t& s_cfg);
 
     // FIFO 데이터 일괄 획득 (배치 처리용)
-    uint16_t readFifoBatch(float* p_out_buffer, uint16_t max_frames, EM_T20_SensorAxis_t target_axis);
+    uint16_t readFifoBatch(float* p_out_x, float* p_out_y, float* p_out_z, 
+                           uint16_t max_frames, EM_T20_AxisCount_t axis_count, 
+                           EM_T20_SensorAxis_t target_axis);
 
     // 캘리브레이션 관리
     bool runCalibration();
