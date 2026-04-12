@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T20 MFCC v218 Control</title>
+    <title>T20 MFCC v219 Control</title>
     <link rel="stylesheet" href="style_219_009.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
-        <div class="logo">T20 MFCC <span>v218.009</span></div>
+        <div class="logo">T20 MFCC <span>v219.009</span></div>
         <div id="status-tag" class="tag offline">OFFLINE</div>
     </header>
 
     <nav class="tab-bar">
         <button class="tab-btn active" onclick="showTab('tab-dash', event)">Dashboard</button>
         <button class="tab-btn" onclick="showTab('tab-settings', event)">Engine Settings</button>
-        <button class="tab-btn" onclick="showTab('tab-wifi', event)">Network</button>
+        <button class="tab-btn" onclick="showTab('tab-wifi', event)">Network & MQTT</button>
         <button class="tab-btn" onclick="showTab('tab-files', event)">Explorer</button>
         <button class="tab-btn" onclick="showTab('tab-diag', event)">Diagnostics</button>
     </nav>
@@ -39,20 +39,20 @@
                 <div class="chart-container"><canvas id="chart-mfcc"></canvas></div>
             </div>
 
-            <h4 style="margin: 15px 0 5px 0; color: #888;">Time-Series Waterfalls</h4>
+            <h4 style="margin: 15px 0 5px 0; color: #888;">Time-Series Waterfalls (Axis 0)</h4>
             <div class="grid">
                 <div class="chart-container" style="height: 300px;"><canvas id="chart-waterfall-spec"></canvas></div>
                 <div class="chart-container" style="height: 300px; display: flex; flex-direction: column; gap: 5px; background: transparent; border: none; padding: 0;">
                     <div class="sub-chart-box">
-                        <span style="color: #4caf50;">Static (C0~C12)</span>
+                        <span style="color: #4caf50;">Static (C0~Cn)</span>
                         <canvas id="chart-waterfall-mfcc-static"></canvas>
                     </div>
                     <div class="sub-chart-box">
-                        <span style="color: #ff9800;">Delta (D1~D13)</span>
+                        <span style="color: #ff9800;">Delta (D1~Dn)</span>
                         <canvas id="chart-waterfall-mfcc-delta"></canvas>
                     </div>
                     <div class="sub-chart-box">
-                        <span style="color: #f44336;">Delta-Delta (DD1~DD13)</span>
+                        <span style="color: #f44336;">Delta-Delta (DD1~DDn)</span>
                         <canvas id="chart-waterfall-mfcc-deltadelta"></canvas>
                     </div>
                 </div>
@@ -64,20 +64,39 @@
                 <div class="grid">
                     <div class="card">
                         <h3 class="section-title">Hardware & System</h3>
-                        <div class="form-group"><label>Analysis Axis</label><select name="sensor.axis"><option value="0">Accel X</option><option value="1">Accel Y</option><option value="2">Accel Z</option><option value="3">Gyro X</option><option value="4">Gyro Y</option><option value="5">Gyro Z</option></select></div>
+                        <div class="form-group"><label>Target Axis</label><select name="sensor.axis"><option value="0">Accel X</option><option value="1">Accel Y</option><option value="2">Accel Z</option><option value="3">Gyro X</option><option value="4">Gyro Y</option><option value="5">Gyro Z</option></select></div>
+                        <div class="form-group highlight"><label>Axis Count (Fusion)</label><select name="feature.axis_count"><option value="1">1-Axis (Single)</option><option value="3">3-Axis (X+Y+Z)</option></select></div>
                         <div class="form-group"><label>Accel Range</label><select name="sensor.accel_range"><option value="0">± 2G</option><option value="1">± 4G</option><option value="2">± 8G</option><option value="3">± 16G</option></select></div>
                         <div class="form-group"><label>Watchdog (ms)</label><input type="number" name="system.watchdog_ms" min="500" max="10000"></div>
                         <div class="form-group"><label>Auto Start</label><select name="system.auto_start"><option value="false">Disable</option><option value="true">Enable</option></select></div>
                         
                         <h3 class="section-title" style="margin-top:20px;">Trigger & Power</h3>
                         <div class="form-group"><label>Any-Motion Wake</label><select name="trigger.use_threshold"><option value="false">OFF</option><option value="true">ON</option></select></div>
-                        <div class="form-group"><label>Threshold (G)</label><input type="number" step="0.01" name="trigger.threshold_rms"></div>
+                        <div class="form-group"><label>Threshold (G/RMS)</label><input type="number" step="0.01" name="trigger.threshold_rms"></div>
                         <div class="form-group"><label>Duration (x20ms)</label><input type="number" name="trigger.any_motion_duration" min="1" max="100"></div>
                         <div class="form-group"><label>Deep Sleep</label><select name="trigger.use_deep_sleep"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        
+                        <h3 class="section-title" style="margin-top:20px;">Firmware OTA Update</h3>
+                        <div class="form-group highlight">
+                            <input type="file" id="ota-file" accept=".bin" style="flex: 2; padding: 4px;">
+                            <button type="button" onclick="uploadOTA()" class="btn warning" style="flex: 1;">UPLOAD & FLASH</button>
+                        </div>
+                        <div id="ota-progress" style="display:none; color: var(--accent); font-weight: bold; text-align: center; margin-top: 5px;">Uploading: 0%</div>
                     </div>
 
                     <div class="card">
                         <h3 class="section-title">DSP Pipeline</h3>
+                        <div class="form-group highlight">
+                            <label>FFT Size</label>
+                            <select name="feature.fft_size">
+                                <option value="256">256</option>
+                                <option value="512">512</option>
+                                <option value="1024">1024</option>
+                                <option value="2048">2048</option>
+                                <option value="4096">4096</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Hop Size</label><input type="number" name="feature.hop_size"></div>
                         <div class="form-group"><label>DC Removal</label><select name="dsp.remove_dc"><option value="false">OFF</option><option value="true">ON</option></select></div>
                         <div class="form-group"><label>Pre-emphasis α</label><input type="number" step="0.01" name="dsp.preemphasis.alpha" min="0" max="1"></div>
                         <div class="form-group"><label>Filter Type</label><select name="dsp.filter.enable"><option value="false">BYPASS</option><option value="true">ENABLE</option></select></div>
@@ -113,33 +132,46 @@
         </section>
 
         <section id="tab-wifi" class="tab-content">
-            <div class="card">
-                <h3 class="section-title">Wi-Fi Connection Mode</h3>
-                <div class="form-group">
-                    <label>Operation Mode</label>
-                    <select name="wifi_mode" id="wifi_mode" onchange="toggleWifiFields()">
-                        <option value="0">Station (STA) Only</option>
-                        <option value="1">Access Point (AP) Only</option>
-                        <option value="2">AP + STA (Concurrent)</option>
-                        <option value="3">Auto Fallback</option>
-                    </select>
-                </div>
+            <form id="form-mqtt">
+                <div class="grid">
+                    <div class="card">
+                        <h3 class="section-title">Wi-Fi Connection Mode</h3>
+                        <div class="form-group">
+                            <label>Operation Mode</label>
+                            <select name="wifi_mode" id="wifi_mode" onchange="toggleWifiFields()">
+                                <option value="0">Station (STA) Only</option>
+                                <option value="1">Access Point (AP) Only</option>
+                                <option value="2">AP + STA (Concurrent)</option>
+                                <option value="3">Auto Fallback</option>
+                            </select>
+                        </div>
 
-                <div id="section_ap_config" class="config-box">
-                    <h4 class="sub-title">Soft-AP Settings (Hotspot)</h4>
-                    <div class="form-group"><label>SSID</label><input type="text" name="wifi_ap_ssid" placeholder="T20_MFCC_AP"></div>
-                    <div class="form-group"><label>Password</label><input type="password" name="wifi_ap_pass" placeholder="12345678"></div>
-                    <div class="form-group"><label>Gateway IP</label><input type="text" name="wifi_ap_ip" placeholder="192.168.4.1"></div>
-                </div>
+                        <div id="section_ap_config" class="config-box">
+                            <h4 class="sub-title">Soft-AP Settings (Hotspot)</h4>
+                            <div class="form-group"><label>SSID</label><input type="text" name="wifi_ap_ssid" placeholder="T20_MFCC_AP"></div>
+                            <div class="form-group"><label>Password</label><input type="password" name="wifi_ap_pass" placeholder="12345678"></div>
+                            <div class="form-group"><label>Gateway IP</label><input type="text" name="wifi_ap_ip" placeholder="192.168.4.1"></div>
+                        </div>
 
-                <div id="section_sta_config" class="config-box">
-                    <h4 class="sub-title">Target Routers (WiFi Multi)</h4>
-                    <div id="routers_container"></div>
-                </div>
+                        <div id="section_sta_config" class="config-box">
+                            <h4 class="sub-title">Target Routers (WiFi Multi)</h4>
+                            <div id="routers_container"></div>
+                        </div>
+                    </div>
 
-                <div style="margin-top: 20px;">
-                    <button type="button" onclick="saveSettings()" class="btn primary" style="width: 100%;">APPLY NETWORK SETTINGS & REBOOT</button>
+                    <div class="card">
+                        <h3 class="section-title">MQTT Cloud Connectivity</h3>
+                        <div class="form-group highlight"><label>Enable MQTT</label><select name="mqtt.enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Broker URL</label><input type="text" name="mqtt.broker" placeholder="broker.hivemq.com"></div>
+                        <div class="form-group"><label>Port</label><input type="number" name="mqtt.port" placeholder="1883"></div>
+                        <div class="form-group"><label>Client ID</label><input type="text" name="mqtt.id" placeholder="T20_DEVICE"></div>
+                        <div class="form-group"><label>Password</label><input type="password" name="mqtt.password" placeholder="Optional"></div>
+                        <div class="form-group"><label>Topic Root</label><input type="text" name="mqtt.topic_root" placeholder="t20/sensor"></div>
+                    </div>
                 </div>
+            </form>
+            <div style="margin-top: 20px;">
+                <button type="button" onclick="saveSettings()" class="btn primary" style="width: 100%;">APPLY NETWORK & MQTT SETTINGS</button>
             </div>
         </section>
 

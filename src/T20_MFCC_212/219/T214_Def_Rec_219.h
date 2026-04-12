@@ -54,6 +54,27 @@ typedef struct {
 	EM_T20_GyroRange_t	gyro_range;
 } ST_T20_ConfigSensor_t;
 
+inline constexpr uint8_t  T20_MAX_TRIGGER_BANDS = 3; // 최대 3개의 주파수 대역 감시
+// #define T20_MAX_TRIGGER_BANDS 3 // 최대 3개의 주파수 대역 감시
+
+// 다중 밴드 설정 구조체 추가
+typedef struct {
+    bool  enable;
+    float start_hz;
+    float end_hz;
+    float threshold;
+} ST_T20_TriggerBand_t;
+
+// 트리거 및 딥슬립 구조체
+typedef struct {
+    bool    use_threshold;
+    float   threshold_rms;
+    uint16_t any_motion_duration; // Any-Motion 지속 시간 (1 = 20ms)
+    bool    use_deep_sleep;
+    uint32_t sleep_timeout_sec;
+    ST_T20_TriggerBand_t bands[T20_MAX_TRIGGER_BANDS]; // [추가] 다중 주파수 밴드 감시
+} ST_T20_ConfigTrigger_t;
+
 
 // 특징량 벡터 구조체 (타임스탬프 및 117차원 확장)
 typedef struct {
@@ -62,6 +83,7 @@ typedef struct {
     uint8_t  active_axes;   // 1 또는 3
     uint8_t  status_flags;  // Bit 0: NTP Synced, Bit 1: Triggered
     float    rms[3];        // 각 축별 실시간 RMS 값
+    float    band_energy[T20_MAX_TRIGGER_BANDS]; // [수정] 감시 중인 밴드들의 최신 에너지 (대표 축 0번 기준
     float    band_energy[3];  // [추가] 축별 특정 주파수 대역 에너지
     float    features[3][39]; // [117]; // 39 * 3 (Max 117차원)
 } ST_T20_FeatureVector_t;
@@ -191,14 +213,6 @@ typedef struct {
 	uint32_t idle_flush_ms;   // Idle Flush 대기 시간 (ms)
 } ST_T20_ConfigStorage_t;
 
-// --- 트리거 및 딥슬립 구조체 ---
-typedef struct {
-	bool	 use_threshold;
-	float	 threshold_rms;
-	uint16_t any_motion_duration; // Any-Motion 지속 시간 (1 = 20ms)
-	bool	 use_deep_sleep;
-	uint32_t sleep_timeout_sec;
-} ST_T20_ConfigTrigger_t;
 
 typedef struct {
 		bool	auto_start;

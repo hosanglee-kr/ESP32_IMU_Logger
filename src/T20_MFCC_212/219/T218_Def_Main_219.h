@@ -69,6 +69,25 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	cfg.trigger.any_motion_duration = 5; //(100ms)
 	cfg.trigger.use_deep_sleep	  = false;
 	cfg.trigger.sleep_timeout_sec = 300;
+	
+    // [스마트 트리거] 밴드 1: 모터 저주파 감시 (예시)
+    cfg.trigger.bands[0].enable = false;
+    cfg.trigger.bands[0].start_hz = 10.0f;
+    cfg.trigger.bands[0].end_hz = 150.0f;
+    cfg.trigger.bands[0].threshold = 5.0f;
+
+    // [스마트 트리거] 밴드 2: 베어링 결함 감시 (예시)
+    cfg.trigger.bands[1].enable = false;
+    cfg.trigger.bands[1].start_hz = 500.0f;
+    cfg.trigger.bands[1].end_hz = 1000.0f;
+    cfg.trigger.bands[1].threshold = 3.0f;
+
+    // [스마트 트리거] 밴드 3: 기어/고주파 마찰 감시 (예시)
+    cfg.trigger.bands[2].enable = false;
+    cfg.trigger.bands[2].start_hz = 1200.0f;
+    cfg.trigger.bands[2].end_hz = 2000.0f;
+    cfg.trigger.bands[2].threshold = 2.0f;
+
 
 	// [7] System
 	cfg.system.auto_start		  = true;
@@ -77,4 +96,8 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
 	return cfg;
 }
+
+
+
+
 

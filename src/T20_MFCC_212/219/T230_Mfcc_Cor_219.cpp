@@ -137,22 +137,55 @@ void T20_processTask(void* p_arg) {
                     all_ready = false; break;
                 }
             }
-
+            
             if (all_ready) {
-                // 트리거 및 SD 기록 세션 제어
+                bool event_detected = false;
+
+                // [1] RMS 임계값 검사
+                if (p->cfg.trigger.use_threshold) {
+                    // 대표 축(0번, X축)을 기준으로 하거나 모든 축 검사 가능. 여기선 전체 축 중 하나라도 넘으면 작동
+                    for (uint8_t a = 0; a < axis_cnt; a++) {
+                        if (feature.rms[a] > p->cfg.trigger.threshold_rms) event_detected = true;
+                    }
+                }
+
+                // [2] 다중 밴드(Multi-band) 에너지 스마트 트리거 검사 (메인 0번 축 기준)
+                for (int b = 0; b < T20_MAX_TRIGGER_BANDS; b++) {
+                    if (p->cfg.trigger.bands[b].enable) {
+                        float band_nrg = p->dsp.getBandEnergy(p->cfg.trigger.bands[b].start_hz, p->cfg.trigger.bands[b].end_hz);
+                        feature.band_energy[b] = band_nrg; // 프론트엔드 모니터링용으로 저장
+
+                        if (band_nrg > p->cfg.trigger.bands[b].threshold) {
+                            event_detected = true;
+                        }
+                    } else {
+                        feature.band_energy[b] = 0.0f;
+                    }
+                }
+
+                // [3] 트리거 및 SD 기록 세션 제어
                 if (event_detected) {
-                    feature.status_flags |= 0x02; 
+                    feature.status_flags |= 0x02; // Triggered 플래그
+                    
+                    // 트리거 초기 진입 시에만 MQTT 알림 (5초 쿨타임)
                     if (millis() - p->last_trigger_ms > 5000) { 
                         JsonDocument alert_doc;
-                        alert_doc["event"] = "anomaly_detected";
+                        alert_doc["event"] = "smart_trigger_alert";
                         alert_doc["timestamp_ms"] = feature.timestamp_ms;
+                        
                         JsonArray rms_arr = alert_doc["rms"].to<JsonArray>();
                         for(uint8_t a = 0; a < axis_cnt; a++) rms_arr.add(feature.rms[a]);
+                        
+                        JsonArray bnd_arr = alert_doc["bands"].to<JsonArray>();
+                        for(uint8_t b = 0; b < T20_MAX_TRIGGER_BANDS; b++) bnd_arr.add(feature.band_energy[b]);
+
                         p->comm.publishMqtt("alert", alert_doc);
                     }
+                    
                     p->last_trigger_ms = millis();
                     if (!p->storage.isOpen()) p->storage.openSession(p->cfg);
                 } else {
+                    // 트리거 소멸 후 5초간 유지(Hold Time) 후 종료
                     if (p->storage.isOpen() && (millis() - p->last_trigger_ms > 5000)) {
                         p->storage.closeSession("trigger_hold_timeout");
                     }
@@ -183,6 +216,7 @@ void T20_processTask(void* p_arg) {
             }
         }
     }
+    
     heap_caps_free(seq_buffer);
     heap_caps_free(ws_payload);
     vTaskDelete(nullptr);
@@ -229,8 +263,6 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     uint16_t vector_dim = (p_cfg->feature.mfcc_coeffs * 3) * (uint8_t)p_cfg->feature.axis_count;
     // Sequence Builder 설정 적용
     _impl->seq_builder.begin(_impl->cfg.output.sequence_frames, vector_dim);
-
-
 
     ST_T20_SdmmcProfile_t sd_prof = { "default", true,
         T20::C10_Pin::SDMMC_CLK, T20::C10_Pin::SDMMC_CMD, T20::C10_Pin::SDMMC_D0,
@@ -325,6 +357,29 @@ void CL_T20_Mfcc::run() {
         }
         wd_last_cnt = _impl->sample_counter;
         wd_last_ms = millis();
+    }
+    
+    // [딥슬립 로직] 설정된 시간 동안 아무런 트리거 이벤트가 없으면 진입
+    if (_impl->cfg.trigger.use_deep_sleep) {
+        // last_trigger_ms가 0이면 부팅 직후이므로, 부팅 후 또는 마지막 트리거 이후 시간 검사
+        uint32_t idle_time = millis() - _impl->last_trigger_ms;
+        
+        // 주의: 수동으로 시작한 경우(measurement_active == true)는 딥슬립 무시
+        if (!_impl->measurement_active && idle_time > (_impl->cfg.trigger.sleep_timeout_sec * 1000)) {
+            Serial.println(F("[Power] Entering Deep Sleep due to inactivity..."));
+            
+            // 센서 Any-Motion Wakeup 인터럽트 설정
+            _impl->sensor.enableWakeOnMotion(_impl->cfg.trigger.threshold_rms, _impl->cfg.trigger.any_motion_duration);
+            
+            // SD 카드 및 시스템 안전 종료
+            _impl->storage.closeSession("system_sleep");
+            delay(500);
+
+            // INT1 핀을 통해 깨어나도록 설정 (BMI270_INT1 = GPIO14 가정)
+            esp_sleep_enable_ext0_wakeup((gpio_num_t)T20::C10_Pin::BMI_INT1, 1); // 1 = High
+            
+            esp_deep_sleep_start();
+        }
     }
 }
 

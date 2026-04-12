@@ -100,8 +100,18 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 		out_cfg.trigger.threshold_rms	  = tr["threshold_rms"] | out_cfg.trigger.threshold_rms;
 		out_cfg.trigger.use_deep_sleep	  = tr["use_deep_sleep"] | out_cfg.trigger.use_deep_sleep;
 		out_cfg.trigger.sleep_timeout_sec = tr["sleep_timeout_sec"] | out_cfg.trigger.sleep_timeout_sec;
-		
 		out_cfg.trigger.any_motion_duration = tr["any_motion_duration"] | out_cfg.trigger.any_motion_duration;
+
+        // 밴드 배열 파싱
+        JsonArrayConst arr = tr["bands"];
+        if (arr) {
+            for (int i = 0; i < T20_MAX_TRIGGER_BANDS && i < arr.size(); i++) {
+                out_cfg.trigger.bands[i].enable = arr[i]["enable"] | out_cfg.trigger.bands[i].enable;
+                out_cfg.trigger.bands[i].start_hz = arr[i]["start_hz"] | out_cfg.trigger.bands[i].start_hz;
+                out_cfg.trigger.bands[i].end_hz = arr[i]["end_hz"] | out_cfg.trigger.bands[i].end_hz;
+                out_cfg.trigger.bands[i].threshold = arr[i]["threshold"] | out_cfg.trigger.bands[i].threshold;
+            }
+        }
 	}
 
 	// 6. System
@@ -170,14 +180,22 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 	st["rotate_keep_max"] = cfg.storage.rotate_keep_max;
 	st["idle_flush_ms"]   = cfg.storage.idle_flush_ms;
 	
-
 	JsonObject tr					 = out_doc["trigger"].to<JsonObject>();
 	tr["use_threshold"]				 = cfg.trigger.use_threshold;
 	tr["threshold_rms"]				 = cfg.trigger.threshold_rms;
 	tr["use_deep_sleep"]			 = cfg.trigger.use_deep_sleep;
 	tr["sleep_timeout_sec"]			 = cfg.trigger.sleep_timeout_sec;
-	tr["any_motion_duration"] = cfg.trigger.any_motion_duration;
-	
+	tr["any_motion_duration"]        = cfg.trigger.any_motion_duration;
+
+    // 밴드 배열 생성
+    JsonArray arr = tr["bands"].to<JsonArray>();
+    for (int i = 0; i < T20_MAX_TRIGGER_BANDS; i++) {
+        JsonObject b = arr.add<JsonObject>();
+        b["enable"] = cfg.trigger.bands[i].enable;
+        b["start_hz"] = cfg.trigger.bands[i].start_hz;
+        b["end_hz"] = cfg.trigger.bands[i].end_hz;
+        b["threshold"] = cfg.trigger.bands[i].threshold;
+    }
 
 	JsonObject sys					 = out_doc["system"].to<JsonObject>();
 	sys["auto_start"]				 = cfg.system.auto_start;

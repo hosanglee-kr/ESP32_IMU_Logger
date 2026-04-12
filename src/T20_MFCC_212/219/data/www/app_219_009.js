@@ -1,22 +1,11 @@
-/* app_219_009.js - v218.009 (Constantized) */
-
 // ==========================================
-// 0. 시스템 전역 상수 (Constants)
+// 0. 시스템 전역 상수 및 동적 상태 (v219)
 // ==========================================
 const T20_CONST = {
     API_BASE: "/api/t20",
     WS: {
         RECONNECT_MS: 2000,
         PROTOCOL: window.location.protocol === 'https:' ? 'wss:' : 'ws:',
-    },
-    DATA_LEN: {
-        FFT_SIZE: 256,
-        FFT_BINS: 129,
-        MFCC_COEFFS: 13,
-        VECTOR_39D: 39,
-        TENSOR_624: 624,   // 16 frames * 39D
-        LEGACY_424: 424,   // 256 + 129 + 39
-        SEQUENCE_MAX: 16
     },
     CHART_LIMITS: {
         WAVE: { MIN: -2.0, MAX: 2.0 },
@@ -25,13 +14,15 @@ const T20_CONST = {
         MFCC_DELTA: { MIN: -5.0, MAX: 5.0 },
         MFCC_ACCEL: { MIN: -2.0, MAX: 2.0 }
     },
-    UI: {
-        TOAST_MS: 3000,
-        DIAG_INTERVAL_MS: 1000,
-        REBOOT_RELOAD_MS: 6000,
-        BTN_DEBOUNCE_MS: 500,
-        MAX_ROUTERS: 3
-    }
+    UI: { TOAST_MS: 3000, DIAG_INTERVAL_MS: 1000, REBOOT_RELOAD_MS: 6000, MAX_ROUTERS: 3 }
+};
+
+// 동적 설정 상태 저장소 (초기 기본값)
+let sysState = {
+    fft_size: 256,
+    axis_count: 1,
+    mfcc_coeffs: 13,
+    sequence_frames: 16
 };
 
 let socket;
@@ -40,16 +31,14 @@ let isLearning = false;
 let diagTimer = null;
 
 // ==========================================
-// 1. UI 및 유틸리티 로직
+// 1. UI 및 유틸리티 로직 (기존과 유사하게 유지)
 // ==========================================
 function showTab(tabId, e = null) {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
 
-    if(e && e.currentTarget) {
-        e.currentTarget.classList.add('active');
-    }
+    if(e && e.currentTarget) e.currentTarget.classList.add('active');
 
     if (tabId === 'tab-diag') {
         fetchDiagnostics();
@@ -63,19 +52,13 @@ function showToast(msg, isError = false) {
     const toast = document.getElementById("toast");
     toast.innerText = msg;
     toast.className = isError ? "toast show error" : "toast show";
-    setTimeout(() => { 
-        toast.className = toast.className.replace("show", ""); 
-    }, T20_CONST.UI.TOAST_MS);
+    setTimeout(() => { toast.className = toast.className.replace("show", ""); }, T20_CONST.UI.TOAST_MS);
 }
 
 function toggleWifiFields() {
     const mode = document.getElementById("wifi_mode").value;
-    const apSection = document.getElementById("section_ap_config");
-    const staSection = document.getElementById("section_sta_config");
-
-    // 0: STA Only, 1: AP Only
-    apSection.style.display = (mode === "0") ? "none" : "block";
-    staSection.style.display = (mode === "1") ? "none" : "block";
+    document.getElementById("section_ap_config").style.display = (mode === "0") ? "none" : "block";
+    document.getElementById("section_sta_config").style.display = (mode === "1") ? "none" : "block";
 }
 
 function renderRouterHTML(idx) {
@@ -108,7 +91,7 @@ function initUI() {
 }
 
 // ==========================================
-// 2. 차트 엔진 초기화
+// 2. 동적 차트 엔진 제어 (v219)
 // ==========================================
 function initCharts() {
     const baseOpt = { 
@@ -117,37 +100,72 @@ function initCharts() {
         elements: { point: { radius: 0 } } 
     };
 
-    const mfccColors = Array(T20_CONST.DATA_LEN.MFCC_COEFFS).fill('#4caf50')
-                      .concat(Array(T20_CONST.DATA_LEN.MFCC_COEFFS).fill('#ff9800'))
-                      .concat(Array(T20_CONST.DATA_LEN.MFCC_COEFFS).fill('#f44336'));
-
     charts.wave = new Chart(document.getElementById('chart-waveform'), { 
-        type: 'line', 
-        data: { labels: Array(T20_CONST.DATA_LEN.FFT_SIZE).fill(''), datasets: [{ data: [], borderColor: '#4caf50', borderWidth: 1 }] }, 
+        type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#4caf50', borderWidth: 1 }] }, 
         options: { ...baseOpt, scales: { y: { min: T20_CONST.CHART_LIMITS.WAVE.MIN, max: T20_CONST.CHART_LIMITS.WAVE.MAX } } } 
     });
 
     charts.spec = new Chart(document.getElementById('chart-spectrum'), { 
-        type: 'line', 
-        data: { labels: Array(T20_CONST.DATA_LEN.FFT_BINS).fill(''), datasets: [{ data: [], borderColor: '#ff9800', borderWidth: 1, fill: true, backgroundColor: 'rgba(255,152,0,0.1)' }] }, 
+        type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#ff9800', borderWidth: 1, fill: true, backgroundColor: 'rgba(255,152,0,0.1)' }] }, 
         options: baseOpt 
     });
 
     charts.mfcc = new Chart(document.getElementById('chart-mfcc'), { 
-        type: 'bar', 
-        data: { labels: Array(T20_CONST.DATA_LEN.VECTOR_39D).fill(''), datasets: [{ data: [], backgroundColor: mfccColors }] }, 
+        type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, 
         options: baseOpt 
     });
 }
 
+function updateChartDimensions() {
+    const N = sysState.fft_size;
+    const Bins = Math.floor(N / 2) + 1;
+    const mfccTotal = sysState.mfcc_coeffs * 3 * sysState.axis_count;
+
+    charts.wave.data.labels = Array(N).fill('');
+    charts.spec.data.labels = Array(Bins).fill('');
+    charts.mfcc.data.labels = Array(mfccTotal).fill('');
+    
+    // 3축 모드 식별을 위한 색상 배열 재생성
+    const colors = [];
+    const axisColors = ['#4caf50', '#2196F3', '#8BC34A']; // X, Y, Z 기본 색상 톤
+    for(let i=0; i < mfccTotal; i++) {
+        // 어느 축의 데이터인지 계산 (예: 117개면 0~38은 축0, 39~77은 축1)
+        const axisIdx = Math.floor(i / (sysState.mfcc_coeffs * 3));
+        const featType = Math.floor((i % (sysState.mfcc_coeffs * 3)) / sysState.mfcc_coeffs); 
+        // featType: 0(Static), 1(Delta), 2(Accel) - 투명도로 구분
+        const alpha = featType === 0 ? '1.0' : (featType === 1 ? '0.7' : '0.4');
+        
+        let rgb;
+        if(axisIdx === 0) rgb = '76, 175, 80';   // Green
+        else if(axisIdx === 1) rgb = '255, 152, 0'; // Orange
+        else rgb = '244, 67, 54'; // Red
+        
+        colors.push(`rgba(${rgb}, ${alpha})`);
+    }
+    charts.mfcc.data.datasets[0].backgroundColor = colors;
+    
+    charts.wave.update('none');
+    charts.spec.update('none');
+    charts.mfcc.update('none');
+
+    waterfallSpec.resize(Bins);
+    waterfallMfccStatic.resize(sysState.mfcc_coeffs);
+    waterfallMfccDelta.resize(sysState.mfcc_coeffs);
+    waterfallMfccAccel.resize(sysState.mfcc_coeffs);
+}
+
 class WaterfallChart {
-    constructor(canvasId, dataLen, minVal, maxVal) {
+    constructor(canvasId, minVal, maxVal) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas ? this.canvas.getContext('2d', { alpha: false, willReadFrequently: true }) : null;
         this.minVal = minVal; this.maxVal = maxVal;
-        if (this.canvas) { 
-            this.canvas.width = 600; 
-            this.canvas.height = dataLen; 
+        if (this.canvas) this.canvas.width = 600; 
+    }
+    resize(newLen) {
+        if(this.canvas && this.canvas.height !== newLen) {
+            this.canvas.height = newLen;
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0,0, this.canvas.width, this.canvas.height);
         }
     }
     draw(dataArray) {
@@ -170,20 +188,20 @@ function getHeatmapColor(value, min, max) {
     return `rgb(${r},${g},${b})`;
 }
 
-const waterfallSpec = new WaterfallChart('chart-waterfall-spec', T20_CONST.DATA_LEN.FFT_BINS, T20_CONST.CHART_LIMITS.SPEC.MIN, T20_CONST.CHART_LIMITS.SPEC.MAX);
-const waterfallMfccStatic = new WaterfallChart('chart-waterfall-mfcc-static', T20_CONST.DATA_LEN.MFCC_COEFFS, T20_CONST.CHART_LIMITS.MFCC_STATIC.MIN, T20_CONST.CHART_LIMITS.MFCC_STATIC.MAX);
-const waterfallMfccDelta = new WaterfallChart('chart-waterfall-mfcc-delta', T20_CONST.DATA_LEN.MFCC_COEFFS, T20_CONST.CHART_LIMITS.MFCC_DELTA.MIN, T20_CONST.CHART_LIMITS.MFCC_DELTA.MAX);
-const waterfallMfccAccel = new WaterfallChart('chart-waterfall-mfcc-deltadelta', T20_CONST.DATA_LEN.MFCC_COEFFS, T20_CONST.CHART_LIMITS.MFCC_ACCEL.MIN, T20_CONST.CHART_LIMITS.MFCC_ACCEL.MAX);
+const waterfallSpec = new WaterfallChart('chart-waterfall-spec', T20_CONST.CHART_LIMITS.SPEC.MIN, T20_CONST.CHART_LIMITS.SPEC.MAX);
+const waterfallMfccStatic = new WaterfallChart('chart-waterfall-mfcc-static', T20_CONST.CHART_LIMITS.MFCC_STATIC.MIN, T20_CONST.CHART_LIMITS.MFCC_STATIC.MAX);
+const waterfallMfccDelta = new WaterfallChart('chart-waterfall-mfcc-delta', T20_CONST.CHART_LIMITS.MFCC_DELTA.MIN, T20_CONST.CHART_LIMITS.MFCC_DELTA.MAX);
+const waterfallMfccAccel = new WaterfallChart('chart-waterfall-mfcc-deltadelta', T20_CONST.CHART_LIMITS.MFCC_ACCEL.MIN, T20_CONST.CHART_LIMITS.MFCC_ACCEL.MAX);
 
-function drawMfccWaterfalls(floats39) {
-    const dim = T20_CONST.DATA_LEN.MFCC_COEFFS;
-    waterfallMfccStatic.draw(floats39.subarray(0, dim));
-    waterfallMfccDelta.draw(floats39.subarray(dim, dim * 2));
-    waterfallMfccAccel.draw(floats39.subarray(dim * 2, dim * 3));
+function drawMfccWaterfalls(axis0Mfcc) {
+    const dim = sysState.mfcc_coeffs;
+    waterfallMfccStatic.draw(axis0Mfcc.subarray(0, dim));
+    waterfallMfccDelta.draw(axis0Mfcc.subarray(dim, dim * 2));
+    waterfallMfccAccel.draw(axis0Mfcc.subarray(dim * 2, dim * 3));
 }
 
 // ==========================================
-// 3. WebSocket 로직 (스로틀링 대응)
+// 3. WebSocket 동적 파서 로직 (v219)
 // ==========================================
 function connectWebSocket() {
     socket = new WebSocket(`${T20_CONST.WS.PROTOCOL}//${window.location.host}${T20_CONST.API_BASE}/ws`);
@@ -198,28 +216,38 @@ function connectWebSocket() {
         if (!(event.data instanceof ArrayBuffer)) return;
         const floats = new Float32Array(event.data);
 
-        if (floats.length === T20_CONST.DATA_LEN.VECTOR_39D) {
-            charts.mfcc.data.datasets[0].data = floats;
-            charts.mfcc.update('none');
-            drawMfccWaterfalls(floats);
-        }
-        else if (floats.length === T20_CONST.DATA_LEN.TENSOR_624) {
-            // 시퀀스 모드: 가장 마지막 프레임을 대표로 차트 표시
-            const lastFrame = floats.subarray(T20_CONST.DATA_LEN.TENSOR_624 - 39, T20_CONST.DATA_LEN.TENSOR_624);
-            charts.mfcc.data.datasets[0].data = lastFrame;
-            charts.mfcc.update('none');
-            // 워터폴에는 시퀀스 전체를 빠르게 그리기
-            for(let i=0; i < T20_CONST.DATA_LEN.SEQUENCE_MAX; i++) {
-                drawMfccWaterfalls(floats.subarray(i * 39, (i + 1) * 39));
-            }
-        }
-        else if (floats.length === T20_CONST.DATA_LEN.LEGACY_424) {
-            const wave = floats.subarray(0, 256), spec = floats.subarray(256, 385), mfcc = floats.subarray(385, 424);
+        const N = sysState.fft_size;
+        const Bins = Math.floor(N / 2) + 1;
+        const singleAxisDim = sysState.mfcc_coeffs * 3;
+        const totalMfccDim = singleAxisDim * sysState.axis_count;
+        
+        const expectedSingle = N + Bins + totalMfccDim;
+        const expectedSeq = sysState.sequence_frames * totalMfccDim;
+
+        if (floats.length === expectedSingle) {
+            // [Wave(N)] + [Power(Bins)] + [MFCC(39 * axes)]
+            const wave = floats.subarray(0, N);
+            const spec = floats.subarray(N, N + Bins);
+            const mfcc = floats.subarray(N + Bins, expectedSingle);
+
             charts.wave.data.datasets[0].data = wave; 
             charts.spec.data.datasets[0].data = spec; 
             charts.mfcc.data.datasets[0].data = mfcc;
             charts.wave.update('none'); charts.spec.update('none'); charts.mfcc.update('none');
-            waterfallSpec.draw(spec); drawMfccWaterfalls(mfcc);
+            
+            waterfallSpec.draw(spec); 
+            // 3축 모드여도 워터폴 시각화는 난잡함 방지를 위해 첫 번째 축(Axis 0)만 그림
+            drawMfccWaterfalls(mfcc.subarray(0, singleAxisDim));
+        }
+        else if (floats.length === expectedSeq) {
+            // 시퀀스 텐서 전송 모드 (가장 마지막 프레임을 대표로 차트 업데이트)
+            const lastFrame = floats.subarray(expectedSeq - totalMfccDim, expectedSeq);
+            charts.mfcc.data.datasets[0].data = lastFrame;
+            charts.mfcc.update('none');
+            
+            for(let i=0; i < sysState.sequence_frames; i++) {
+                drawMfccWaterfalls(floats.subarray(i * totalMfccDim, i * totalMfccDim + singleAxisDim));
+            }
         }
     };
 
@@ -231,7 +259,7 @@ function connectWebSocket() {
 }
 
 // ==========================================
-// 4. API 제어 (REST)
+// 4. API 제어 및 설정 동기화
 // ==========================================
 const callAPI = (path, method = 'POST') => fetch(`${T20_CONST.API_BASE}${path}`, { method });
 
@@ -261,9 +289,6 @@ async function rebootDevice() {
     } catch(e) { showToast("Reboot command sent.", true); setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS); }
 }
 
-// ==========================================
-// 5. 설정 동기화 (Nested JSON Logic)
-// ==========================================
 const getNested = (obj, path) => path.split('.').reduce((acc, part) => acc && acc[part] !== undefined ? acc[part] : undefined, obj);
 const setNested = (obj, path, value) => {
     const keys = path.split('.');
@@ -279,24 +304,36 @@ async function loadSettings() {
     try {
         const res = await fetch(`${T20_CONST.API_BASE}/runtime_config`);
         const cfg = await res.json();
-        const form = document.getElementById('form-config');
+        
+        // 동적 상태 업데이트 및 차트 리사이즈
+        sysState.fft_size = parseInt(cfg.feature?.fft_size || 256);
+        sysState.axis_count = parseInt(cfg.feature?.axis_count || 1);
+        sysState.mfcc_coeffs = parseInt(cfg.feature?.mfcc_coeffs || 13);
+        sysState.sequence_frames = parseInt(cfg.output?.sequence_frames || 16);
+        updateChartDimensions();
 
-        form.querySelectorAll('select, input').forEach(el => {
-            if (el.name.startsWith('multi_')) return; // Multi-WiFi는 별도 처리
-            const val = getNested(cfg, el.name);
-            if (val !== undefined) el.value = typeof val === 'boolean' ? val.toString() : val;
+        const formConfig = document.getElementById('form-config');
+        const formMqtt = document.getElementById('form-mqtt'); // MQTT 분리 폼
+
+        [formConfig, formMqtt].forEach(form => {
+            if(!form) return;
+            form.querySelectorAll('select, input').forEach(el => {
+                if (el.name.startsWith('multi_')) return;
+                const val = getNested(cfg, el.name);
+                if (val !== undefined) el.value = typeof val === 'boolean' ? val.toString() : val;
+            });
         });
 
-        // WiFi Multi-AP Mapping
         if (cfg.wifi_multi_ap && Array.isArray(cfg.wifi_multi_ap)) {
             cfg.wifi_multi_ap.forEach((ap, i) => {
                 if (i >= T20_CONST.UI.MAX_ROUTERS) return;
-                form[`multi_ssid_${i}`].value = ap.ssid || "";
-                form[`multi_pass_${i}`].value = ap.pass || "";
-                form[`multi_static_${i}`].value = ap.use_static_ip ? "true" : "false";
-                form[`multi_ip_${i}`].value = ap.local_ip || "";
-                form[`multi_gw_${i}`].value = ap.gateway || "";
-                form[`multi_sn_${i}`].value = ap.subnet || "";
+                const f = formMqtt || formConfig;
+                f[`multi_ssid_${i}`].value = ap.ssid || "";
+                f[`multi_pass_${i}`].value = ap.pass || "";
+                f[`multi_static_${i}`].value = ap.use_static_ip ? "true" : "false";
+                f[`multi_ip_${i}`].value = ap.local_ip || "";
+                f[`multi_gw_${i}`].value = ap.gateway || "";
+                f[`multi_sn_${i}`].value = ap.subnet || "";
                 document.getElementById(`rip_${i}`).style.display = ap.use_static_ip ? 'flex' : 'none';
             });
         }
@@ -305,26 +342,31 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-    const formData = new FormData(document.getElementById('form-config'));
     const configData = {};
     const multiApArray = [];
 
-    formData.forEach((value, key) => {
-        if (key.startsWith('multi_')) return;
-        let parsed = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value.trim() !== '') ? Number(value) : value;
-        setNested(configData, key, parsed);
+    // 두 개의 폼 데이터를 모두 순회
+    ['form-config', 'form-mqtt'].forEach(formId => {
+        const form = document.getElementById(formId);
+        if(!form) return;
+        new FormData(form).forEach((value, key) => {
+            if (key.startsWith('multi_')) return;
+            let parsed = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value.trim() !== '') ? Number(value) : value;
+            setNested(configData, key, parsed);
+        });
     });
 
+    const f = document.getElementById('form-mqtt') || document.getElementById('form-config');
     for(let i=0; i < T20_CONST.UI.MAX_ROUTERS; i++) {
-        const ssid = document.querySelector(`[name="multi_ssid_${i}"]`).value;
+        const ssid = f.querySelector(`[name="multi_ssid_${i}"]`).value;
         if (ssid.trim()) {
             multiApArray.push({
                 ssid: ssid,
-                pass: document.querySelector(`[name="multi_pass_${i}"]`).value,
-                use_static_ip: document.querySelector(`[name="multi_static_${i}"]`).value === 'true',
-                local_ip: document.querySelector(`[name="multi_ip_${i}"]`).value,
-                gateway: document.querySelector(`[name="multi_gw_${i}"]`).value,
-                subnet: document.querySelector(`[name="multi_sn_${i}"]`).value
+                pass: f.querySelector(`[name="multi_pass_${i}"]`).value,
+                use_static_ip: f.querySelector(`[name="multi_static_${i}"]`).value === 'true',
+                local_ip: f.querySelector(`[name="multi_ip_${i}"]`).value,
+                gateway: f.querySelector(`[name="multi_gw_${i}"]`).value,
+                subnet: f.querySelector(`[name="multi_sn_${i}"]`).value
             });
         }
     }
@@ -342,7 +384,7 @@ async function saveSettings() {
 }
 
 // ==========================================
-// 6. 스토리지 및 진단
+// 5. 스토리지 및 진단 로직 (기존 유지)
 // ==========================================
 async function refreshFileList() {
     const list = document.getElementById('file-list');
@@ -371,6 +413,44 @@ async function fetchDiagnostics() {
     } catch(e) { document.getElementById('diag-health').innerText = "API Error"; }
 }
 
+
+async function uploadOTA() {
+    const fileInput = document.getElementById('ota-file');
+    if (!fileInput.files.length) return showToast("Please select a .bin file", true);
+    
+    if (!confirm("펌웨어 업데이트 중에는 전원을 끄지 마십시오. 계속하시겠습니까?")) return;
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append("update", file);
+
+    const progressText = document.getElementById('ota-progress');
+    progressText.style.display = 'block';
+    
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${T20_CONST.API_BASE}/ota_update`, true);
+    
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressText.innerText = `Uploading & Flashing: ${percent}%`;
+        }
+    };
+    
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            progressText.innerText = "Success! Rebooting...";
+            showToast("OTA Success! Device is rebooting.");
+            setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS + 2000);
+        } else {
+            progressText.style.display = 'none';
+            showToast("OTA Failed.", true);
+        }
+    };
+    xhr.send(formData);
+}
+
+
 window.onload = () => {
     initUI();
     initCharts();
@@ -378,4 +458,3 @@ window.onload = () => {
     loadSettings();
     refreshFileList();
 };
-
