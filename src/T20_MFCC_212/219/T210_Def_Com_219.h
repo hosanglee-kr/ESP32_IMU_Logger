@@ -103,7 +103,7 @@ namespace T20 {
         inline constexpr char const* MOUNT_SD      = "/sdcard";
         inline constexpr char const* DIR_SYS       = "/sys";
         inline constexpr char const* DIR_WEB       = "/www";
-        inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg_219_008.json";
+        inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg_219_009.json";
         inline constexpr char const* FILE_REC_IDX  = "/sys/recorder_index.json";
         inline constexpr char const* FILE_BMI_CALIB= "/sys/bmi_calib.json";
         inline constexpr char const* WEB_INDEX     = "index_219_009.html";
