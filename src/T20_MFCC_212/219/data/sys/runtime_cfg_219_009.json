@@ -1,0 +1,102 @@
+{
+  "preprocess": {
+    "remove_dc": true,
+    "preemphasis": {
+      "enable": true,
+      "alpha": 0.97
+    },
+    "filter": {
+      "enable": true,
+      "type": 2,
+      "cutoff_hz_1": 15.0,
+      "q_factor": 0.707
+    },
+    "noise": {
+      "enable_gate": true,
+      "gate_threshold_abs": 0.002,
+      "mode": 2,
+      "spectral_subtract_strength": 1.0,
+      "adaptive_alpha": 0.05,
+      "noise_learn_frames": 8
+    }
+  },
+  "sensor": {
+    "axis": 2,
+    "accel_range": 2,
+    "gyro_range": 4
+  },
+  "wifi": {
+    "mode": 3,
+    "ap_ssid": "T20_MFCC_AP",
+    "ap_password": "12345678",
+    "ap_ip": "192.168.4.1"
+  },
+  "wifi_multi_ap": [
+    {
+      "ssid": "",
+      "pass": "",
+      "use_static_ip": false,
+      "local_ip": "",
+      "gateway": "",
+      "subnet": ""
+    }
+  ],
+  "mqtt": {
+    "enable": false,
+    "broker": "broker.hivemq.com",
+    "port": 1883,
+    "id": "T20_DEVICE",
+    "password": "",
+    "topic_root": "t20/sensor"
+  },
+  "feature": {
+    "hop_size": 256,
+    "mfcc_coeffs": 13,
+    "fft_size": 256,
+    "axis_count": 1
+  },
+  "output": {
+    "sequence_frames": 16,
+    "enabled": true,
+    "output_sequence": false
+  },
+  "storage": {
+    "save_raw": false,
+    "rotation_mb": 10,
+    "rotation_min": 60,
+    "rotate_keep_max": 8,
+    "idle_flush_ms": 250
+  },
+  "trigger": {
+    "use_threshold": false,
+    "threshold_rms": 0.5,
+    "any_motion_duration": 5,
+    "use_deep_sleep": false,
+    "sleep_timeout_sec": 300,
+    "bands": [
+      {
+        "enable": false,
+        "start_hz": 10.0,
+        "end_hz": 150.0,
+        "threshold": 5.0
+      },
+      {
+        "enable": false,
+        "start_hz": 500.0,
+        "end_hz": 1000.0,
+        "threshold": 3.0
+      },
+      {
+        "enable": false,
+        "start_hz": 1200.0,
+        "end_hz": 2000.0,
+        "threshold": 2.0
+      }
+    ]
+  },
+  "system": {
+    "auto_start": true,
+    "button_pin": 0,
+    "watchdog_ms": 2000
+  }
+}
