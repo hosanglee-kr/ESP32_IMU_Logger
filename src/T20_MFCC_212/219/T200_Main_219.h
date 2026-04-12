@@ -3,10 +3,13 @@
  * Summary: Application Entry Point Wrapper (v218 Config Auto-load)
  * ========================================================================== */
 
-// 219 v002
+// 219 v003 (min_spiffs.csv : 4MB - App(1.9MB) x 2개 + SPIFFS(약 190KB)
+//   RAM:   [==        ]  16.4% (used    53,744 bytes from   327,680 bytes)
+//   Flash: [======    ]  64.8% (used 1,273,053 bytes from 1,966,080 bytes)
+// 219 v002 (huge_app.csv)
 //   RAM:   [==        ]  16.4% (used    537,44 bytes from   327,680 bytes)
 //   Flash: [====      ]  40.5% (used 1,273,053 bytes from 3,145,728 bytes)
-// 219 v001
+// 219 v001 (huge_app.csv)
 //   RAM:   [==        ]  16.9% (used    55,428 bytes from   327,680 bytes)
 //   Flash: [====      ]  39.4% (used 1,240,981 bytes from 3,145,728 bytes)
 
