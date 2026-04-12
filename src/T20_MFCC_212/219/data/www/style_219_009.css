@@ -1,5 +1,4 @@
 /* style_219_009.css */
-
 :root {
     --bg: #121212; 
     --card: #1e1e1e; 
@@ -47,7 +46,7 @@ header {
     border-bottom: 1px solid var(--border); 
     overflow-x: auto; 
     position: sticky;
-    top: 53px; /* Header height */
+    top: 53px;
     z-index: 99;
 }
 .tab-btn { 
@@ -93,7 +92,6 @@ header {
     border-bottom: 1px solid #333; 
     display: block;
 }
-
 .sub-title { color: #aaa; margin: 15px 0 10px 0; font-size: 0.95em; }
 
 /* Dashboard Specifics */
@@ -118,7 +116,7 @@ header {
 
 canvas[id^="chart-waterfall-"] {
     width: 100%; height: 100%;
-    image-rendering: pixelated; /* 중요: 워터폴 선명도 유지 */
+    image-rendering: pixelated; 
     background-color: #000;
 }
 

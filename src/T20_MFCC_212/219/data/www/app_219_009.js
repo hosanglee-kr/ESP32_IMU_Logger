@@ -17,7 +17,6 @@ const T20_CONST = {
     UI: { TOAST_MS: 3000, DIAG_INTERVAL_MS: 1000, REBOOT_RELOAD_MS: 6000, MAX_ROUTERS: 3 }
 };
 
-// 동적 설정 상태 저장소 (초기 기본값)
 let sysState = {
     fft_size: 256,
     axis_count: 1,
@@ -30,8 +29,16 @@ let charts = {};
 let isLearning = false;
 let diagTimer = null;
 
+// [렌더링 버퍼 최적화 변수]
+let pendingWave = null;
+let pendingSpec = null;
+let pendingMfcc = null;
+let pendingSeqFrames = [];
+let isSinglePending = false;
+let isSeqPending = false;
+
 // ==========================================
-// 1. UI 및 유틸리티 로직 (기존과 유사하게 유지)
+// 1. UI 및 유틸리티 로직
 // ==========================================
 function showTab(tabId, e = null) {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -91,7 +98,7 @@ function initUI() {
 }
 
 // ==========================================
-// 2. 동적 차트 엔진 제어 (v219)
+// 2. 동적 차트 엔진 제어
 // ==========================================
 function initCharts() {
     const baseOpt = { 
@@ -127,19 +134,12 @@ function updateChartDimensions() {
     
     // 3축 모드 식별을 위한 색상 배열 재생성
     const colors = [];
-    const axisColors = ['#4caf50', '#2196F3', '#8BC34A']; // X, Y, Z 기본 색상 톤
     for(let i=0; i < mfccTotal; i++) {
-        // 어느 축의 데이터인지 계산 (예: 117개면 0~38은 축0, 39~77은 축1)
         const axisIdx = Math.floor(i / (sysState.mfcc_coeffs * 3));
         const featType = Math.floor((i % (sysState.mfcc_coeffs * 3)) / sysState.mfcc_coeffs); 
-        // featType: 0(Static), 1(Delta), 2(Accel) - 투명도로 구분
+        
         const alpha = featType === 0 ? '1.0' : (featType === 1 ? '0.7' : '0.4');
-        
-        let rgb;
-        if(axisIdx === 0) rgb = '76, 175, 80';   // Green
-        else if(axisIdx === 1) rgb = '255, 152, 0'; // Orange
-        else rgb = '244, 67, 54'; // Red
-        
+        let rgb = axisIdx === 0 ? '76, 175, 80' : (axisIdx === 1 ? '255, 152, 0' : '244, 67, 54');
         colors.push(`rgba(${rgb}, ${alpha})`);
     }
     charts.mfcc.data.datasets[0].backgroundColor = colors;
@@ -169,7 +169,7 @@ class WaterfallChart {
         }
     }
     draw(dataArray) {
-        if (!this.ctx) return;
+        if (!this.ctx || !dataArray) return;
         const w = this.canvas.width, h = this.canvas.height;
         this.ctx.drawImage(this.canvas, 1, 0, w - 1, h, 0, 0, w - 1, h);
         for (let y = 0; y < h; y++) {
@@ -201,8 +201,35 @@ function drawMfccWaterfalls(axis0Mfcc) {
 }
 
 // ==========================================
-// 3. WebSocket 동적 파서 로직 (v219)
+// 3. WebSocket 및 60Hz 렌더링 최적화 루프
 // ==========================================
+function renderLoop() {
+    if (isSinglePending && pendingWave && pendingSpec && pendingMfcc) {
+        charts.wave.data.datasets[0].data = pendingWave;
+        charts.spec.data.datasets[0].data = pendingSpec;
+        charts.mfcc.data.datasets[0].data = pendingMfcc;
+        
+        charts.wave.update('none');
+        charts.spec.update('none');
+        charts.mfcc.update('none');
+        
+        waterfallSpec.draw(pendingSpec);
+        const singleAxisDim = sysState.mfcc_coeffs * 3;
+        drawMfccWaterfalls(pendingMfcc.subarray(0, singleAxisDim));
+        
+        isSinglePending = false;
+    } 
+    else if (isSeqPending && pendingMfcc) {
+        charts.mfcc.data.datasets[0].data = pendingMfcc;
+        charts.mfcc.update('none');
+        
+        pendingSeqFrames.forEach(frame => drawMfccWaterfalls(frame));
+        pendingSeqFrames = [];
+        isSeqPending = false;
+    }
+    requestAnimationFrame(renderLoop);
+}
+
 function connectWebSocket() {
     socket = new WebSocket(`${T20_CONST.WS.PROTOCOL}//${window.location.host}${T20_CONST.API_BASE}/ws`);
     socket.binaryType = "arraybuffer";
@@ -225,29 +252,18 @@ function connectWebSocket() {
         const expectedSeq = sysState.sequence_frames * totalMfccDim;
 
         if (floats.length === expectedSingle) {
-            // [Wave(N)] + [Power(Bins)] + [MFCC(39 * axes)]
-            const wave = floats.subarray(0, N);
-            const spec = floats.subarray(N, N + Bins);
-            const mfcc = floats.subarray(N + Bins, expectedSingle);
-
-            charts.wave.data.datasets[0].data = wave; 
-            charts.spec.data.datasets[0].data = spec; 
-            charts.mfcc.data.datasets[0].data = mfcc;
-            charts.wave.update('none'); charts.spec.update('none'); charts.mfcc.update('none');
-            
-            waterfallSpec.draw(spec); 
-            // 3축 모드여도 워터폴 시각화는 난잡함 방지를 위해 첫 번째 축(Axis 0)만 그림
-            drawMfccWaterfalls(mfcc.subarray(0, singleAxisDim));
+            pendingWave = floats.subarray(0, N);
+            pendingSpec = floats.subarray(N, N + Bins);
+            pendingMfcc = floats.subarray(N + Bins, expectedSingle);
+            isSinglePending = true;
         }
         else if (floats.length === expectedSeq) {
-            // 시퀀스 텐서 전송 모드 (가장 마지막 프레임을 대표로 차트 업데이트)
-            const lastFrame = floats.subarray(expectedSeq - totalMfccDim, expectedSeq);
-            charts.mfcc.data.datasets[0].data = lastFrame;
-            charts.mfcc.update('none');
-            
+            pendingMfcc = floats.subarray(expectedSeq - totalMfccDim, expectedSeq);
+            pendingSeqFrames = [];
             for(let i=0; i < sysState.sequence_frames; i++) {
-                drawMfccWaterfalls(floats.subarray(i * totalMfccDim, i * totalMfccDim + singleAxisDim));
+                pendingSeqFrames.push(floats.subarray(i * totalMfccDim, i * totalMfccDim + singleAxisDim));
             }
+            isSeqPending = true;
         }
     };
 
@@ -259,7 +275,7 @@ function connectWebSocket() {
 }
 
 // ==========================================
-// 4. API 제어 및 설정 동기화
+// 4. API 제어 및 OTA 업데이트
 // ==========================================
 const callAPI = (path, method = 'POST') => fetch(`${T20_CONST.API_BASE}${path}`, { method });
 
@@ -289,6 +305,43 @@ async function rebootDevice() {
     } catch(e) { showToast("Reboot command sent.", true); setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS); }
 }
 
+async function uploadOTA() {
+    const fileInput = document.getElementById('ota-file');
+    if (!fileInput.files.length) return showToast("Please select a .bin file", true);
+    if (!confirm("펌웨어 업데이트 중에는 전원을 끄지 마십시오. 진행하시겠습니까?")) return;
+
+    const formData = new FormData();
+    formData.append("update", fileInput.files[0]);
+
+    const progressText = document.getElementById('ota-progress');
+    progressText.style.display = 'block';
+    
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${T20_CONST.API_BASE}/ota_update`, true);
+    
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressText.innerText = `Uploading & Flashing: ${percent}%`;
+        }
+    };
+    
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            progressText.innerText = "Success! Rebooting...";
+            showToast("OTA Success! Device is rebooting.");
+            setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS + 2000);
+        } else {
+            progressText.style.display = 'none';
+            showToast("OTA Failed.", true);
+        }
+    };
+    xhr.send(formData);
+}
+
+// ==========================================
+// 5. 설정 동기화 (Multi-Band Trigger 포함)
+// ==========================================
 const getNested = (obj, path) => path.split('.').reduce((acc, part) => acc && acc[part] !== undefined ? acc[part] : undefined, obj);
 const setNested = (obj, path, value) => {
     const keys = path.split('.');
@@ -305,7 +358,6 @@ async function loadSettings() {
         const res = await fetch(`${T20_CONST.API_BASE}/runtime_config`);
         const cfg = await res.json();
         
-        // 동적 상태 업데이트 및 차트 리사이즈
         sysState.fft_size = parseInt(cfg.feature?.fft_size || 256);
         sysState.axis_count = parseInt(cfg.feature?.axis_count || 1);
         sysState.mfcc_coeffs = parseInt(cfg.feature?.mfcc_coeffs || 13);
@@ -313,16 +365,26 @@ async function loadSettings() {
         updateChartDimensions();
 
         const formConfig = document.getElementById('form-config');
-        const formMqtt = document.getElementById('form-mqtt'); // MQTT 분리 폼
+        const formMqtt = document.getElementById('form-mqtt');
 
         [formConfig, formMqtt].forEach(form => {
             if(!form) return;
             form.querySelectorAll('select, input').forEach(el => {
-                if (el.name.startsWith('multi_')) return;
+                if (el.name.startsWith('multi_') || el.name.startsWith('band_')) return;
                 const val = getNested(cfg, el.name);
                 if (val !== undefined) el.value = typeof val === 'boolean' ? val.toString() : val;
             });
         });
+
+        if(cfg.trigger && cfg.trigger.bands) {
+            cfg.trigger.bands.forEach((b, i) => {
+                if(i > 2) return;
+                formConfig[`band_${i}_enable`].value = b.enable ? "true" : "false";
+                formConfig[`band_${i}_start`].value = b.start_hz || "";
+                formConfig[`band_${i}_end`].value = b.end_hz || "";
+                formConfig[`band_${i}_thresh`].value = b.threshold || "";
+            });
+        }
 
         if (cfg.wifi_multi_ap && Array.isArray(cfg.wifi_multi_ap)) {
             cfg.wifi_multi_ap.forEach((ap, i) => {
@@ -343,26 +405,37 @@ async function loadSettings() {
 
 async function saveSettings() {
     const configData = {};
-    const multiApArray = [];
-
-    // 두 개의 폼 데이터를 모두 순회
+    
     ['form-config', 'form-mqtt'].forEach(formId => {
         const form = document.getElementById(formId);
         if(!form) return;
         new FormData(form).forEach((value, key) => {
-            if (key.startsWith('multi_')) return;
+            if (key.startsWith('multi_') || key.startsWith('band_')) return;
             let parsed = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value.trim() !== '') ? Number(value) : value;
             setNested(configData, key, parsed);
         });
     });
 
-    const f = document.getElementById('form-mqtt') || document.getElementById('form-config');
+    const formConfig = document.getElementById('form-config');
+    const bands = [];
+    for(let i=0; i<3; i++) {
+        bands.push({
+            enable: formConfig[`band_${i}_enable`].value === 'true',
+            start_hz: Number(formConfig[`band_${i}_start`].value),
+            end_hz: Number(formConfig[`band_${i}_end`].value),
+            threshold: Number(formConfig[`band_${i}_thresh`].value)
+        });
+    }
+    if(!configData.trigger) configData.trigger = {};
+    configData.trigger.bands = bands;
+
+    const multiApArray = [];
+    const f = document.getElementById('form-mqtt') || formConfig;
     for(let i=0; i < T20_CONST.UI.MAX_ROUTERS; i++) {
         const ssid = f.querySelector(`[name="multi_ssid_${i}"]`).value;
         if (ssid.trim()) {
             multiApArray.push({
-                ssid: ssid,
-                pass: f.querySelector(`[name="multi_pass_${i}"]`).value,
+                ssid: ssid, pass: f.querySelector(`[name="multi_pass_${i}"]`).value,
                 use_static_ip: f.querySelector(`[name="multi_static_${i}"]`).value === 'true',
                 local_ip: f.querySelector(`[name="multi_ip_${i}"]`).value,
                 gateway: f.querySelector(`[name="multi_gw_${i}"]`).value,
@@ -378,13 +451,13 @@ async function saveSettings() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(configData)
         });
-        if(res.ok) showToast("Settings saved & Applied!");
+        if(res.ok) showToast("Settings saved! Rebooting...");
         else showToast("Save failed", true);
     } catch (e) { showToast("Network error", true); }
 }
 
 // ==========================================
-// 5. 스토리지 및 진단 로직 (기존 유지)
+// 6. 스토리지 및 진단 로직 
 // ==========================================
 async function refreshFileList() {
     const list = document.getElementById('file-list');
@@ -413,48 +486,13 @@ async function fetchDiagnostics() {
     } catch(e) { document.getElementById('diag-health').innerText = "API Error"; }
 }
 
-
-async function uploadOTA() {
-    const fileInput = document.getElementById('ota-file');
-    if (!fileInput.files.length) return showToast("Please select a .bin file", true);
-    
-    if (!confirm("펌웨어 업데이트 중에는 전원을 끄지 마십시오. 계속하시겠습니까?")) return;
-
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append("update", file);
-
-    const progressText = document.getElementById('ota-progress');
-    progressText.style.display = 'block';
-    
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${T20_CONST.API_BASE}/ota_update`, true);
-    
-    xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            progressText.innerText = `Uploading & Flashing: ${percent}%`;
-        }
-    };
-    
-    xhr.onload = () => {
-        if (xhr.status === 200) {
-            progressText.innerText = "Success! Rebooting...";
-            showToast("OTA Success! Device is rebooting.");
-            setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS + 2000);
-        } else {
-            progressText.style.display = 'none';
-            showToast("OTA Failed.", true);
-        }
-    };
-    xhr.send(formData);
-}
-
-
 window.onload = () => {
     initUI();
     initCharts();
     connectWebSocket();
     loadSettings();
     refreshFileList();
+    
+    // 60Hz 렌더링 최적화 루프 엔진 가동
+    requestAnimationFrame(renderLoop);
 };
