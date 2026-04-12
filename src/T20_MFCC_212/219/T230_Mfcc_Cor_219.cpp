@@ -79,7 +79,7 @@ void T20_sensorTask(void* p_arg) {
     }
 }
 
-// Core 1: DSP 연산 및 스마트 트리거, MQTT 제어 태스크 (v219 완성체)
+// Core 1: DSP 연산 및 특징량 조립, 스마트 트리거, MQTT 제어 태스크 
 void T20_processTask(void* p_arg) {
     auto* p = static_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     if (!p) { vTaskDelete(nullptr); return; }
@@ -91,11 +91,10 @@ void T20_processTask(void* p_arg) {
     const uint16_t axis_cnt = (uint8_t)p->cfg.feature.axis_count;
     const uint16_t mfcc_dim = 39 * axis_cnt;
     
-    // [메모리 정렬 보완] 16바이트 정렬 할당
+    // [1] 시퀀스 전송용 메모리 할당 (16바이트 정렬, 내부 RAM 사용으로 캐시 미스 방지)
     float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim * sizeof(float), MALLOC_CAP_INTERNAL);
     
-    // [WS 누락 보완] 파형 + 스펙트럼 + MFCC 통합 전송용 버퍼 동적 할당
-    // 최대치(FFT 4096 + Bins 2049 + MFCC 117 = 6262 float) 대응
+    // [2] 단일 프레임 WS 전송용 통합 버퍼 할당 (프론트엔드 파형 + 스펙트럼 + MFCC 차트용)
     const uint16_t N = p->cfg.feature.fft_size;
     const uint16_t bins = (N / 2) + 1;
     const size_t ws_payload_len = N + bins + mfcc_dim;
@@ -104,70 +103,61 @@ void T20_processTask(void* p_arg) {
     for (;;) {
         if (xQueueReceive(p->frame_queue, &read_idx, portMAX_DELAY) == pdTRUE) {
             
+            // [3] 타임스탬프 획득 및 NTP 동기화 상태 플래그 설정
             struct timeval tv;
             gettimeofday(&tv, NULL);
             feature.timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
             feature.frame_id = ++frame_id;
             feature.active_axes = axis_cnt;
-            feature.status_flags = (tv.tv_sec > 1000000) ? 0x01 : 0x00;
+            feature.status_flags = (tv.tv_sec > 1000000) ? 0x01 : 0x00; // Bit 0: NTP 동기화 여부
 
-            // [Raw 누락 보완] 3축 인터리빙 저장
+            // [4] Raw 파형 데이터 3축 인터리빙 병합 저장 (설정 켜짐 시)
             if (p->cfg.storage.save_raw) {
                 p->storage.pushRaw(p->raw_buffer[0][read_idx], p->raw_buffer[1][read_idx], p->raw_buffer[2][read_idx], N, axis_cnt);
             }
 
             bool all_ready = true;
-            bool event_detected = false;
 
+            // [5] 3축(또는 1축) 독립 DSP 연산 수행 및 특징량 추출
             for (uint8_t a = 0; a < axis_cnt; a++) {
-                if (p->dsp.processFrame(p->raw_buffer[a][read_idx], &feature, a)) {
-                    
-                    // [트리거 보완] RMS 및 밴드 에너지(특정 주파수 대역) 동시 감시
-                    float cur_rms = feature.rms[a];
-                    float band_nrg = feature.band_energy[a]; // 500~800Hz 에너지
-
-                    if (p->cfg.trigger.use_threshold) {
-                        // 진동이 비정상적으로 커지거나, 특정 주파수(예: 마찰음) 대역 에너지가 급증하면 트리거
-                        // (참고: band_energy 임계값은 trigger_rms와 비율로 쓰거나 별도 설정 추가 가능)
-                        if (cur_rms > p->cfg.trigger.threshold_rms || band_nrg > (p->cfg.trigger.threshold_rms * 5.0f)) {
-                            event_detected = true;
-                        }
-                    }
-                } else {
-                    all_ready = false; break;
+                if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], &feature, a)) {
+                    all_ready = false; 
+                    break;
                 }
             }
-            
+
+            // 모든 축 연산이 완료된 시점에만 트리거 판별 및 저장 진행
             if (all_ready) {
                 bool event_detected = false;
 
-                // [1] RMS 임계값 검사
+                // [6] 스마트 트리거 판별: RMS 진동 세기 검사 (전체 활성 축 대상)
                 if (p->cfg.trigger.use_threshold) {
-                    // 대표 축(0번, X축)을 기준으로 하거나 모든 축 검사 가능. 여기선 전체 축 중 하나라도 넘으면 작동
                     for (uint8_t a = 0; a < axis_cnt; a++) {
-                        if (feature.rms[a] > p->cfg.trigger.threshold_rms) event_detected = true;
+                        if (feature.rms[a] > p->cfg.trigger.threshold_rms) {
+                            event_detected = true;
+                        }
                     }
                 }
 
-                // [2] 다중 밴드(Multi-band) 에너지 스마트 트리거 검사 (메인 0번 축 기준)
+                // [7] 스마트 트리거 판별: 다중 주파수 대역(Multi-band) 에너지 검사 (기준 축 0번 대상)
                 for (int b = 0; b < T20_MAX_TRIGGER_BANDS; b++) {
                     if (p->cfg.trigger.bands[b].enable) {
                         float band_nrg = p->dsp.getBandEnergy(p->cfg.trigger.bands[b].start_hz, p->cfg.trigger.bands[b].end_hz);
-                        feature.band_energy[b] = band_nrg; // 프론트엔드 모니터링용으로 저장
+                        feature.band_energy[b] = band_nrg; 
 
                         if (band_nrg > p->cfg.trigger.bands[b].threshold) {
                             event_detected = true;
                         }
                     } else {
-                        feature.band_energy[b] = 0.0f;
+                        feature.band_energy[b] = 0.0f; // 비활성 밴드는 0으로 초기화
                     }
                 }
 
-                // [3] 트리거 및 SD 기록 세션 제어
+                // [8] 트리거 이벤트 발생 시 SD 레코딩 세션 및 MQTT 경보 제어
                 if (event_detected) {
-                    feature.status_flags |= 0x02; // Triggered 플래그
+                    feature.status_flags |= 0x02; // Bit 1: Triggered 플래그 활성화
                     
-                    // 트리거 초기 진입 시에만 MQTT 알림 (5초 쿨타임)
+                    // MQTT 알림 전송 (연속 알림 폭주를 방지하기 위한 5초 쿨타임)
                     if (millis() - p->last_trigger_ms > 5000) { 
                         JsonDocument alert_doc;
                         alert_doc["event"] = "smart_trigger_alert";
@@ -183,32 +173,39 @@ void T20_processTask(void* p_arg) {
                     }
                     
                     p->last_trigger_ms = millis();
-                    if (!p->storage.isOpen()) p->storage.openSession(p->cfg);
+                    
+                    // 레코딩이 닫혀있다면 이벤트 시점에 즉시 자동 시작
+                    if (!p->storage.isOpen()) {
+                        p->storage.openSession(p->cfg);
+                        p->storage.writeEvent("smart_trigger_started");
+                    }
                 } else {
-                    // 트리거 소멸 후 5초간 유지(Hold Time) 후 종료
+                    // 이벤트 소멸 후 5초(Hold Time) 유지 후 세션 자동 종료
                     if (p->storage.isOpen() && (millis() - p->last_trigger_ms > 5000)) {
                         p->storage.closeSession("trigger_hold_timeout");
                     }
                 }
 
+                // [9] 추출된 MFCC/특징량 벡터를 시퀀스 빌더(링 버퍼)에 푸시
                 p->seq_builder.pushVector(&feature.features[0][0]);
 
+                // [10] 프론트엔드(Web UI) 및 SD 스토리지로 데이터 전송/저장 분기
                 if (p->cfg.output.output_sequence) {
+                    // (A) 시퀀스 텐서 모드: 설정된 프레임 단위로 묶어서 WS 전송
                     if (p->seq_builder.isReady() && (frame_id % p->cfg.output.sequence_frames == 0)) {
                         p->seq_builder.getSequenceFlat(seq_buffer);
                         p->comm.broadcastBinary(seq_buffer, p->seq_builder.getSequenceFrames() * mfcc_dim);
                     }
                 } else {
-                    // [WS 페이로드 보완] 프론트엔드 차트를 위한 통합 데이터 조립
-                    // 구조: [Wave 파형 (N)] + [Power Spectrum (bins)] + [MFCC (39 or 117)]
-                    
-                    // 1번 축(0번 인덱스)의 데이터를 대표 차트 데이터로 사용
+                    // (B) 단일 벡터 모드: 실시간 차트 렌더링을 위한 통합 페이로드 조립
+                    // 데이터 구조: [Wave 파형 (N)] + [Power Spectrum (bins)] + [MFCC (39*축)]
                     memcpy(ws_payload, p->raw_buffer[0][read_idx], N * sizeof(float));
                     memcpy(ws_payload + N, p->dsp.getPowerSpectrum(), bins * sizeof(float));
                     memcpy(ws_payload + N + bins, &feature.features[0][0], mfcc_dim * sizeof(float));
 
                     p->comm.broadcastBinary(ws_payload, ws_payload_len);
                     
+                    // 수동 측정 상태이거나 스마트 트리거로 파일이 열려있을 때 SD 저장 큐로 전송
                     if (p->cfg.output.enabled && p->storage.isOpen()) {
                         xQueueSend(p->recorder_queue, &feature, 0);
                     }
@@ -217,6 +214,7 @@ void T20_processTask(void* p_arg) {
         }
     }
     
+    // Task 종료 시 안전하게 힙 메모리 해제 (무한 루프 구조상 도달하지는 않음)
     heap_caps_free(seq_buffer);
     heap_caps_free(ws_payload);
     vTaskDelete(nullptr);

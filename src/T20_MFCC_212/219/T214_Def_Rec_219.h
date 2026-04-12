@@ -83,8 +83,7 @@ typedef struct {
     uint8_t  active_axes;   // 1 또는 3
     uint8_t  status_flags;  // Bit 0: NTP Synced, Bit 1: Triggered
     float    rms[3];        // 각 축별 실시간 RMS 값
-    float    band_energy[T20_MAX_TRIGGER_BANDS]; // [수정] 감시 중인 밴드들의 최신 에너지 (대표 축 0번 기준
-    float    band_energy[3];  // [추가] 축별 특정 주파수 대역 에너지
+    float    band_energy[T20_MAX_TRIGGER_BANDS]; // 감시 중인 밴드들의 최신 에너지 (대표 축 0번 기준
     float    features[3][39]; // [117]; // 39 * 3 (Max 117차원)
 } ST_T20_FeatureVector_t;
 
@@ -93,8 +92,8 @@ typedef struct {
 typedef struct {
     uint16_t          hop_size;
     uint16_t          mfcc_coeffs;
-    EM_T20_FftSize_t  fft_size;     // [추가] Enum 기반 설정
-    EM_T20_AxisCount_t axis_count;  // [추가] 1축/3축 선택
+    EM_T20_FftSize_t  fft_size;     // Enum 기반 설정
+    EM_T20_AxisCount_t axis_count;  // 1축/3축 선택
 } ST_T20_ConfigFeature_t;
 
 // --- [2] DSP Preprocess Types ---
@@ -168,7 +167,7 @@ typedef struct {
 	char					ap_ip[16];				// AP 모드 커스텀 IP
 } ST_T20_ConfigWiFi_t;
 
-// MQTT 설정을 위한 구조체 미리 선언 (Phase 2용)
+// MQTT 설정을 위한 구조체 미리 선언
 typedef struct {
     bool     enable;
     char     broker[64];
@@ -196,7 +195,7 @@ typedef struct {
     uint32_t sample_rate_hz;
     uint16_t fft_size;
     uint16_t mfcc_dim;      // 축당 MFCC 계수 (예: 13)
-    uint8_t  active_axes;   // [추가] 1 또는 3 (퓨전 여부 판별)
+    uint8_t  active_axes;   // 1 또는 3 (퓨전 여부 판별)
     uint8_t  reserved;      // 정렬용 패딩
     uint32_t record_count;
     char     config_dump[1024]; 
