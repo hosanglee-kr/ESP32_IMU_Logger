@@ -105,7 +105,7 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         // 밴드 배열 파싱
         JsonArrayConst arr = tr["bands"];
         if (arr) {
-            for (int i = 0; i < TRIGGER_BANDS_MAX && i < arr.size(); i++) {
+            for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX && i < arr.size(); i++) {
                 out_cfg.trigger.bands[i].enable = arr[i]["enable"] | out_cfg.trigger.bands[i].enable;
                 out_cfg.trigger.bands[i].start_hz = arr[i]["start_hz"] | out_cfg.trigger.bands[i].start_hz;
                 out_cfg.trigger.bands[i].end_hz = arr[i]["end_hz"] | out_cfg.trigger.bands[i].end_hz;
@@ -189,7 +189,7 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 
     // 밴드 배열 생성
     JsonArray arr = tr["bands"].to<JsonArray>();
-    for (int i = 0; i < TRIGGER_BANDS_MAX; i++) {
+    for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
         JsonObject b = arr.add<JsonObject>();
         b["enable"] = cfg.trigger.bands[i].enable;
         b["start_hz"] = cfg.trigger.bands[i].start_hz;
