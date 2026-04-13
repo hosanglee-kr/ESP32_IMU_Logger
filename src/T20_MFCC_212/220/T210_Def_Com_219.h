@@ -1,0 +1,115 @@
+/* ============================================================================
+ * File: T210_Def_Com_219.h
+ * Summary: 시스템 전역 상수 (v217 Full)
+ * ========================================================================== */
+#pragma once
+#include <Arduino.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+
+namespace T20 {
+    namespace C10_Sys {
+        inline constexpr char const* VERSION_STR           = "T20_Mfcc_v219";
+        inline constexpr uint16_t QUEUE_LEN                = 8U;
+        inline constexpr uint16_t CFG_PROFILE_COUNT        = 4U;
+        inline constexpr uint16_t RAW_FRAME_BUFFERS        = 4U;
+        inline constexpr uint16_t SEQUENCE_FRAMES_MAX      = 16U;
+        inline constexpr uint8_t  PIN_NOT_SET              = 0xFFU;
+    }
+
+    namespace C10_Pin {
+        inline constexpr uint8_t BTN_CONTROL = 0U;
+        inline constexpr uint8_t RGB_LED     = 21U;
+        inline constexpr uint8_t BMI_SCK     = 12U;
+        inline constexpr uint8_t BMI_MISO    = 13U;
+        inline constexpr uint8_t BMI_MOSI    = 11U;
+        inline constexpr uint8_t BMI_CS      = 10U;
+        inline constexpr uint8_t BMI_INT1    = 14U;
+        inline constexpr uint8_t SDMMC_CLK   = 39U;
+        inline constexpr uint8_t SDMMC_CMD   = 38U;
+        inline constexpr uint8_t SDMMC_D0    = 40U;
+        inline constexpr uint8_t SDMMC_D1    = C10_Sys::PIN_NOT_SET;
+        inline constexpr uint8_t SDMMC_D2    = C10_Sys::PIN_NOT_SET;
+        inline constexpr uint8_t SDMMC_D3    = C10_Sys::PIN_NOT_SET;
+    }
+
+    namespace C10_Task {
+        inline constexpr uint32_t SENSOR_STACK   = 6144U;
+        inline constexpr uint32_t PROCESS_STACK  = 12288U;
+        inline constexpr uint32_t RECORDER_STACK = 8192U;
+        inline constexpr uint8_t  SENSOR_PRIO    = 4U;
+        inline constexpr uint8_t  PROCESS_PRIO   = 3U;
+        inline constexpr uint8_t  RECORDER_PRIO  = 2U;
+    }
+
+    namespace C10_DSP {
+        inline constexpr uint16_t FFT_SIZE         = 256U;
+        inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U;
+        inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;
+        inline constexpr uint16_t MEL_FILTERS      = 26U;
+        inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;
+        inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;
+        inline constexpr uint16_t MFCC_HISTORY_LEN = 5U;
+		inline constexpr float    MEL_SCALE_CONST  = 2595.0f;		// Mel 스케일 변환 상수입니다. (f = 2595 * log10(1 + m/700))
+		inline constexpr float    MEL_FREQ_CONST   = 700.0f;		// Mel 스케일 변환 상수입니다. (f = 2595 * log10(1 + m/700))
+    }
+
+    namespace C10_BMI {
+        inline constexpr uint32_t SPI_FREQ_HZ      			= 10000000UL;
+        inline constexpr uint8_t  REG_CALIB_OFFSET_START 	= 0x71U;
+		inline constexpr float    LSB_PER_G        			= 2048.0f;
+    }
+
+    namespace C10_Rec {
+        inline constexpr uint32_t BINARY_MAGIC     = 0x54323042UL;
+        inline constexpr uint16_t BINARY_VERSION   = 1U;
+        inline constexpr uint16_t BATCH_WMARK_HIGH = 8U;
+        inline constexpr uint32_t BATCH_IDLE_FLUSH_MS = 250U;
+        inline constexpr uint16_t ROTATE_KEEP_MAX  = 8U;
+    }
+
+    namespace C10_Web {
+        inline constexpr char const* WS_URI        		= "/api/t20/ws";
+        inline constexpr uint16_t JSON_BUF_SIZE    		= 2048U;
+        inline constexpr uint16_t LARGE_JSON_BUF_SIZE 	= 8192U;
+        inline constexpr uint32_t BTN_DEBOUNCE_MS  		= 500U;
+    }
+
+    namespace C10_Net {
+        inline constexpr uint8_t WIFI_MULTI_MAX    		= 3U;
+    }
+
+    namespace C10_Time {
+        inline constexpr char const* NTP_SERVER_1 		= "pool.ntp.org";
+        inline constexpr char const* NTP_SERVER_2 		= "time.nist.gov";
+        inline constexpr char const* TZ_INFO      		= "KST-9";
+        inline constexpr uint32_t SYNC_TIMEOUT_MS 		= 5000U;
+    }
+
+    namespace C10_NVS {
+        inline constexpr char const* NAMESPACE    = "t20_sys";
+        inline constexpr char const* KEY_FILE_SEQ = "file_seq";
+    }
+
+    // 향후 Phase 2, 3에서 사용할 기본값 상수
+    namespace C10_Ext {
+        inline constexpr uint32_t ROTATION_MB_DEF = 50U;
+        inline constexpr float    THRES_RMS_DEF   = 0.5f;
+        inline constexpr uint32_t SLEEP_SEC_DEF   = 300U;
+    }
+
+    namespace C10_Path {
+        inline constexpr char const* MOUNT_SD      = "/sdcard";
+        inline constexpr char const* DIR_SYS       = "/sys";
+        inline constexpr char const* DIR_WEB       = "/www";
+        inline constexpr char const* FILE_CFG_JSON = "/sys/runtime_cfg_219_009.json";
+        inline constexpr char const* FILE_REC_IDX  = "/sys/recorder_index.json";
+        inline constexpr char const* FILE_BMI_CALIB= "/sys/bmi_calib.json";
+        inline constexpr char const* WEB_INDEX     = "index_219_009.html";
+        inline constexpr char const* SD_DIR_BIN    = "/t20_data/bin";
+        inline constexpr char const* SD_PREFIX_BIN = "/t20_data/bin/rec_";
+		inline constexpr char const* DIR_FALLBACK  = "/fallback";
+    	inline constexpr char const* SD_DIR_RAW    = "/t20_data/raw";
+    }
+}
