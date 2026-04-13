@@ -63,6 +63,11 @@ namespace T20 {
         inline constexpr float    		MEL_FREQ_CONST   		= 700.0f;               // Mel 변환 주파수 상수
 		
 		inline constexpr uint8_t 		TRIGGER_BANDS_MAX		= 3; 					// 최대 3개의 주파수 대역 감시(T20_MAX_TRIGGER_BANDS)
+		
+		inline constexpr uint16_t MFCC_TOTAL_DIM = MFCC_COEFFS_MAX * 3U; // 32 * 3 = 96 (Static+Delta+Accel)
+        inline constexpr uint16_t MAX_FEATURE_DIM = 3U * MFCC_TOTAL_DIM; // 3축 합산 최대 차원
+        inline constexpr uint16_t SIMD_ALIGN = 16U;                      // 메모리 정렬 기준
+        
     }
 	
 	
@@ -71,6 +76,9 @@ namespace T20 {
         inline constexpr uint32_t 		SPI_FREQ_HZ      		= 10000000UL;			// SPI 통신 속도 (10MHz)
         inline constexpr uint8_t  		REG_CALIB_OFFSET_START 	= 0x71U;				// 캘리브레이션 레지스터 시작 주소
         inline constexpr float    		LSB_PER_G        		= 2048.0f;              // 16G 설정 시 G당 LSB (범위별 가변 필요)
+        
+        inline constexpr uint16_t FIFO_FRAME_SIZE = 12U;                 // Accel(6) + Gyro(6)
+        inline constexpr uint16_t FIFO_BATCH_SIZE = 32U;                 // 한번에 읽을 프레임 수
     }
 
     namespace C10_Rec {
@@ -79,6 +87,10 @@ namespace T20 {
         inline constexpr uint16_t 		BATCH_WMARK_HIGH 	= 8U;						// Write 워터마크
         inline constexpr uint32_t 		BATCH_IDLE_FLUSH_MS = 250U;						// 유휴 상태 시 강제 Flush 대기시간
         inline constexpr uint16_t 		ROTATE_KEEP_MAX  	= 8U;						// 파일 로테이션 유지 개수
+        
+        inline constexpr uint32_t TRIGGER_HOLD_MS = 5000UL;              // 트리거 유지 시간
+        inline constexpr uint8_t  FLAG_NTP_SYNCED = 0x01U;               // NTP 동기화 완료 비트
+        inline constexpr uint8_t  FLAG_TRIGGERED  = 0x02U;               // 이벤트 발생 비트
     }
 
     namespace C10_Web {
@@ -219,13 +231,13 @@ typedef struct {
 
 // 특징량 벡터 구조체 (타임스탬프 및 117차원 확장)
 typedef struct {
-	uint64_t timestamp_ms;						  // NTP/시스템 정밀 타임스탬프 (ms)
-	uint32_t frame_id;							  // 프레임 시퀀스 번호
-	uint8_t	 active_axes;						  // 1 또는 3
-	uint8_t	 status_flags;						  // Bit 0: NTP Synced, Bit 1: Triggered
-	float	 rms[3];							  // 각 축별 실시간 RMS 값
-	float	 band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX];  // 감시 중인 밴드들의 최신 에너지
-	float	 features[3][39];					  // 39 * 3 (Max 117차원 특징량)
+    uint64_t timestamp_ms;
+    uint32_t frame_id;
+    uint8_t  active_axes;
+    uint8_t  status_flags; 
+    float    rms[3];
+    float    band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX];
+    float    features[3][T20::C10_DSP::MFCC_TOTAL_DIM]; // 39 -> TOTAL_DIM(96)으로 안전하게 확장
 } ST_T20_FeatureVector_t;
 
 typedef struct {
