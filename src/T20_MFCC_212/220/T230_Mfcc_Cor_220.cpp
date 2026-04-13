@@ -140,7 +140,7 @@ void T20_processTask(void* p_arg) {
                 }
 
                 // [7] 스마트 트리거 판별: 다중 주파수 대역(Multi-band) 에너지 검사 (기준 축 0번 대상)
-                for (int b = 0; b < T20_MAX_TRIGGER_BANDS; b++) {
+                for (int b = 0; b < TRIGGER_BANDS_MAX; b++) {
                     if (p->cfg.trigger.bands[b].enable) {
                         float band_nrg = p->dsp.getBandEnergy(p->cfg.trigger.bands[b].start_hz, p->cfg.trigger.bands[b].end_hz);
                         feature.band_energy[b] = band_nrg;
@@ -167,7 +167,7 @@ void T20_processTask(void* p_arg) {
                         for(uint8_t a = 0; a < axis_cnt; a++) rms_arr.add(feature.rms[a]);
 
                         JsonArray bnd_arr = alert_doc["bands"].to<JsonArray>();
-                        for(uint8_t b = 0; b < T20_MAX_TRIGGER_BANDS; b++) bnd_arr.add(feature.band_energy[b]);
+                        for(uint8_t b = 0; b < TRIGGER_BANDS_MAX; b++) bnd_arr.add(feature.band_energy[b]);
 
                         p->comm.publishMqtt("alert", alert_doc);
                     }
