@@ -25,15 +25,15 @@ namespace T20 {
 
     namespace C10_Pin {
         inline constexpr uint8_t 		BTN_CONTROL 			= 0U;                   // 제어 버튼 (Boot Pin)
-							
+
 		inline constexpr uint8_t 		RGB_LED     			= 21U;                  // 상태 표시용 RGB LED
-							
+
         inline constexpr uint8_t 		BMI_SCK     			= 12U;                  // IMU SPI SCK
         inline constexpr uint8_t 		BMI_MISO    			= 13U;                  // IMU SPI MISO
         inline constexpr uint8_t 		BMI_MOSI    			= 11U;                  // IMU SPI MOSI
         inline constexpr uint8_t 		BMI_CS      			= 10U;                  // IMU SPI CS
         inline constexpr uint8_t 		BMI_INT1    			= 14U;                  // IMU 인터럽트 핀
-							
+
 		inline constexpr uint8_t 		SDMMC_CLK   			= 39U;                  // SDMMC CLK
         inline constexpr uint8_t 		SDMMC_CMD   			= 38U;                  // SDMMC CMD
         inline constexpr uint8_t 		SDMMC_D0    			= 40U;                  // SDMMC Data 0
@@ -61,54 +61,57 @@ namespace T20 {
         inline constexpr uint16_t 		MFCC_HISTORY_LEN 		= 5U;                   // 과거 특징량 보존 길이
         inline constexpr float    		MEL_SCALE_CONST  		= 2595.0f;              // Mel 변환 상수
         inline constexpr float    		MEL_FREQ_CONST   		= 700.0f;               // Mel 변환 주파수 상수
-		
-		inline constexpr uint8_t 		TRIGGER_BANDS_MAX		= 3; 					// 최대 3개의 주파수 대역 감시(T20_MAX_TRIGGER_BANDS)
-		
-		inline constexpr uint16_t       MFCC_COMPONENTS         = 3U;      // Static, Delta, Delta-Delta 
-        inline constexpr uint16_t       MFCC_TOTAL_DIM          = MFCC_COEFFS_MAX * MFCC_COMPONENTS; // 32 * 3 = 96
-    
-        inline constexpr uint16_t       MAX_FEATURE_DIM         = 3U * MFCC_TOTAL_DIM; // 3축 합산 최대 차원
-        inline constexpr uint16_t       SIMD_ALIGN              = 16U;                      // 메모리 정렬 기준
-        
-        inline constexpr float          FREQ_RES_HZ             = SAMPLE_RATE_HZ / (float)FFT_SIZE;   // 샘플 레이트와 FFT 사이즈 기반 주파수 해상도
-        inline constexpr uint32_t 		SLEEP_SEC_DEF   	= 300U;                     // 기본 딥슬립 진입 시간
-        
-        
-        // MAX_FEATURE_DIM을 축 개수와 연동하여 정의
-        inline constexpr uint16_t AXIS_COUNT_MAX     = 3U; 
-        inline constexpr uint16_t TOTAL_VECTOR_SIZE  = AXIS_COUNT_MAX * MFCC_TOTAL_DIM; // 3 * 96 = 288
 
+		inline constexpr uint8_t 		TRIGGER_BANDS_MAX		= 3; 					// 최대 3개의 주파수 대역 감시(T20_MAX_TRIGGER_BANDS)
+
+		inline constexpr uint16_t       MFCC_COMPONENTS         = 3U;      				// Static, Delta, Delta-Delta
+        inline constexpr uint16_t       MFCC_TOTAL_DIM          = MFCC_COEFFS_MAX * MFCC_COMPONENTS; // 32 * 3 = 96
+
+		inline constexpr uint16_t 		AXIS_COUNT_MAX     			= 3U;
+        inline constexpr uint16_t       MAX_FEATURE_DIM         = AXIS_COUNT_MAX * MFCC_TOTAL_DIM; 	// 3축 합산 최대 차원 3 * 96 = 288
+        inline constexpr uint16_t       SIMD_ALIGN              = 16U;                  // 메모리 정렬 기준
+
+        inline constexpr float          FREQ_RES_HZ             = SAMPLE_RATE_HZ / (float)FFT_SIZE;   // 샘플 레이트와 FFT 사이즈 기반 주파수 해상도
+
+		inline constexpr uint8_t 		AXIS_COUNT_DEFAULT		= 3U;						// 기본 축 개수
     }
-	
-	
+
+
 
     namespace C10_BMI {
         inline constexpr uint32_t 		SPI_FREQ_HZ      		= 10000000UL;			// SPI 통신 속도 (10MHz)
         inline constexpr uint8_t  		REG_CALIB_OFFSET_START 	= 0x71U;				// 캘리브레이션 레지스터 시작 주소
         inline constexpr float    		LSB_PER_G        		= 2048.0f;              // 16G 설정 시 G당 LSB (범위별 가변 필요)
-        
-        inline constexpr uint16_t       FIFO_FRAME_SIZE = 12U;                 // Accel(6) + Gyro(6)
-        inline constexpr uint16_t       FIFO_BATCH_SIZE = 32U;                 // 한번에 읽을 프레임 수
-        
-        inline constexpr uint32_t       ANY_MOTION_STEP_MS = 20UL;     // BMI270 Any-Motion 1틱 기준 시간
+
+        inline constexpr uint16_t       FIFO_FRAME_SIZE 		= 12U;                 // Accel(6) + Gyro(6)
+        inline constexpr uint16_t       FIFO_BATCH_SIZE 		= 32U;                 // 한번에 읽을 프레임 수
+
+        inline constexpr uint32_t       ANY_MOTION_STEP_MS 		= 20UL;     			// BMI270 Any-Motion 1틱 기준 시간
     }
 
     namespace C10_Rec {
-        
+
         inline constexpr uint32_t 		BINARY_MAGIC     	= 0x54323042UL;				// 바이너리 파일 식별자 (T20B)
-        inline constexpr uint16_t 		BINARY_VERSION   	= = 220U;     // 파일 헤더용 버전 번호						// 바이너리 포맷 버전
+        inline constexpr uint16_t 		BINARY_VERSION_NUM  = 220U;     				// 파일 헤더용 버전 바이너리 포맷 버전
         inline constexpr uint16_t 		BATCH_WMARK_HIGH 	= 8U;						// Write 워터마크
         inline constexpr uint32_t 		BATCH_IDLE_FLUSH_MS = 250U;						// 유휴 상태 시 강제 Flush 대기시간
         inline constexpr uint16_t 		ROTATE_KEEP_MAX  	= 8U;						// 파일 로테이션 유지 개수
-        
-        
-        inline constexpr uint8_t        FLAG_NTP_SYNCED     = 0x01U;               // NTP 동기화 완료 비트
-        inline constexpr uint8_t        FLAG_TRIGGERED      = 0x02U;               // 이벤트 발생 비트
-        
-        inline constexpr uint32_t 		ROTATION_MB_DEF 	= 50U;                      // 기본 로테이션 용량 (MB)
-        
+
+
+        inline constexpr uint8_t        FLAG_NTP_SYNCED     = 0x01U;               		// NTP 동기화 완료 비트
+        inline constexpr uint8_t        FLAG_TRIGGERED      = 0x02U;               		// 이벤트 발생 비트
+
         inline constexpr float    		THRES_RMS_DEF   	= 0.5f;                     // 기본 RMS 트리거 임계값
-        inline constexpr uint32_t       TRIGGER_HOLD_MS     = 5000UL;              // 트리거 유지 시간
+        inline constexpr uint32_t       TRIGGER_HOLD_MS     = 5000UL;              		// 트리거 유지 시간
+		inline constexpr uint32_t 		TRIGGER_DURATION_MS_DEFAULT = 100UL;	 		// 100ms를 목표로 계산 (매직넘버 100U를 상수로 추출 권장)
+
+		inline constexpr uint32_t 		SLEEP_SEC_DEF   		= 300U;                 // 기본 딥슬립 진입 시간
+
+		inline constexpr uint32_t 		ROTATION_MB_DEF        = 10U;     				// 기본 로테이션 용량 (MB) 50U에서 10U로 기본값 조정 (함수와 동기화)
+		inline constexpr uint32_t 		ROTATION_MIN_DEF       = 60U;     				// 추가: 시간 기반 로테이션 기본값
+		inline constexpr uint16_t 		MQTT_PORT_DEF          = 1883U;   				// 추가: MQTT 표준 포트
+		inline constexpr uint32_t 		WATCHDOG_MS_DEF        = 2000UL;  				// 추가: 시스템 워치독 기본값
+
     }
 
     namespace C10_Web {
@@ -144,10 +147,10 @@ namespace T20 {
         inline constexpr char const* 	MOUNT_SD      		= "/sdcard";
         inline constexpr char const* 	DIR_SYS       		= "/sys";
         inline constexpr char const* 	DIR_WEB       		= "/www";
-        inline constexpr char const* 	FILE_CFG_JSON 		= "/sys/runtime_cfg_220_001.json"; 
+        inline constexpr char const* 	FILE_CFG_JSON 		= "/sys/runtime_cfg_220_001.json";
         inline constexpr char const* 	FILE_REC_IDX  		= "/sys/recorder_index.json";
         inline constexpr char const* 	FILE_BMI_CALIB		= "/sys/bmi_calib.json";
-        inline constexpr char const* 	WEB_INDEX     		= "index_220_001.html";            
+        inline constexpr char const* 	WEB_INDEX     		= "index_220_001.html";
         inline constexpr char const* 	SD_DIR_BIN    		= "/t20_data/bin";
         inline constexpr char const* 	SD_PREFIX_BIN 		= "/t20_data/bin/rec_";
         inline constexpr char const* 	DIR_FALLBACK  		= "/fallback";
@@ -249,14 +252,28 @@ typedef struct {
 
 // 특징량 벡터 구조체 (타임스탬프 및 117차원 확장)
 typedef struct alignas(T20::C10_DSP::SIMD_ALIGN) {
-    uint64_t timestamp_ms;
-    uint32_t frame_id;
-    uint8_t  active_axes;
-    uint8_t  status_flags;   // Bit 0: C10_Rec::FLAG_NTP_SYNCED, Bit 1: C10_Rec::FLAG_TRIGGERED
-    float    rms[T20::C10_DSP::AXIS_COUNT_MAX];
-    float    band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX];
-    float    features[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_TOTAL_DIM]; 
+    uint64_t timestamp_ms;      // 8
+    uint32_t frame_id;          // 4
+    uint8_t  active_axes;       // 1
+    uint8_t  status_flags;      // 1
+    uint8_t  reserved_1[2];     // 2 (Header를 16바이트로 정렬)
+
+    float    rms[T20::C10_DSP::AXIS_COUNT_MAX];         	// 12
+    float    band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX]; 	// 12
+    uint8_t  reserved_2[8];     							// 8 (features 시작점을 48바이트로 정렬하여 SIMD 최적화)
+
+    alignas(T20::C10_DSP::SIMD_ALIGN) float features[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_TOTAL_DIM];  // 축별 데이터가 각각 16바이트 정렬되도록 보장 (MFCC_TOTAL_DIM=96은 4바이트 float 기준 384바이트로 16의 배수임)
 } ST_T20_FeatureVector_t;
+
+// typedef struct alignas(T20::C10_DSP::SIMD_ALIGN) {
+//     uint64_t timestamp_ms;
+//     uint32_t frame_id;
+//     uint8_t  active_axes;
+//     uint8_t  status_flags;   															// Bit 0: C10_Rec::FLAG_NTP_SYNCED, Bit 1: C10_Rec::FLAG_TRIGGERED
+//     float    rms[T20::C10_DSP::AXIS_COUNT_MAX];
+//     float    band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX];
+//     float    features[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_TOTAL_DIM];
+// } ST_T20_FeatureVector_t;
 
 
 typedef struct {
@@ -338,7 +355,7 @@ typedef struct {
     uint8_t  active_axes;   // 1 또는 3
     uint8_t  reserved;
     uint32_t record_count;
-    char     config_dump[1024];
+    char     config_dump[T20::C10_Web::JSON_BUF_SIZE]; // JSON 버퍼 크기와 연동
 } ST_T20_RecorderBinaryHeader_t;
 
 typedef struct {
@@ -417,38 +434,40 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 	// MQTT 기본 비활성화
 	cfg.mqtt.enable 								= false;
 	strlcpy(cfg.mqtt.broker							, "broker.hivemq.com", 64);
-	cfg.mqtt.port 									= 1883;
+	cfg.mqtt.port                   				= T20::C10_Rec::MQTT_PORT_DEF;
 	strlcpy(cfg.mqtt.id								, "T20_DEVICE", 16);
 	strlcpy(cfg.mqtt.topic_root						, "t20/sensor", 64);
 
 	// [4] Feature & Output - 기본 1축, MFCC 13차원
 	// [4] Feature & Output - 상수 기반 자동 매핑
-    cfg.feature.fft_size        = (EM_T20_FftSize_t)T20::C10_DSP::FFT_SIZE;
-    cfg.feature.hop_size        = T20::C10_DSP::FFT_SIZE; // 기본적으로 No-overlap 또는 상수 기반 설정
-    cfg.feature.mfcc_coeffs     = T20::C10_DSP::MFCC_COEFFS_DEF;
-    cfg.feature.axis_count      = EN_T20_AXIS_SINGLE; // 필요시 C10_DSP에 DEFAULT_AXIS_COUNT 정의 후 사용
- 
+    cfg.feature.fft_size        					= (EM_T20_FftSize_t)T20::C10_DSP::FFT_SIZE;
+    cfg.feature.hop_size        					= T20::C10_DSP::FFT_SIZE; 				// 기본적으로 No-overlap 또는 상수 기반 설정
+    cfg.feature.mfcc_coeffs     					= T20::C10_DSP::MFCC_COEFFS_DEF;
+    cfg.feature.axis_count  						= T20::C10_DSP::AXIS_COUNT_DEFAULT;
+
+
     cfg.output.sequence_frames    					= T20::C10_Sys::SEQUENCE_FRAMES_MAX;
     cfg.output.enabled            					= true;
     cfg.output.output_sequence    					= false; // 단일 벡터 모드
 
     // [5] Storage - SDMMC 로테이션 설정
     cfg.storage.save_raw          					= false;
-    cfg.storage.rotation_mb       					= 10;
-    cfg.storage.rotation_min      					= 60;
-    cfg.storage.rotate_keep_max   					= 8;
-    cfg.storage.idle_flush_ms     					= 250;
+    cfg.storage.rotation_mb       					= T20::C10_Rec::ROTATION_MB_DEF;
+    cfg.storage.rotation_min      					= T20::C10_Rec::ROTATION_MIN_DEF;
+    cfg.storage.rotate_keep_max   					= T20::C10_Rec::ROTATE_KEEP_MAX;
+    cfg.storage.idle_flush_ms     					= T20::C10_Rec::BATCH_IDLE_FLUSH_MS;
 
     // [6] Trigger & Power - 스마트 트리거 밴드 초기화
     cfg.trigger.use_threshold     					= false;
-    cfg.trigger.threshold_rms       = T20::C10_Ext::THRES_RMS_DEF;
-    // 100ms를 목표로 계산 (매직넘버 100U를 상수로 추출 권장)
-    inline constexpr uint32_t DEFAULT_TRIGGER_DURATION_MS = 100UL;
-    cfg.trigger.any_motion_duration = (uint16_t)(DEFAULT_TRIGGER_DURATION_MS / T20::C10_BMI::ANY_MOTION_STEP_MS);
+    cfg.trigger.threshold_rms       				= T20::C10_Rec::THRES_RMS_DEF;
+
+
+
+	cfg.trigger.any_motion_duration = (uint16_t)(T20::C10_Rec::TRIGGER_DURATION_MS_DEFAULT / T20::C10_BMI::ANY_MOTION_STEP_MS);
     cfg.trigger.use_deep_sleep     					= false;
-    cfg.trigger.sleep_timeout_sec  					= 300;
-    
-    
+    cfg.trigger.sleep_timeout_sec  					= T20::C10_Rec::SLEEP_SEC_DEF;
+
+
 
     for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
         cfg.trigger.bands[i].enable   				= false;
@@ -460,7 +479,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     // [7] System - 자동 시작 및 워치독 설정
     cfg.system.auto_start         					= true;
     cfg.system.button_pin         					= T20::C10_Pin::BTN_CONTROL;
-    cfg.system.watchdog_ms        					= 2000; // (2초)
+    cfg.system.watchdog_ms        					= T20::C10_Rec::WATCHDOG_MS_DEF; // (2초)
 
     return cfg;
 }
