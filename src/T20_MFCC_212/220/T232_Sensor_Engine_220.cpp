@@ -81,10 +81,18 @@ uint16_t CL_T20_SensorEngine::readFifoBatch(float* p_out_x, float* p_out_y, floa
 
     for (uint16_t i = 0; i < frames_to_read; i++) {
         if (axis_count == EN_T20_AXIS_TRIPLE) {
-            // [3축 모드]: 가속도 X, Y, Z를 각각의 포인터 버퍼에 분리 저장
-            p_out_x[i] = fifo_raw[i].accelX;
-            p_out_y[i] = fifo_raw[i].accelY;
-            p_out_z[i] = fifo_raw[i].accelZ;
+            
+            if (axis_count == EN_T20_AXIS_TRIPLE) {
+                if (target_axis >= 3) { // 자이로 계열이 선택된 경우
+                    p_out_x[i] = fifo_raw[i].gyroX;
+                    p_out_y[i] = fifo_raw[i].gyroY;
+                    p_out_z[i] = fifo_raw[i].gyroZ;
+                } else { //  가속도 X, Y, Z를 각각의 포인터 버퍼에 분리 저장
+                    p_out_x[i] = fifo_raw[i].accelX;
+                    p_out_y[i] = fifo_raw[i].accelY;
+                    p_out_z[i] = fifo_raw[i].accelZ;
+                }
+            }
         } else {
             // [1축 모드]: 타겟으로 지정된 단일 물리축만 p_out_x 버퍼에 저장
             switch (target_axis) {
