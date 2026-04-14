@@ -1,7 +1,16 @@
 /* ============================================================================
  * File: T231_Dsp_Pipeline_220.h
- * Summary: MFCC & DSP 연산 전담 엔진
- * Description: 동적 필터, 노이즈 게이트, 적응형 학습 기능
+ * Summary: MFCC & DSP Pipeline Engine (SIMD Optimized)
+ * * [AI 메모: 제공 기능 요약]
+ * 1. ESP32-S3 SIMD 가속을 활용한 고속 FFT 및 MFCC 추출 엔진.
+ * 2. 16바이트 정렬된 Internal SRAM 버퍼를 사용하여 연산 지연 최소화.
+ * 3. 축별 독립적인 IIR 필터 상태 및 노이즈 프로필 관리.
+ * * [AI 메모: 구현 및 유지보수 주의사항]
+ * 1. SIMD 연산용 버퍼(_work_frame, _fft_io_buf 등)는 반드시 MALLOC_CAP_INTERNAL에
+ * 할당되어야 하며, PSRAM에 위치할 경우 연산 오류나 심각한 성능 저하가 발생합니다.
+ * 2. dsps_fft2r_init_fc32는 실행 시 내부 룩업 테이블을 생성하므로 begin()에서
+ * 한 번만 호출되도록 관리합니다.
+ * 3. MFCC 계수(Static, Delta, Delta-Delta) 조립 시 메모리 정렬(alignas(16))을 유지합니다.
  * ========================================================================== */
 #pragma once
 
@@ -20,6 +29,7 @@ class CL_T20_DspPipeline {
 
 	// 단일 프레임 처리 (Time Domain -> 39D MFCC Vector)
     bool processFrame(const float* p_time_in, ST_T20_FeatureVector_t* p_vec_out, uint8_t axis_idx = 0);
+
 
 	// 노이즈 학습 제어 (외부 버튼이나 API에서 호출)
 	void setNoiseLearning(bool active) {
@@ -65,43 +75,34 @@ class CL_T20_DspPipeline {
 
 
    private:
-	ST_T20_Config_t _cfg;
+	ST_T20_Config_t 	_cfg;
 
-    // 동적 할당 버퍼 (SIMD 정렬 보장)
-    float* _work_frame = nullptr;
-    float* _window     = nullptr;
-    float* _power      = nullptr;
-    float* _noise_spectrum = nullptr;
-    float* _mel_bank_flat = nullptr; // [MEL_FILTERS * bins] 형태로 관리
-    float* _fft_io_buf = nullptr;    // FFT 연산용 복소수 버퍼 (N*2)
+    // 동적 할당 버퍼 (SIMD 정렬 보장) (Internal SRAM 강제 할당)
+    float* 				_work_frame 	= nullptr;
+    float* 				_window     	= nullptr;
+    float* 				_power      	= nullptr;
+    float* 				_noise_spectrum = nullptr;	// 3축 분량
+    float* 				_mel_bank_flat 	= nullptr; 	// [MEL_FILTERS * bins] 형태로 관리
+    float* 				_fft_io_buf 	= nullptr;  // FFT 연산용 복소수 버퍼 (N*2)
 
-    alignas(16) float _log_mel[T20::C10_DSP::MEL_FILTERS];
-    alignas(16) float _dct_matrix[T20::C10_DSP::MFCC_COEFFS_MAX][T20::C10_DSP::MEL_FILTERS];
-    alignas(16) float _mfcc_history[3][T20::C10_DSP::MFCC_HISTORY_LEN][T20::C10_DSP::MFCC_COEFFS_MAX];
+	alignas(16) float 	_log_mel[T20::C10_DSP::MEL_FILTERS];
+    alignas(16) float 	_dct_matrix[T20::C10_DSP::MFCC_COEFFS_MAX][T20::C10_DSP::MEL_FILTERS];
+    alignas(16) float 	_mfcc_history[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_HISTORY_LEN][T20::C10_DSP::MFCC_COEFFS_MAX];
 
-	// alignas(16) float _work_frame[T20::C10_DSP::FFT_SIZE];
-	// alignas(16) float _window[T20::C10_DSP::FFT_SIZE];
-	// alignas(16) float _power[T20::C10_DSP::FFT_BINS];
-	// alignas(16) float _noise_spectrum[T20::C10_DSP::FFT_BINS];
-	// alignas(16) float _log_mel[T20::C10_DSP::MEL_FILTERS];
-	// alignas(16) float _mel_bank[T20::C10_DSP::MEL_FILTERS][T20::C10_DSP::FFT_BINS];
-	// alignas(16) float _dct_matrix[T20::C10_DSP::MFCC_COEFFS_MAX][T20::C10_DSP::MEL_FILTERS];
-	// alignas(16) float _mfcc_history[T20::C10_DSP::MFCC_HISTORY_LEN][T20::C10_DSP::MFCC_COEFFS_MAX];
-
-	uint16_t _current_fft_size = 0;
 
 	// 필터 및 상태 변수
-	alignas(16) float _biquad_coeffs[5];
-	float _biquad_state[3][2];    // 축별 IIR Biquad 상태 (2-tap)
+	alignas(16) float 	_biquad_coeffs[5];
 
+	float 				_biquad_state[T20::C10_DSP::AXIS_COUNT_MAX][2];   // 축별 IIR Biquad 상태 (2-tap)
+	float 				_prev_sample[T20::C10_DSP::AXIS_COUNT_MAX];       // 축별 Pre-emphasis 이전 샘플
+	float 				_current_rms[T20::C10_DSP::AXIS_COUNT_MAX];       // 축별 실시간 RMS
 
-	float _prev_sample[3];       // 축별 Pre-emphasis 이전 샘플
+	uint16_t 			_history_count[T20::C10_DSP::AXIS_COUNT_MAX];
+	uint16_t 			_noise_learned_frames[T20::C10_DSP::AXIS_COUNT_MAX]; // 축별 학습 프레임 카운터 분리
 
+	bool	 			_noise_learning_active = false;
 
-	uint16_t _history_count[3];
-	uint16_t _noise_learned_frames[3]; // 축별 학습 프레임 카운터 분리
-	bool	 _noise_learning_active;
-	float _current_rms[3];       // 축별 실시간 RMS
+	uint16_t 			_current_fft_size = 0;
 
 
 };
