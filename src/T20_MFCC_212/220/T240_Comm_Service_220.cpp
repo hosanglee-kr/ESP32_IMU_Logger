@@ -130,7 +130,8 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     _server.on("/api/t20/status", HTTP_GET, [this, p](AsyncWebServerRequest* request) {
         JsonDocument doc;
         doc["running"] = p->running;
-        doc["hash"] = calcStatusHash(0, p->storage.getRecordCount(), p->running);
+        // 0 대신 p->sample_counter와 p->measurement_active 적용
+        doc["hash"] = calcStatusHash(p->sample_counter, p->storage.getRecordCount(), p->measurement_active); 
         doc["sensor_status"] = p->sensor.getStatusText();
         doc["storage_open"] = p->storage.isOpen();
         _sendJson(request, doc);
@@ -140,14 +141,24 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     // 2. 레코더 및 파일 스트리밍 API
     // ========================================================================
     _server.on("/api/t20/recorder_begin", HTTP_POST, [p](AsyncWebServerRequest* request) {
-        p->measurement_active = true; // 플래그만 세팅하면 T230의 run()이 알아서 세션을 엽니다.
+        p->measurement_active = true;
+        // 웹 요청 시 명시적으로 스토리지 세션을 열고 이벤트를 기록합니다.
+        if (!p->storage.isOpen()) {
+            p->storage.openSession(p->cfg);
+            p->storage.writeEvent("web_start");
+        }
         request->send(200, "application/json", "{\"ok\":true}");
     });
 
     _server.on("/api/t20/recorder_end", HTTP_POST, [p](AsyncWebServerRequest* request) {
         p->measurement_active = false;
+        // 웹 요청 시 명시적으로 스토리지 세션을 닫습니다.
+        if (p->storage.isOpen()) {
+            p->storage.closeSession("web_stop");
+        }
         request->send(200, "application/json", "{\"ok\":true}");
     });
+
 
     // 인덱스 파일 조회
     _server.on("/api/t20/recorder_index", HTTP_GET, [this](AsyncWebServerRequest* request) {

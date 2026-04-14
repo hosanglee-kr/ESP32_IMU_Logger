@@ -72,17 +72,8 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.output.output_sequence = o["output_sequence"] | out_cfg.output.output_sequence;
         out_cfg.output.sequence_frames = o["sequence_frames"] | out_cfg.output.sequence_frames;
     }
-    
-    // 5. MQTT
-    JsonObjectConst mq = doc["mqtt"];
-    if (mq) {
-        out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
-        strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
-        out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
-        strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
-    }
 
-    // 6. Storage
+    // 5. Storage
     JsonObjectConst st = doc["storage"];
     if (st) {
         out_cfg.storage.rotation_mb     = st["rotation_mb"] | out_cfg.storage.rotation_mb;
@@ -92,7 +83,7 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.storage.idle_flush_ms   = st["idle_flush_ms"] | out_cfg.storage.idle_flush_ms;
     }
 
-    // 7. Trigger
+    // 6. Trigger
     JsonObjectConst tr = doc["trigger"];
     if (tr) {
         out_cfg.trigger.use_threshold       = tr["use_threshold"] | out_cfg.trigger.use_threshold;
@@ -111,12 +102,45 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
             }
         }
     }
+    
+    // === 7. WiFi ===
+    JsonObjectConst wf = doc["wifi"];
+    if (wf) {
+        out_cfg.wifi.mode = (EM_T20_WiFiMode_t)(wf["mode"] | out_cfg.wifi.mode);
+        strlcpy(out_cfg.wifi.ap_ssid, wf["ap_ssid"] | out_cfg.wifi.ap_ssid, sizeof(out_cfg.wifi.ap_ssid));
+        strlcpy(out_cfg.wifi.ap_password, wf["ap_password"] | out_cfg.wifi.ap_password, sizeof(out_cfg.wifi.ap_password));
+        strlcpy(out_cfg.wifi.ap_ip, wf["ap_ip"] | out_cfg.wifi.ap_ip, sizeof(out_cfg.wifi.ap_ip));
 
-    // 8. System
+        JsonArrayConst multi = wf["multi_ap"];
+        if (multi) {
+            for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX && i < multi.size(); i++) {
+                strlcpy(out_cfg.wifi.multi_ap[i].ssid, multi[i]["ssid"] | out_cfg.wifi.multi_ap[i].ssid, sizeof(out_cfg.wifi.multi_ap[i].ssid));
+                strlcpy(out_cfg.wifi.multi_ap[i].password, multi[i]["password"] | out_cfg.wifi.multi_ap[i].password, sizeof(out_cfg.wifi.multi_ap[i].password));
+                out_cfg.wifi.multi_ap[i].use_static_ip = multi[i]["use_static_ip"] | out_cfg.wifi.multi_ap[i].use_static_ip;
+                strlcpy(out_cfg.wifi.multi_ap[i].local_ip, multi[i]["local_ip"] | out_cfg.wifi.multi_ap[i].local_ip, sizeof(out_cfg.wifi.multi_ap[i].local_ip));
+                strlcpy(out_cfg.wifi.multi_ap[i].gateway, multi[i]["gateway"] | out_cfg.wifi.multi_ap[i].gateway, sizeof(out_cfg.wifi.multi_ap[i].gateway));
+                strlcpy(out_cfg.wifi.multi_ap[i].subnet, multi[i]["subnet"] | out_cfg.wifi.multi_ap[i].subnet, sizeof(out_cfg.wifi.multi_ap[i].subnet));
+                strlcpy(out_cfg.wifi.multi_ap[i].dns1, multi[i]["dns1"] | out_cfg.wifi.multi_ap[i].dns1, sizeof(out_cfg.wifi.multi_ap[i].dns1));
+                strlcpy(out_cfg.wifi.multi_ap[i].dns2, multi[i]["dns2"] | out_cfg.wifi.multi_ap[i].dns2, sizeof(out_cfg.wifi.multi_ap[i].dns2));
+            }
+        }
+    }
+    
+    // 8. MQTT
+    JsonObjectConst mq = doc["mqtt"];
+    if (mq) {
+        out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
+        strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
+        out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
+        strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
+    }
+
+    // 9. System
     JsonObjectConst sys = doc["system"];
     if (sys) {
         out_cfg.system.auto_start  = sys["auto_start"] | out_cfg.system.auto_start;
         out_cfg.system.watchdog_ms = sys["watchdog_ms"] | out_cfg.system.watchdog_ms;
+        out_cfg.system.button_pin  = sys["button_pin"] | out_cfg.system.button_pin;
     }
 
     return true;
@@ -162,11 +186,12 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     o["output_sequence"]     = cfg.output.output_sequence;
     o["sequence_frames"]     = cfg.output.sequence_frames;
     
-    JsonObject mq      = out_doc["mqtt"].to<JsonObject>();
-    mq["enable"]       = cfg.mqtt.enable;
-    mq["broker"]       = cfg.mqtt.broker;
-    mq["port"]         = cfg.mqtt.port;
-    mq["topic_root"]   = cfg.mqtt.topic_root;
+    // === WiFi ===
+    JsonObject wf       = out_doc["wifi"].to<JsonObject>();
+    wf["mode"]          = (int)cfg.wifi.mode;
+    wf["ap_ssid"]       = cfg.wifi.ap_ssid;
+    wf["ap_password"]   = cfg.wifi.ap_password;
+    wf["ap_ip"]         = cfg.wifi.ap_ip;
 
     JsonObject st           = out_doc["storage"].to<JsonObject>();
     st["rotation_mb"]       = cfg.storage.rotation_mb;
@@ -190,10 +215,31 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         b["end_hz"]    = cfg.trigger.bands[i].end_hz;
         b["threshold"] = cfg.trigger.bands[i].threshold;
     }
+    
+    JsonArray multi = wf["multi_ap"].to<JsonArray>();
+    for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
+        JsonObject ap = multi.add<JsonObject>();
+        ap["ssid"]          = cfg.wifi.multi_ap[i].ssid;
+        ap["password"]      = cfg.wifi.multi_ap[i].password;
+        ap["use_static_ip"] = cfg.wifi.multi_ap[i].use_static_ip;
+        ap["local_ip"]      = cfg.wifi.multi_ap[i].local_ip;
+        ap["gateway"]       = cfg.wifi.multi_ap[i].gateway;
+        ap["subnet"]        = cfg.wifi.multi_ap[i].subnet;
+        ap["dns1"]          = cfg.wifi.multi_ap[i].dns1;
+        ap["dns2"]          = cfg.wifi.multi_ap[i].dns2;
+    }
+    
+    JsonObject mq      = out_doc["mqtt"].to<JsonObject>();
+    mq["enable"]       = cfg.mqtt.enable;
+    mq["broker"]       = cfg.mqtt.broker;
+    mq["port"]         = cfg.mqtt.port;
+    mq["topic_root"]   = cfg.mqtt.topic_root;
+
 
     JsonObject sys         = out_doc["system"].to<JsonObject>();
     sys["auto_start"]      = cfg.system.auto_start;
     sys["watchdog_ms"]     = cfg.system.watchdog_ms;
+    sys["button_pin"]      = cfg.system.button_pin;
 }
 
 void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_str) {
@@ -201,3 +247,6 @@ void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_
     buildJson(cfg, doc);
     serializeJson(doc, out_str);
 }
+
+
+

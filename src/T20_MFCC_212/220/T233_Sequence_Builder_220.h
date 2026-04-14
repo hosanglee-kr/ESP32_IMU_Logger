@@ -45,10 +45,13 @@ public:
     uint16_t getFeatureDim() const { return _dim; }
 
 private:
-    float    _data[T20::C10_Sys::SEQUENCE_FRAMES_MAX][T20::C10_DSP::MFCC_COEFFS_MAX * 3];
+    float    _data[T20::C10_Sys::SEQUENCE_FRAMES_MAX][T20::C10_DSP::MAX_FEATURE_DIM];
+
     uint16_t _frames;
     uint16_t _dim;
     uint16_t _head;
     bool     _is_full;
 };
+
+
 

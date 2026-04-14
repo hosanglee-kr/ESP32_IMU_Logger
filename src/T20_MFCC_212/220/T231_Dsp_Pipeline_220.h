@@ -68,8 +68,6 @@ class CL_T20_DspPipeline {
 	// 39차원 벡터(Delta, Delta-Delta) 조립
 	void _pushHistory(const float* p_mfcc, uint8_t axis_idx);      // [수정] axis_idx 추가
 
-	void _computeDelta(const float history[][T20::C10_DSP::MFCC_COEFFS_MAX], uint16_t dim, float* delta_out);
-	void _computeDeltaDelta(const float history[][T20::C10_DSP::MFCC_COEFFS_MAX], uint16_t dim, float* delta2_out);
 	void _build39DVector(ST_T20_FeatureVector_t* p_vec_out, uint8_t axis_idx); // [수정] axis_idx 추가
 
 

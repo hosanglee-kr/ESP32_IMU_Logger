@@ -47,26 +47,6 @@ struct CL_T20_Mfcc::ST_Impl {
 
 	ST_T20_Config_t cfg;
 	bool			running = false;
-	
-	/*
-	TODO :
-	   - 필요여부 재검토 필요
-	   - ST_Impl 전체를 psram vs 필요항 것(raw_buffer 등)만 psram 사용
-	
-	   // new 연산자 오버로딩: ST_Impl 생성 시 무조건 PSRAM에 할당
-    void* operator new(size_t size) {
-        void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
-        if (!ptr) {
-            Serial.println(F("[Critical Error] Failed to allocate ST_Impl in PSRAM!"));
-            // ESP32-S3 보드 설정에서 PSRAM이 활성화되어 있는지(OPI/QSPI) 반드시 확인해야 합니다.
-        }
-        return ptr;
-    }
-
-    void operator delete(void* ptr) {
-        heap_caps_free(ptr);
-    }
-    */
 
 	ST_Impl() : sensor(SPI), comm() {
 	}

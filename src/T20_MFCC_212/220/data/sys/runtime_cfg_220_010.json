@@ -1,0 +1,125 @@
+{
+  "sensor": {
+    "axis": 2,
+    "accel_range": 2,
+    "gyro_range": 4
+  },
+  "dsp": {
+    "remove_dc": true,
+    "preemphasis": {
+      "enable": true,
+      "alpha": 0.97
+    },
+    "filter": {
+      "enable": true,
+      "type": 2,
+      "cutoff_hz_1": 15.0,
+      "q_factor": 0.707
+    },
+    "noise": {
+      "enable_gate": true,
+      "gate_threshold_abs": 0.002,
+      "mode": 2,
+      "spectral_subtract_strength": 1.0,
+      "adaptive_alpha": 0.05,
+      "noise_learn_frames": 8
+    }
+  },
+  "feature": {
+    "fft_size": 256,
+    "hop_size": 256,
+    "mfcc_coeffs": 13,
+    "axis_count": 3
+  },
+  "output": {
+    "enabled": true,
+    "output_sequence": false,
+    "sequence_frames": 16
+  },
+  "mqtt": {
+    "enable": false,
+    "broker": "broker.hivemq.com",
+    "port": 1883,
+    "id": "T20_DEVICE",
+    "password": "",
+    "topic_root": "t20/sensor"
+  },
+  "storage": {
+    "save_raw": false,
+    "rotation_mb": 10,
+    "rotation_min": 60,
+    "rotate_keep_max": 8,
+    "idle_flush_ms": 250
+  },
+  "trigger": {
+    "use_threshold": false,
+    "threshold_rms": 0.5,
+    "use_deep_sleep": false,
+    "sleep_timeout_sec": 300,
+    "any_motion_duration": 5,
+    "bands": [
+      {
+        "enable": false,
+        "start_hz": 0.0,
+        "end_hz": 0.0,
+        "threshold": 0.0
+      },
+      {
+        "enable": false,
+        "start_hz": 0.0,
+        "end_hz": 0.0,
+        "threshold": 0.0
+      },
+      {
+        "enable": false,
+        "start_hz": 0.0,
+        "end_hz": 0.0,
+        "threshold": 0.0
+      }
+    ]
+  },
+  "system": {
+    "auto_start": true,
+    "watchdog_ms": 2000,
+    "button_pin": 0
+  },
+  "wifi": {
+    "mode": 3,
+    "ap_ssid": "T20_MFCC_AP",
+    "ap_password": "password1234",
+    "ap_ip": "192.168.4.1",
+    "multi_ap": [
+      {
+        "ssid": "",
+        "password": "",
+        "use_static_ip": false,
+        "local_ip": "",
+        "gateway": "",
+        "subnet": "",
+        "dns1": "",
+        "dns2": ""
+      },
+      {
+        "ssid": "",
+        "password": "",
+        "use_static_ip": false,
+        "local_ip": "",
+        "gateway": "",
+        "subnet": "",
+        "dns1": "",
+        "dns2": ""
+      },
+      {
+        "ssid": "",
+        "password": "",
+        "use_static_ip": false,
+        "local_ip": "",
+        "gateway": "",
+        "subnet": "",
+        "dns1": "",
+        "dns2": ""
+      }
+    ]
+  }
+}
+

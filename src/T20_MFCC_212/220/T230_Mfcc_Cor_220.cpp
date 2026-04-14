@@ -239,10 +239,29 @@ void T20_recorderTask(void* p_arg) {
     }
 }
 
-// --- [CL_T20_Mfcc Implementation] ---
 
-CL_T20_Mfcc::CL_T20_Mfcc() : _impl(new ST_Impl()) { g_t20 = this; }
-CL_T20_Mfcc::~CL_T20_Mfcc() { stop(); delete _impl; }
+// --- [CL_T20_Mfcc Implementation] ---
+CL_T20_Mfcc::CL_T20_Mfcc() {
+    // 192KB 거대 구조체를 PSRAM에 안전하게 할당
+    _impl = (ST_Impl*)heap_caps_malloc(sizeof(ST_Impl), MALLOC_CAP_SPIRAM);
+    if (_impl != nullptr) {
+        // 확보된 PSRAM 메모리 공간에 객체 생성자(초기화 리스트 등) 호출
+        new (_impl) ST_Impl(); 
+    } else {
+        Serial.println(F("[Critical] PSRAM Allocation Failed for ST_Impl!"));
+    }
+    g_t20 = this;
+}
+
+CL_T20_Mfcc::~CL_T20_Mfcc() { 
+    stop(); 
+    if (_impl) {
+        _impl->~ST_Impl(); // 소멸자 명시적 호출
+        heap_caps_free(_impl);
+        _impl = nullptr;
+    }
+}
+
 
 
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {

@@ -142,26 +142,27 @@ void CL_T20_StorageService::closeSession(const char* reason) {
 bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     if (!_session_open || !p_vec) return false;
 
+    const uint8_t axes = p_vec->active_axes;
+    // 설정된 계수 * 3(Static, Delta, D-Delta)
+    const uint16_t dim_per_axis = _current_cfg.feature.mfcc_coeffs * 3; 
+    const uint16_t feature_bytes = (dim_per_axis * axes * sizeof(float));
+    
     // 프레임 크기 계산: 
     // timestamp(8) + frame_id(4) + axes(1) + (39 * active_axes * float(4))
-    const uint8_t axes = p_vec->active_axes;
-    const uint16_t feature_bytes = (39 * axes * sizeof(float));
     const uint16_t total_frame_size = sizeof(p_vec->timestamp_ms) + 
                                       sizeof(p_vec->frame_id) + 
                                       sizeof(p_vec->active_axes) + 
                                       feature_bytes;
 
-    uint8_t slot = _dma_active_slot;
-
     // 슬롯 교체 로직 (DMA_SLOT_BYTES=4096 내에 프레임이 들어가는지 확인)
+    uint8_t slot = _dma_active_slot;
     if ((_dma_slot_used[slot] + total_frame_size) > DMA_SLOT_BYTES) {
         if (!_commitSlot(slot)) return false;
         _dma_active_slot = (slot + 1) % DMA_SLOT_COUNT;
         slot = _dma_active_slot;
-        
-        if (_dma_slot_used[slot] > 0) return false; // Buffer Busy (Drop Frame)
+        if (_dma_slot_used[slot] > 0) return false; 
     }
-
+    
     // 직렬화 (Serialization)
     uint8_t* ptr = &_dma_slots[slot][_dma_slot_used[slot]];
     
@@ -169,8 +170,11 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += 4;
     memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += 1;
     
-    // features[3][39] 배열에서 실제 활성화된 축 데이터만 연속 기록
-    memcpy(ptr, &p_vec->features[0][0], feature_bytes);
+    // [핵심] 2D 배열에서 실제 사용 중인 유효 차원 데이터만 추출하여 직렬화
+    for (uint8_t a = 0; a < axes; a++) {
+        memcpy(ptr, &p_vec->features[a][0], dim_per_axis * sizeof(float));
+        ptr += (dim_per_axis * sizeof(float));
+    }
 
     _dma_slot_used[slot] += total_frame_size;
     _written_bytes += total_frame_size;
@@ -181,6 +185,7 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     if (_batch_count >= _watermark_high) flush();
     return true;
 }
+
 
 // Raw 데이터 기록 (3축 모드 시 3축 파형 통합 기록 대응 가능)
 bool CL_T20_StorageService::pushRaw(const float* p_raw_x, const float* p_raw_y, const float* p_raw_z, uint16_t len, uint8_t active_axes) {

@@ -17,17 +17,6 @@ CL_T20_DspPipeline::CL_T20_DspPipeline() {
 
 	_current_fft_size = 0;
 
-    // _work_frame = nullptr;
-    // _window = nullptr;
-    // _power = nullptr;
-    // _noise_spectrum = nullptr;
-    // _fft_io_buf = nullptr;
-    // _mel_bank_flat = nullptr;
-    // _current_fft_size = 0;
-
-    // memset(_mfcc_history, 0, sizeof(_mfcc_history));
-    // memset(_biquad_state, 0, sizeof(_biquad_state));
-    // memset(_biquad_coeffs, 0, sizeof(_biquad_coeffs));
 }
 
 CL_T20_DspPipeline::~CL_T20_DspPipeline() {
@@ -46,12 +35,6 @@ void CL_T20_DspPipeline::_freeBuffers() {
     safe_free(_fft_io_buf);     _fft_io_buf 	= nullptr;
     safe_free(_mel_bank_flat);  _mel_bank_flat 	= nullptr;
 
-	// if (_work_frame)     { heap_caps_free(_work_frame);     _work_frame = nullptr; }
-    // if (_window)         { heap_caps_free(_window);         _window = nullptr; }
-    // if (_power)          { heap_caps_free(_power);          _power = nullptr; }
-    // if (_noise_spectrum) { heap_caps_free(_noise_spectrum); _noise_spectrum = nullptr; }
-    // if (_fft_io_buf)     { heap_caps_free(_fft_io_buf);     _fft_io_buf = nullptr; }
-    // if (_mel_bank_flat)  { heap_caps_free(_mel_bank_flat);  _mel_bank_flat = nullptr; }
 }
 
 
@@ -80,15 +63,6 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
         _noise_spectrum = (float*)heap_caps_aligned_alloc(16, 3 * bins * sizeof(float), MALLOC_CAP_INTERNAL);
         _fft_io_buf     = (float*)heap_caps_aligned_alloc(16, N * 2 * sizeof(float), MALLOC_CAP_INTERNAL);
         _mel_bank_flat  = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-
-        // _work_frame = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
-        // _window     = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
-        // _power      = (float*)heap_caps_aligned_alloc(16, bins * sizeof(float), MALLOC_CAP_INTERNAL);
-
-        // [중요 수정] 3축(X,Y,Z) 독립 노이즈 프로필을 위해 3 * bins 크기 할당
-        // _noise_spectrum = (float*)heap_caps_aligned_alloc(16, 3 * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        // _fft_io_buf = (float*)heap_caps_aligned_alloc(16, N * 2 * sizeof(float), MALLOC_CAP_INTERNAL);
-        // _mel_bank_flat = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float), MALLOC_CAP_INTERNAL);
 
         if (!_work_frame || !_window || !_power || !_mel_bank_flat || !_fft_io_buf || !_noise_spectrum) {
             Serial.println(F("[DSP] Critical: Memory Allocation Failed!"));
@@ -163,11 +137,6 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
 	// 벡터 곱셈 (Windowing) - SIMD 활용
     dsps_mul_f32(_work_frame, _window, _work_frame, _current_fft_size, 1, 1, 1);
     _computePowerSpectrum(_work_frame);
-
-    // [추가] 파워 스펙트럼이 계산된 직후, 현재 축의 대역 에너지를 추출하여 구조체에 저장
-    // (예: 500Hz ~ 800Hz 대역 감시 시)
-    p_vec_out->band_energy[axis_idx] = getBandEnergy(500.0f, 800.0f);
-
 
     // [중요 수정] axis_idx 전달
     _learnNoiseSpectrum(axis_idx);
@@ -341,21 +310,6 @@ void CL_T20_DspPipeline::_pushHistory(const float* p_mfcc, uint8_t axis_idx) {
 }
 
 
-void CL_T20_DspPipeline::_computeDelta(const float history[][T20::C10_DSP::MFCC_COEFFS_MAX], uint16_t dim, float* delta_out) {
-	// Window = 2 기준 공식: (2*h[t+2] + h[t+1] - h[t-1] - 2*h[t-2]) / 10
-	// 여기서는 v216의 Window=2 간소화 공식을 적용합니다.
-	const int t = 2;
-	for (int i = 0; i < dim; i++) {
-		delta_out[i] = (history[t + 1][i] - history[t - 1][i]) / 2.0f;
-	}
-}
-
-void CL_T20_DspPipeline::_computeDeltaDelta(const float history[][T20::C10_DSP::MFCC_COEFFS_MAX], uint16_t dim, float* delta2_out) {
-	const int t = 2;
-	for (int i = 0; i < dim; i++) {
-		delta2_out[i] = history[t + 1][i] - (2.0f * history[t][i]) + history[t - 1][i];
-	}
-}
 
 void CL_T20_DspPipeline::_build39DVector(ST_T20_FeatureVector_t* p_vec_out, uint8_t axis_idx) {
     uint16_t dim = _cfg.feature.mfcc_coeffs;
