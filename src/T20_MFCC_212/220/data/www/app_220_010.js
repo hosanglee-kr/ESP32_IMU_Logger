@@ -134,16 +134,27 @@ function updateChartDimensions() {
     charts.spec.data.labels = Array(Bins).fill('');
     charts.mfcc.data.labels = Array(mfccTotal).fill('');
     
-    const colors = [];
+    // [수정] 차트 라인 동적 생성 (1축이면 1줄, 3축이면 3줄)
+    charts.wave.data.datasets = [];
+    charts.spec.data.datasets = [];
+    const lineColors = ['#4caf50', '#ff9800', '#f44336'];
+    const bgColors = ['rgba(76, 175, 80, 0.1)', 'rgba(255, 152, 0, 0.1)', 'rgba(244, 67, 54, 0.1)'];
+
+    for(let i=0; i < sysState.axis_count; i++) {
+        charts.wave.data.datasets.push({ data: [], borderColor: lineColors[i], borderWidth: 1, pointRadius: 0 });
+        charts.spec.data.datasets.push({ data: [], borderColor: lineColors[i], borderWidth: 1, fill: true, backgroundColor: bgColors[i], pointRadius: 0 });
+    }
+    
+    const mfccColors = [];
     for(let i=0; i < mfccTotal; i++) {
         const axisIdx = Math.floor(i / (sysState.mfcc_coeffs * 3));
         const featType = Math.floor((i % (sysState.mfcc_coeffs * 3)) / sysState.mfcc_coeffs); 
-        
         const alpha = featType === 0 ? '1.0' : (featType === 1 ? '0.7' : '0.4');
         let rgb = axisIdx === 0 ? '76, 175, 80' : (axisIdx === 1 ? '255, 152, 0' : '244, 67, 54');
-        colors.push(`rgba(${rgb}, ${alpha})`);
+        mfccColors.push(`rgba(${rgb}, ${alpha})`);
     }
-    charts.mfcc.data.datasets[0].backgroundColor = colors;
+    if (charts.mfcc.data.datasets.length === 0) charts.mfcc.data.datasets.push({ data: [], backgroundColor: [] });
+    charts.mfcc.data.datasets[0].backgroundColor = mfccColors;
     
     charts.wave.update('none');
     charts.spec.update('none');
@@ -154,6 +165,8 @@ function updateChartDimensions() {
     waterfallMfccDelta.resize(sysState.mfcc_coeffs);
     waterfallMfccAccel.resize(sysState.mfcc_coeffs);
 }
+
+
 
 class WaterfallChart {
     constructor(canvasId, minVal, maxVal) {
@@ -206,15 +219,19 @@ function drawMfccWaterfalls(axis0Mfcc) {
 // ==========================================
 function renderLoop() {
     if (isSinglePending && pendingWave && pendingSpec && pendingMfcc) {
-        charts.wave.data.datasets[0].data = pendingWave;
-        charts.spec.data.datasets[0].data = pendingSpec;
+        // [수정] 축 개수만큼 차트에 데이터 매핑
+        for(let i=0; i < sysState.axis_count; i++) {
+            charts.wave.data.datasets[i].data = pendingWave[i];
+            charts.spec.data.datasets[i].data = pendingSpec[i];
+        }
         charts.mfcc.data.datasets[0].data = pendingMfcc;
         
         charts.wave.update('none');
         charts.spec.update('none');
         charts.mfcc.update('none');
         
-        waterfallSpec.draw(pendingSpec);
+        // Waterfall은 첫 번째 축(0번) 기준 렌더링 유지
+        waterfallSpec.draw(pendingSpec[0]);
         const singleAxisDim = sysState.mfcc_coeffs * 3;
         drawMfccWaterfalls(pendingMfcc.subarray(0, singleAxisDim));
         
@@ -231,6 +248,8 @@ function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
+
+
 function connectWebSocket() {
     socket = new WebSocket(`${T20_CONST.WS.PROTOCOL}//${window.location.host}${T20_CONST.API_BASE}/ws`);
     socket.binaryType = "arraybuffer";
@@ -243,19 +262,25 @@ function connectWebSocket() {
     socket.onmessage = (event) => {
         if (!(event.data instanceof ArrayBuffer)) return;
         const floats = new Float32Array(event.data);
-
+    
         const N = sysState.fft_size;
         const Bins = Math.floor(N / 2) + 1;
         const singleAxisDim = sysState.mfcc_coeffs * 3;
         const totalMfccDim = singleAxisDim * sysState.axis_count;
         
-        const expectedSingle = N + Bins + totalMfccDim;
+        // [수정] 3축일 경우 페이로드 크기가 N*3 + Bins*3 으로 확장됨
+        const expectedSingle = (N * sysState.axis_count) + (Bins * sysState.axis_count) + totalMfccDim;
         const expectedSeq = sysState.sequence_frames * totalMfccDim;
-
+    
         if (floats.length === expectedSingle) {
-            pendingWave = floats.subarray(0, N);
-            pendingSpec = floats.subarray(N, N + Bins);
-            pendingMfcc = floats.subarray(N + Bins, expectedSingle);
+            pendingWave = [];
+            pendingSpec = [];
+            // [수정] 직렬화된 데이터 배열을 다차원 배열로 슬라이싱
+            for(let i=0; i < sysState.axis_count; i++) {
+                pendingWave.push(floats.subarray(i * N, (i + 1) * N));
+                pendingSpec.push(floats.subarray((sysState.axis_count * N) + (i * Bins), (sysState.axis_count * N) + ((i + 1) * Bins)));
+            }
+            pendingMfcc = floats.subarray((sysState.axis_count * N) + (sysState.axis_count * Bins), expectedSingle);
             isSinglePending = true;
         }
         else if (floats.length === expectedSeq) {
@@ -267,6 +292,7 @@ function connectWebSocket() {
             isSeqPending = true;
         }
     };
+
 
     socket.onclose = () => { 
         const tag = document.getElementById('status-tag');
@@ -503,3 +529,4 @@ window.onload = () => {
     // 60Hz 렌더링 최적화 루프 엔진 가동
     requestAnimationFrame(renderLoop);
 };
+

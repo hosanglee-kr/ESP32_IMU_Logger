@@ -2,6 +2,27 @@
  * File: T230_Mfcc_Cor_220.cpp
  * Summary: Main Task Logic & Engine Orchestration
  * ========================================================================== */
+ 
+ /* 
+============================================================================
+ * [AI 메모: T20_processTask 제공 기능 요약]
+ * 1. Core 1에서 동작하며, DSP 파이프라인, 스마트 트리거, 특징량 추출을 총괄하는 메인 엔진.
+ * 2. 1축 및 3축 모드를 동적으로 인지하여 파형(Wave)과 스펙트럼(Spec)을 웹 페이로드 버퍼에 순차 직렬화.
+ * 3. 스마트 트리거(Band Energy) 시 3축 모드일 경우 각 축의 에너지를 추출해 가장 큰 값(Max)으로 감시.
+ * 4. 시퀀스 텐서 출력 모드(TinyML용)와 실시간 단일 프레임 스트리밍 모드(Web UI용) 동적 스위칭.
+ * 5. 거대한 특징량 구조체(약 1.2KB)로 인한 Stack Overflow를 방지하기 위해 Internal SRAM 힙 할당 적용.
+ *
+ * [AI 메모: 구현 및 유지보수 주의사항]
+ * 1. xQueueSend는 포인터가 아닌 값(Value)의 복사를 수행하므로, p_feature가 가리키는 
+ * 전체 1152바이트가 큐로 안전하게 복사됩니다.
+ * 2. 메모리 복사(memcpy) 단위인 N, bins, mfcc_dim의 크기 계산에 유의해야 합니다. 
+ * ws_payload 메모리 맵: [Wave축1..3] + [Spec축1..3] + [MFCC축1..3]
+ * 3. p_feature->features 배열은 16바이트 SIMD 패딩이 포함되어 있으므로, 통신으로 보낼 때는 
+ * a * 39 단위로 순수 데이터만 추출(Packing)하여 대역폭 낭비를 막아야 합니다.
+ * ==========================================================================
+ */
+
+
 #include "T220_Mfcc_220.h"
 #include "T221_Mfcc_Inter_220.h"
 #include "T210_Def_221.h"
@@ -85,20 +106,32 @@ void T20_processTask(void* p_arg) {
     if (!p) { vTaskDelete(nullptr); return; }
 
     uint8_t read_idx;
-    ST_T20_FeatureVector_t feature;
     uint32_t frame_id = 0;
 
     const uint16_t axis_cnt = (uint8_t)p->cfg.feature.axis_count;
-    const uint16_t mfcc_dim = 39 * axis_cnt;
-
-    // [1] 시퀀스 전송용 메모리 할당 (16바이트 정렬, 내부 RAM 사용으로 캐시 미스 방지)
-    float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim * sizeof(float), MALLOC_CAP_INTERNAL);
-
-    // [2] 단일 프레임 WS 전송용 통합 버퍼 할당 (프론트엔드 파형 + 스펙트럼 + MFCC 차트용)
+    const uint16_t mfcc_dim = 39 * axis_cnt; // 단일축 39차원 x 축 개수
     const uint16_t N = p->cfg.feature.fft_size;
     const uint16_t bins = (N / 2) + 1;
-    const size_t ws_payload_len = N + bins + mfcc_dim;
+
+    // [최적화] Stack Overflow 방지 및 SIMD 가속을 위한 구조체 힙(Internal SRAM) 할당
+    ST_T20_FeatureVector_t* p_feature = (ST_T20_FeatureVector_t*)heap_caps_aligned_alloc(16, sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_INTERNAL);
+
+    // [1] 시퀀스 전송용 메모리 할당 (16바이트 정렬, 캐시 미스 방지)
+    float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim * sizeof(float), MALLOC_CAP_INTERNAL);
+
+    // [2] 웹 소켓 통합 페이로드 할당 (파형 N개 + 스펙트럼 Bins개 + MFCC 데이터 동적 할당)
+    const size_t ws_payload_len = (N * axis_cnt) + (bins * axis_cnt) + mfcc_dim;
     float* ws_payload = (float*)heap_caps_aligned_alloc(16, ws_payload_len * sizeof(float), MALLOC_CAP_INTERNAL);
+
+    // 메모리 할당 실패 시 태스크 안전 종료
+    if (!p_feature || !seq_buffer || !ws_payload) {
+        if (p_feature) heap_caps_free(p_feature);
+        if (seq_buffer) heap_caps_free(seq_buffer);
+        if (ws_payload) heap_caps_free(ws_payload);
+        Serial.println(F("[Critical] DSP Task Memory Allocation Failed!"));
+        vTaskDelete(nullptr);
+        return;
+    }
 
     for (;;) {
         if (xQueueReceive(p->frame_queue, &read_idx, portMAX_DELAY) == pdTRUE) {
@@ -106,10 +139,10 @@ void T20_processTask(void* p_arg) {
             // [3] 타임스탬프 획득 및 NTP 동기화 상태 플래그 설정
             struct timeval tv;
             gettimeofday(&tv, NULL);
-            feature.timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
-            feature.frame_id = ++frame_id;
-            feature.active_axes = axis_cnt;
-            feature.status_flags = (tv.tv_sec > 1000000) ? 0x01 : 0x00; // Bit 0: NTP 동기화 여부
+            p_feature->timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+            p_feature->frame_id = ++frame_id;
+            p_feature->active_axes = axis_cnt;
+            p_feature->status_flags = (tv.tv_sec > 1000000) ? 0x01 : 0x00; // Bit 0: NTP 동기화 여부
 
             // [4] Raw 파형 데이터 3축 인터리빙 병합 저장 (설정 켜짐 시)
             if (p->cfg.storage.save_raw) {
@@ -117,57 +150,68 @@ void T20_processTask(void* p_arg) {
             }
 
             bool all_ready = true;
+            float max_band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX] = {0.0f};
 
-            // [5] 3축(또는 1축) 독립 DSP 연산 수행 및 특징량 추출
+            // [5] 3축(또는 1축) 독립 DSP 연산 수행 및 웹 페이로드 동시 조립
             for (uint8_t a = 0; a < axis_cnt; a++) {
-                if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], &feature, a)) {
+                
+                // PSRAM(raw_buffer) 데이터를 입력으로 주고 연산 수행
+                if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], p_feature, a)) {
                     all_ready = false;
                     break;
                 }
+
+                // 밴드 에너지 추출: 3축일 경우 3번 순회하며 가장 높은 에너지(Max)를 보존
+                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
+                    if (p->cfg.trigger.bands[b].enable) {
+                        float nrg = p->dsp.getBandEnergy(p->cfg.trigger.bands[b].start_hz, p->cfg.trigger.bands[b].end_hz);
+                        if (nrg > max_band_energy[b]) {
+                            max_band_energy[b] = nrg;
+                        }
+                    }
+                }
+
+                // 웹 전송용 버퍼에 파형(Wave)과 스펙트럼(Spec) 데이터를 축 개수(a)만큼 차례대로 오프셋 직렬화
+                memcpy(ws_payload + (a * N), p->raw_buffer[a][read_idx], N * sizeof(float));
+                memcpy(ws_payload + (axis_cnt * N) + (a * bins), p->dsp.getPowerSpectrum(), bins * sizeof(float));
             }
 
             // 모든 축 연산이 완료된 시점에만 트리거 판별 및 저장 진행
             if (all_ready) {
                 bool event_detected = false;
 
-                // [6] 스마트 트리거 판별: RMS 진동 세기 검사 (전체 활성 축 대상)
+                // [6] 스마트 트리거 판별: RMS 진동 세기 검사 (어느 한 축이라도 넘으면 발생)
                 if (p->cfg.trigger.use_threshold) {
                     for (uint8_t a = 0; a < axis_cnt; a++) {
-                        if (feature.rms[a] > p->cfg.trigger.threshold_rms) {
+                        if (p_feature->rms[a] > p->cfg.trigger.threshold_rms) {
                             event_detected = true;
                         }
                     }
                 }
 
-                // [7] 스마트 트리거 판별: 다중 주파수 대역(Multi-band) 에너지 검사 (기준 축 0번 대상)
+                // [7] 스마트 트리거 판별: 다중 주파수 대역(Multi-band) 에너지 검사 (루프에서 구한 최대치 활용)
                 for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
-                    if (p->cfg.trigger.bands[b].enable) {
-                        float band_nrg = p->dsp.getBandEnergy(p->cfg.trigger.bands[b].start_hz, p->cfg.trigger.bands[b].end_hz);
-                        feature.band_energy[b] = band_nrg;
-
-                        if (band_nrg > p->cfg.trigger.bands[b].threshold) {
-                            event_detected = true;
-                        }
-                    } else {
-                        feature.band_energy[b] = 0.0f; // 비활성 밴드는 0으로 초기화
+                    p_feature->band_energy[b] = max_band_energy[b]; 
+                    if (p->cfg.trigger.bands[b].enable && max_band_energy[b] > p->cfg.trigger.bands[b].threshold) {
+                        event_detected = true;
                     }
                 }
 
                 // [8] 트리거 이벤트 발생 시 SD 레코딩 세션 및 MQTT 경보 제어
                 if (event_detected) {
-                    feature.status_flags |= 0x02; // Bit 1: Triggered 플래그 활성화
+                    p_feature->status_flags |= 0x02; // Bit 1: Triggered 플래그 활성화
 
                     // MQTT 알림 전송 (연속 알림 폭주를 방지하기 위한 5초 쿨타임)
                     if (millis() - p->last_trigger_ms > 5000) {
                         JsonDocument alert_doc;
                         alert_doc["event"] = "smart_trigger_alert";
-                        alert_doc["timestamp_ms"] = feature.timestamp_ms;
+                        alert_doc["timestamp_ms"] = p_feature->timestamp_ms;
 
                         JsonArray rms_arr = alert_doc["rms"].to<JsonArray>();
-                        for(uint8_t a = 0; a < axis_cnt; a++) rms_arr.add(feature.rms[a]);
+                        for(uint8_t a = 0; a < axis_cnt; a++) rms_arr.add(p_feature->rms[a]);
 
                         JsonArray bnd_arr = alert_doc["bands"].to<JsonArray>();
-                        for(uint8_t b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) bnd_arr.add(feature.band_energy[b]);
+                        for(uint8_t b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) bnd_arr.add(p_feature->band_energy[b]);
 
                         p->comm.publishMqtt("alert", alert_doc);
                     }
@@ -187,27 +231,31 @@ void T20_processTask(void* p_arg) {
                 }
 
                 // [9] 추출된 MFCC/특징량 벡터를 시퀀스 빌더(링 버퍼)에 푸시
-                p->seq_builder.pushVector(&feature.features[0][0]);
+                // 1축이든 3축이든 features[0][0]부터 메모리가 연속되어 있으므로 그대로 포인터 전달
+                p->seq_builder.pushVector(&p_feature->features[0][0]);
 
-                // [10] 프론트엔드(Web UI) 및 SD 스토리지로 데이터 전송/저장 분기
+                // [10] 프론트엔드(Web UI) 및 SD 스토리지로 데이터 전송 분기
                 if (p->cfg.output.output_sequence) {
-                    // (A) 시퀀스 텐서 모드: 설정된 프레임 단위로 묶어서 WS 전송
+                    // (A) 시퀀스 텐서 모드 (TinyML): 설정된 프레임 단위로 묶어서 WS 전송
                     if (p->seq_builder.isReady() && (frame_id % p->cfg.output.sequence_frames == 0)) {
                         p->seq_builder.getSequenceFlat(seq_buffer);
                         p->comm.broadcastBinary(seq_buffer, p->seq_builder.getSequenceFrames() * mfcc_dim);
                     }
                 } else {
-                    // (B) 단일 벡터 모드: 실시간 차트 렌더링을 위한 통합 페이로드 조립
-                    // 데이터 구조: [Wave 파형 (N)] + [Power Spectrum (bins)] + [MFCC (39*축)]
-                    memcpy(ws_payload, p->raw_buffer[0][read_idx], N * sizeof(float));
-                    memcpy(ws_payload + N, p->dsp.getPowerSpectrum(), bins * sizeof(float));
-                    memcpy(ws_payload + N + bins, &feature.features[0][0], mfcc_dim * sizeof(float));
+                    // (B) 단일 벡터 모드 (Web UI): 파형 + 스펙트럼 버퍼 뒤에 MFCC 데이터를 덧붙여 조립
+                    float* mfcc_ptr = ws_payload + (axis_cnt * N) + (axis_cnt * bins);
+                    
+                    // SIMD 정렬을 위해 96차원(패딩 포함)으로 선언된 데이터에서 순수 데이터(39차원)만 복사(Packing)
+                    for(uint8_t a = 0; a < axis_cnt; a++) {
+                        memcpy(mfcc_ptr + (a * 39), &p_feature->features[a][0], 39 * sizeof(float));
+                    }
 
                     p->comm.broadcastBinary(ws_payload, ws_payload_len);
 
                     // 수동 측정 상태이거나 스마트 트리거로 파일이 열려있을 때 SD 저장 큐로 전송
+                    // xQueueSend는 Value Copy 방식으로 동작하므로 p_feature 구조체 전체(1152B)가 복사되어 전달됨
                     if (p->cfg.output.enabled && p->storage.isOpen()) {
-                        xQueueSend(p->recorder_queue, &feature, 0);
+                        xQueueSend(p->recorder_queue, p_feature, 0);
                     }
                 }
             }
@@ -215,6 +263,7 @@ void T20_processTask(void* p_arg) {
     }
 
     // Task 종료 시 안전하게 힙 메모리 해제 (무한 루프 구조상 도달하지는 않음)
+    heap_caps_free(p_feature);
     heap_caps_free(seq_buffer);
     heap_caps_free(ws_payload);
     vTaskDelete(nullptr);
@@ -407,4 +456,3 @@ void CL_T20_Mfcc::printStatus(Stream& out) const {
     out.printf("WiFi: %s\n", _impl->comm.isConnected() ? "Connected" : "Disconnected");
     out.println("-------------------------");
 }
-
