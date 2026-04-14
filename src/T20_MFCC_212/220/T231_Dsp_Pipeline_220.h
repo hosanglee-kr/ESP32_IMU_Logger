@@ -5,7 +5,7 @@
  * ========================================================================== */
 #pragma once
 
-#include "T210_Def_220.h"  // ST_T20_Config_t 정의 포함
+#include "T210_Def_221.h"  // ST_T20_Config_t 정의 포함
 #include "esp_dsp.h"
 
 

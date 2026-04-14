@@ -1,0 +1,196 @@
+/* ============================================================================
+ * File: T221_Mfcc_Inter_221.h
+ * Summary: 통합 내부 구현체 (Pimpl) - 정합성 보완 풀버전
+ * Description: OOP 아키텍처(v220) 유지 + Web Viewer/UI Sync 메타데이터(v216) 복원
+ * + RTOS 동시성(Concurrency) 및 SIMD 메모리 정렬 완벽 보장
+ * ========================================================================== */
+#pragma once
+
+#include "T220_Mfcc_220.h"
+#include "T231_Dsp_Pipeline_220.h"
+#include "T232_Sensor_Engine_220.h"
+#include "T233_Sequence_Builder_220.h"
+#include "T234_Storage_Service_220.h"
+#include "T240_Comm_Service_220.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+
+#include <cstring>
+#include <atomic>
+
+struct CL_T20_Mfcc::ST_Impl {
+
+    // ========================================================================
+    // [1] 시스템 코어 엔진 (v220 OOP Architecture)
+    // ========================================================================
+    CL_T20_SensorEngine    sensor;
+    CL_T20_DspPipeline     dsp;
+    CL_T20_SequenceBuilder seq_builder;
+    CL_T20_StorageService  storage;
+    CL_T20_CommService     comm;
+
+    // ========================================================================
+    // [2] RTOS 자원 및 시스템 상태
+    // ========================================================================
+    TaskHandle_t           sensor_task;
+    TaskHandle_t           process_task;
+    TaskHandle_t           recorder_task;
+    QueueHandle_t          frame_queue;
+    QueueHandle_t          recorder_queue;
+    SemaphoreHandle_t      mutex;
+
+    ST_T20_Config_t        cfg;
+
+    // [중요 보완] 태스크 간 공유되는 제어 변수는 volatile 또는 atomic 처리
+    volatile bool          running;
+    volatile bool          measurement_active;
+    volatile uint32_t      sample_counter;
+    volatile uint32_t      dropped_frames;
+
+    // 시스템 프로필 및 설정 상태 
+    uint8_t                current_profile_index;
+    char                   runtime_cfg_profile_name[32];
+    uint32_t               last_btn_ms;
+
+    // ========================================================================
+    // [3] 고속 데이터 파이프라인 (Ping-Pong Buffers)
+    // ========================================================================
+    // 3축(X,Y,Z) x 핑퐁슬롯(4) x 최대 FFT 사이즈(4096) 대응 버퍼
+    // 주의: 약 192KB 점유. 반드시 PSRAM(heap_caps_malloc) 할당 필요
+    alignas(T20::C10_DSP::SIMD_ALIGN) float raw_buffer[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_Sys::RAW_FRAME_BUFFERS][4096];
+    
+    volatile uint8_t       active_fill_buffer;
+    volatile uint16_t      active_sample_index;
+
+    // 스마트 트리거 및 딥슬립 상태 관리
+    uint32_t               last_trigger_ms;
+    uint16_t               trigger_hold_frames;
+
+    // ========================================================================
+    // [4] 프론트엔드 뷰어 & 캐시 (v216 복원 - Web UI 및 REST API 폴링용)
+    // ========================================================================
+    // [중요 보완] 단일 구조체 캐시 복원 (REST API 상태 조회 시 즉각 반환 목적)
+    alignas(T20::C10_DSP::SIMD_ALIGN) ST_T20_FeatureVector_t latest_feature;
+
+    volatile uint32_t      viewer_last_frame_id;
+    uint16_t               viewer_last_waveform_len;
+    uint16_t               viewer_last_spectrum_len;
+    uint16_t               viewer_last_mfcc_len;
+    uint16_t               viewer_last_vector_len;
+
+    // SIMD 정렬을 유지하여 메모리 복사(memcpy) 및 WebSocket 브로드캐스트 성능 극대화
+    alignas(T20::C10_DSP::SIMD_ALIGN) float viewer_last_waveform[4096];
+    alignas(T20::C10_DSP::SIMD_ALIGN) float viewer_last_spectrum[2049];
+    alignas(T20::C10_DSP::SIMD_ALIGN) float viewer_last_mfcc[T20::C10_DSP::MAX_FEATURE_DIM];
+
+    // 이벤트 로깅 (Web UI 알림용)
+    static constexpr uint16_t EVENT_MAX = 8;
+    struct ST_ViewerEvent {
+        uint32_t timestamp_ms;
+        char     message[64];
+        uint8_t  level; // 0:Info, 1:Warn, 2:Error
+    } viewer_events[EVENT_MAX];
+    uint16_t viewer_event_count;
+
+    // ========================================================================
+    // [5] 메타데이터 및 동기화 (v216 복원 - 데이터 라벨링 및 구간 분석용)
+    // ========================================================================
+    static constexpr uint16_t STRING_MAX = 32;
+    static constexpr uint16_t POINTS_MAX = 128;
+
+    char                   type_meta_name[STRING_MAX];
+    char                   type_meta_kind[STRING_MAX];
+    char                   type_meta_auto_text[64];
+    bool                   type_meta_enabled;
+
+    bool                   selection_sync_enabled;
+    uint32_t               selection_sync_frame_from;
+    uint32_t               selection_sync_frame_to;
+    uint32_t               selection_sync_effective_from;
+    uint32_t               selection_sync_effective_to;
+    bool                   selection_sync_range_valid;
+    char                   selection_sync_name[STRING_MAX];
+
+    float                  viewer_selection_points[POINTS_MAX];
+    uint16_t               viewer_selection_points_len;
+    float                  viewer_overlay_points[POINTS_MAX];
+    uint16_t               viewer_overlay_points_len;
+    uint16_t               viewer_overlay_accum_count;
+    uint16_t               viewer_overlay_subset_count;
+
+    // ========================================================================
+    // 생성자 (초기화)
+    // ========================================================================
+    ST_Impl() : sensor(SPI), comm() {
+        // [1] RTOS 및 코어 상태 초기화
+        sensor_task = process_task = recorder_task = nullptr;
+        frame_queue = recorder_queue = nullptr;
+        mutex = nullptr;
+        running = false;
+        measurement_active = false;
+        sample_counter = 0;
+        dropped_frames = 0;
+        last_btn_ms = 0;
+
+        current_profile_index = 0;
+        std::memset(runtime_cfg_profile_name, 0, sizeof(runtime_cfg_profile_name));
+
+        // [2] 고속 버퍼 및 트리거 초기화
+        std::memset(raw_buffer, 0, sizeof(raw_buffer));
+        active_fill_buffer = 0;
+        active_sample_index = 0;
+        last_trigger_ms = 0;
+        trigger_hold_frames = 0;
+
+        // [3] 프론트엔드 뷰어 캐시 초기화
+        std::memset(&latest_feature, 0, sizeof(latest_feature));
+        viewer_last_frame_id = 0;
+        viewer_last_waveform_len = viewer_last_spectrum_len = viewer_last_mfcc_len = viewer_last_vector_len = 0;
+        
+        std::memset(viewer_last_waveform, 0, sizeof(viewer_last_waveform));
+        std::memset(viewer_last_spectrum, 0, sizeof(viewer_last_spectrum));
+        std::memset(viewer_last_mfcc, 0, sizeof(viewer_last_mfcc));
+        
+        std::memset(viewer_events, 0, sizeof(viewer_events));
+        viewer_event_count = 0;
+
+        // [4] 메타데이터 동기화 상태 초기화
+        strlcpy(type_meta_name, "none", sizeof(type_meta_name));
+        strlcpy(type_meta_kind, "feature_vector", sizeof(type_meta_kind));
+        std::memset(type_meta_auto_text, 0, sizeof(type_meta_auto_text));
+        type_meta_enabled = true;
+
+        selection_sync_enabled = false;
+        selection_sync_frame_from = selection_sync_frame_to = 0;
+        selection_sync_effective_from = selection_sync_effective_to = 0;
+        selection_sync_range_valid = false;
+        std::memset(selection_sync_name, 0, sizeof(selection_sync_name));
+
+        std::memset(viewer_selection_points, 0, sizeof(viewer_selection_points));
+        std::memset(viewer_overlay_points, 0, sizeof(viewer_overlay_points));
+        viewer_selection_points_len = viewer_overlay_points_len = 0;
+        viewer_overlay_accum_count = viewer_overlay_subset_count = 0;
+    }
+
+    // ========================================================================
+    // 유틸리티 함수: 뷰어 이벤트 푸시 (UI 알림용)
+    // ========================================================================
+    void pushViewerEvent(const char* message, uint8_t level = 0) {
+        if (!message) return;
+        
+        // Mutex 보호가 필요한 경우를 대비해 인터럽트 락 또는 뮤텍스 적용 권장
+        // UI 이벤트는 초당 수회 미만으로 발생하므로 가벼운 memmove 사용
+        if (viewer_event_count >= EVENT_MAX) {
+            std::memmove(&viewer_events[0], &viewer_events[1], sizeof(ST_ViewerEvent) * (EVENT_MAX - 1));
+            viewer_event_count = EVENT_MAX - 1;
+        }
+        
+        viewer_events[viewer_event_count].timestamp_ms = millis();
+        viewer_events[viewer_event_count].level = level;
+        strlcpy(viewer_events[viewer_event_count].message, message, sizeof(viewer_events[0].message));
+        viewer_event_count++;
+    }
+};

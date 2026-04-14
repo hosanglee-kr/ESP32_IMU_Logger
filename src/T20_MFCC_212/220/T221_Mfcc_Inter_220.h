@@ -21,15 +21,18 @@ struct CL_T20_Mfcc::ST_Impl {
 	TaskHandle_t		   sensor_task	  = nullptr;
 	TaskHandle_t		   process_task	  = nullptr;
 	TaskHandle_t		   recorder_task  = nullptr;
+	
 	QueueHandle_t		   frame_queue	  = nullptr;
 	QueueHandle_t		   recorder_queue = nullptr;
+	
 	SemaphoreHandle_t	   mutex		  = nullptr;
 
 	// 핑퐁 버퍼 및 제어 상태
 	// 3축(X,Y,Z) x 핑퐁슬롯(4) x 최대 FFT 사이즈(4096) 대응 버퍼
-    // 내부 SRAM의 약 192KB를 점유합니다 (3 * 4 * 4096 * 4 bytes)
+    // 약 192KB를 점유합니다 (3 * 4 * 4096 * 4 bytes)
+    // 192KB의 거대 버퍼: 이제 PSRAM에 안전하게 안착됩니다.
     alignas(16) float raw_buffer[3][T20::C10_Sys::RAW_FRAME_BUFFERS][4096];
-    
+   
     uint8_t   active_fill_buffer  = 0;
     uint16_t  active_sample_index = 0;
     
@@ -44,8 +47,27 @@ struct CL_T20_Mfcc::ST_Impl {
 
 	ST_T20_Config_t cfg;
 	bool			running = false;
+	
+	/*
+	TODO :
+	   - 필요여부 재검토 필요
+	   - ST_Impl 전체를 psram vs 필요항 것(raw_buffer 등)만 psram 사용
+	
+	   // new 연산자 오버로딩: ST_Impl 생성 시 무조건 PSRAM에 할당
+    void* operator new(size_t size) {
+        void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+        if (!ptr) {
+            Serial.println(F("[Critical Error] Failed to allocate ST_Impl in PSRAM!"));
+            // ESP32-S3 보드 설정에서 PSRAM이 활성화되어 있는지(OPI/QSPI) 반드시 확인해야 합니다.
+        }
+        return ptr;
+    }
+
+    void operator delete(void* ptr) {
+        heap_caps_free(ptr);
+    }
+    */
 
 	ST_Impl() : sensor(SPI), comm() {
 	}
 };
-

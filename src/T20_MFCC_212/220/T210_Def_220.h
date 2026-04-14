@@ -15,13 +15,16 @@
  * ------------------------------------------------------------------------- */
 namespace T20 {
     namespace C10_Sys {
-        inline constexpr char const* 	VERSION_STR           	= "T20_Mfcc_v220"; 		// 시스템 버전 문자열
-        inline constexpr uint16_t 		QUEUE_LEN               = 8U;              		// Task 간 메시지 큐 길이
-        inline constexpr uint16_t 		CFG_PROFILE_COUNT       = 4U;              		// 설정 프로필 최대 개수
-        inline constexpr uint16_t 		RAW_FRAME_BUFFERS       = 4U;              		// Raw 데이터 버퍼 개수
-        inline constexpr uint16_t 		SEQUENCE_FRAMES_MAX     = 16U;             		// 시퀀스 출력 시 최대 프레임 수
-        inline constexpr uint8_t  		PIN_NOT_SET             = 0xFFU;           		// 미할당 핀 정의
+        inline constexpr char const*    VERSION_STR           	= "T20_Mfcc_v220";
+        inline constexpr uint16_t 		QUEUE_LEN               = 8U;
+        inline constexpr uint16_t 		CFG_PROFILE_COUNT       = 4U;
+        inline constexpr uint16_t 		RAW_FRAME_BUFFERS       = 4U;
+        inline constexpr uint16_t 		SEQUENCE_FRAMES_MAX     = 16U;     // 버퍼/배열 최대 한계값
+        inline constexpr uint16_t 		SEQUENCE_FRAMES_DEF     = 16U;     // 초기 설정 기본값
+        inline constexpr uint8_t  		PIN_NOT_SET             = 0xFFU;
+        inline constexpr uint32_t 		WATCHDOG_MS_DEF         = 2000UL;  // C10_Rec에서 이동
     }
+    
 
     namespace C10_Pin {
         inline constexpr uint8_t 		BTN_CONTROL 			= 0U;                   // 제어 버튼 (Boot Pin)
@@ -67,13 +70,14 @@ namespace T20 {
 		inline constexpr uint16_t       MFCC_COMPONENTS         = 3U;      				// Static, Delta, Delta-Delta
         inline constexpr uint16_t       MFCC_TOTAL_DIM          = MFCC_COEFFS_MAX * MFCC_COMPONENTS; // 32 * 3 = 96
 
-		inline constexpr uint16_t 		AXIS_COUNT_MAX     			= 3U;
+		inline constexpr uint8_t 		AXIS_COUNT_MAX     			= 3U;
         inline constexpr uint16_t       MAX_FEATURE_DIM         = AXIS_COUNT_MAX * MFCC_TOTAL_DIM; 	// 3축 합산 최대 차원 3 * 96 = 288
         inline constexpr uint16_t       SIMD_ALIGN              = 16U;                  // 메모리 정렬 기준
-
+        
         inline constexpr float          FREQ_RES_HZ             = SAMPLE_RATE_HZ / (float)FFT_SIZE;   // 샘플 레이트와 FFT 사이즈 기반 주파수 해상도
 
-		inline constexpr uint8_t 		AXIS_COUNT_DEFAULT		= 3U;						// 기본 축 개수
+		inline constexpr uint8_t 		AXIS_COUNT_DEF		    = 3U;      // 기본 축 개수
+        
     }
 
 
@@ -88,30 +92,29 @@ namespace T20 {
 
         inline constexpr uint32_t       ANY_MOTION_STEP_MS 		= 20UL;     			// BMI270 Any-Motion 1틱 기준 시간
     }
-
+    
     namespace C10_Rec {
+        inline constexpr uint32_t 		BINARY_MAGIC     	    = 0x54323042UL;
+        inline constexpr uint16_t 		BINARY_VERSION_NUM      = 220U;
+        inline constexpr uint16_t 		BATCH_WMARK_HIGH 	    = 8U;
+        inline constexpr uint32_t 		BATCH_IDLE_FLUSH_MS     = 250U;
+        inline constexpr uint16_t 		ROTATE_KEEP_MAX  	    = 8U;
+        
+        inline constexpr uint8_t        FLAG_NTP_SYNCED         = 0x01U;
+        inline constexpr uint8_t        FLAG_TRIGGERED          = 0x02U;
+        
+        inline constexpr uint32_t 		ROTATION_MB_DEF         = 10U;
+        inline constexpr uint32_t 		ROTATION_MIN_DEF        = 60U;
 
-        inline constexpr uint32_t 		BINARY_MAGIC     	= 0x54323042UL;				// 바이너리 파일 식별자 (T20B)
-        inline constexpr uint16_t 		BINARY_VERSION_NUM  = 220U;     				// 파일 헤더용 버전 바이너리 포맷 버전
-        inline constexpr uint16_t 		BATCH_WMARK_HIGH 	= 8U;						// Write 워터마크
-        inline constexpr uint32_t 		BATCH_IDLE_FLUSH_MS = 250U;						// 유휴 상태 시 강제 Flush 대기시간
-        inline constexpr uint16_t 		ROTATE_KEEP_MAX  	= 8U;						// 파일 로테이션 유지 개수
+    }
 
-
-        inline constexpr uint8_t        FLAG_NTP_SYNCED     = 0x01U;               		// NTP 동기화 완료 비트
-        inline constexpr uint8_t        FLAG_TRIGGERED      = 0x02U;               		// 이벤트 발생 비트
-
-        inline constexpr float    		THRES_RMS_DEF   	= 0.5f;                     // 기본 RMS 트리거 임계값
-        inline constexpr uint32_t       TRIGGER_HOLD_MS     = 5000UL;              		// 트리거 유지 시간
-		inline constexpr uint32_t 		TRIGGER_DURATION_MS_DEFAULT = 100UL;	 		// 100ms를 목표로 계산 (매직넘버 100U를 상수로 추출 권장)
-
-		inline constexpr uint32_t 		SLEEP_SEC_DEF   		= 300U;                 // 기본 딥슬립 진입 시간
-
-		inline constexpr uint32_t 		ROTATION_MB_DEF        = 10U;     				// 기본 로테이션 용량 (MB) 50U에서 10U로 기본값 조정 (함수와 동기화)
-		inline constexpr uint32_t 		ROTATION_MIN_DEF       = 60U;     				// 추가: 시간 기반 로테이션 기본값
-		inline constexpr uint16_t 		MQTT_PORT_DEF          = 1883U;   				// 추가: MQTT 표준 포트
-		inline constexpr uint32_t 		WATCHDOG_MS_DEF        = 2000UL;  				// 추가: 시스템 워치독 기본값
-
+    
+    // Trigger 네임스페이스
+    namespace C10_Trigger {
+        inline constexpr float    		THRES_RMS_DEF   	    = 0.5f;     // 기본 RMS 트리거 임계값
+        inline constexpr uint32_t       HOLD_MS     		    = 5000UL;   // 트리거 유지 시간
+		inline constexpr uint32_t 		DURATION_MS_DEF         = 100UL;   // _DEFAULT를 _DEF로 통일
+		inline constexpr uint32_t 		SLEEP_SEC_DEF   		= 300U;    // 기본 딥슬립 진입 시간
     }
 
     namespace C10_Web {
@@ -123,6 +126,7 @@ namespace T20 {
 
     namespace C10_Net {
         inline constexpr uint8_t 		WIFI_MULTI_MAX    	= 3U;						// 다중 AP 등록 최대 개수
+        inline constexpr uint16_t 		MQTT_PORT_DEF          = 1883U;   				// 추가: MQTT 표준 포트
     }
 
     namespace C10_Time {
@@ -137,11 +141,7 @@ namespace T20 {
         inline constexpr char const* 	KEY_FILE_SEQ 		= "file_seq";               // 파일 시퀀스 번호 키
     }
 
-    namespace C10_Ext {
-        // inline constexpr uint32_t 		ROTATION_MB_DEF 	= 50U;                      // 기본 로테이션 용량 (MB)
-        // inline constexpr float    		THRES_RMS_DEF   	= 0.5f;                     // 기본 RMS 트리거 임계값
-        // inline constexpr uint32_t 		SLEEP_SEC_DEF   	= 300U;                     // 기본 딥슬립 진입 시간
-    }
+
 
     namespace C10_Path {
         inline constexpr char const* 	MOUNT_SD      		= "/sdcard";
@@ -411,6 +411,9 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.preprocess.filter.type                      = EN_T20_FILTER_HPF;
     cfg.preprocess.filter.cutoff_hz_1               = 15.0f;
     cfg.preprocess.filter.q_factor                  = 0.707f;
+    
+    
+    
 
     // 노이즈 게이트 및 적응형 노이즈 제거 설정
     cfg.preprocess.noise.enable_gate                = true;
@@ -443,7 +446,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.feature.fft_size        					= (EM_T20_FftSize_t)T20::C10_DSP::FFT_SIZE;
     cfg.feature.hop_size        					= T20::C10_DSP::FFT_SIZE; 				// 기본적으로 No-overlap 또는 상수 기반 설정
     cfg.feature.mfcc_coeffs     					= T20::C10_DSP::MFCC_COEFFS_DEF;
-    cfg.feature.axis_count  						= T20::C10_DSP::AXIS_COUNT_DEFAULT;
+    cfg.feature.axis_count = (EM_T20_AxisCount_t)T20::C10_DSP::AXIS_COUNT_DEFAULT;
 
 
     cfg.output.sequence_frames    					= T20::C10_Sys::SEQUENCE_FRAMES_MAX;
@@ -483,3 +486,4 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     return cfg;
 }
+
