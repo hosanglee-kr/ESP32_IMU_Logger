@@ -36,53 +36,6 @@
     "output_sequence": false,
     "sequence_frames": 16
   },
-  "mqtt": {
-    "enable": false,
-    "broker": "broker.hivemq.com",
-    "port": 1883,
-    "id": "T20_DEVICE",
-    "password": "",
-    "topic_root": "t20/sensor"
-  },
-  "storage": {
-    "save_raw": false,
-    "rotation_mb": 10,
-    "rotation_min": 60,
-    "rotate_keep_max": 8,
-    "idle_flush_ms": 250
-  },
-  "trigger": {
-    "use_threshold": false,
-    "threshold_rms": 0.5,
-    "use_deep_sleep": false,
-    "sleep_timeout_sec": 300,
-    "any_motion_duration": 5,
-    "bands": [
-      {
-        "enable": false,
-        "start_hz": 0.0,
-        "end_hz": 0.0,
-        "threshold": 0.0
-      },
-      {
-        "enable": false,
-        "start_hz": 0.0,
-        "end_hz": 0.0,
-        "threshold": 0.0
-      },
-      {
-        "enable": false,
-        "start_hz": 0.0,
-        "end_hz": 0.0,
-        "threshold": 0.0
-      }
-    ]
-  },
-  "system": {
-    "auto_start": true,
-    "watchdog_ms": 2000,
-    "button_pin": 0
-  },
   "wifi": {
     "mode": 3,
     "ap_ssid": "T20_MFCC_AP",
@@ -120,6 +73,59 @@
         "dns2": ""
       }
     ]
+  },
+  "storage": {
+    "rotation_mb": 10,
+    "rotation_min": 60,
+    "save_raw": false,
+    "rotate_keep_max": 8,
+    "idle_flush_ms": 250,
+    "pre_trigger_sec": 4
+  },
+  "trigger": {
+    "hw_power": {
+      "use_deep_sleep": false,
+      "sleep_timeout_sec": 300,
+      "wake_threshold_g": 1.0,
+      "duration_x20ms": 5
+    },
+    "sw_event": {
+      "hold_time_ms": 5000,
+      "use_rms": false,
+      "rms_threshold_power": 0.5,
+      "bands": [
+        {
+          "enable": false,
+          "start_hz": 0.0,
+          "end_hz": 0.0,
+          "threshold": 0.0
+        },
+        {
+          "enable": false,
+          "start_hz": 0.0,
+          "end_hz": 0.0,
+          "threshold": 0.0
+        },
+        {
+          "enable": false,
+          "start_hz": 0.0,
+          "end_hz": 0.0,
+          "threshold": 0.0
+        }
+      ]
+    }
+  },
+  "mqtt": {
+    "enable": false,
+    "broker": "broker.hivemq.com",
+    "port": 1883,
+    "id": "T20_DEVICE",
+    "password": "",
+    "topic_root": "t20/sensor"
+  },
+  "system": {
+    "auto_start": true,
+    "watchdog_ms": 2000,
+    "button_pin": 0
   }
 }
-

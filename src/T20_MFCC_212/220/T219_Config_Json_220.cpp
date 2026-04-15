@@ -206,6 +206,19 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     wf["ap_ssid"]       = cfg.wifi.ap_ssid;
     wf["ap_password"]   = cfg.wifi.ap_password;
     wf["ap_ip"]         = cfg.wifi.ap_ip;
+    
+    JsonArray multi = wf["multi_ap"].to<JsonArray>();
+    for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
+        JsonObject ap = multi.add<JsonObject>();
+        ap["ssid"]          = cfg.wifi.multi_ap[i].ssid;
+        ap["password"]      = cfg.wifi.multi_ap[i].password;
+        ap["use_static_ip"] = cfg.wifi.multi_ap[i].use_static_ip;
+        ap["local_ip"]      = cfg.wifi.multi_ap[i].local_ip;
+        ap["gateway"]       = cfg.wifi.multi_ap[i].gateway;
+        ap["subnet"]        = cfg.wifi.multi_ap[i].subnet;
+        ap["dns1"]          = cfg.wifi.multi_ap[i].dns1;
+        ap["dns2"]          = cfg.wifi.multi_ap[i].dns2;
+    }
 
     JsonObject st           = out_doc["storage"].to<JsonObject>();
     st["rotation_mb"]       = cfg.storage.rotation_mb;
@@ -239,19 +252,6 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         b["threshold"] = cfg.trigger.sw_event.bands[i].threshold;
     }
     
-
-    JsonArray multi = wf["multi_ap"].to<JsonArray>();
-    for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
-        JsonObject ap = multi.add<JsonObject>();
-        ap["ssid"]          = cfg.wifi.multi_ap[i].ssid;
-        ap["password"]      = cfg.wifi.multi_ap[i].password;
-        ap["use_static_ip"] = cfg.wifi.multi_ap[i].use_static_ip;
-        ap["local_ip"]      = cfg.wifi.multi_ap[i].local_ip;
-        ap["gateway"]       = cfg.wifi.multi_ap[i].gateway;
-        ap["subnet"]        = cfg.wifi.multi_ap[i].subnet;
-        ap["dns1"]          = cfg.wifi.multi_ap[i].dns1;
-        ap["dns2"]          = cfg.wifi.multi_ap[i].dns2;
-    }
 
     JsonObject mq      = out_doc["mqtt"].to<JsonObject>();
     mq["enable"]       = cfg.mqtt.enable;
