@@ -81,6 +81,8 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.storage.save_raw        = st["save_raw"] | out_cfg.storage.save_raw;
         out_cfg.storage.rotate_keep_max = st["rotate_keep_max"] | out_cfg.storage.rotate_keep_max;
         out_cfg.storage.idle_flush_ms   = st["idle_flush_ms"] | out_cfg.storage.idle_flush_ms;
+        out_cfg.storage.pre_trigger_sec = st["pre_trigger_sec"] | out_cfg.storage.pre_trigger_sec; // [추가]
+    
     }
 
     // 6. Trigger (HW Power & SW Event 분리)
@@ -141,6 +143,9 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
         strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
         out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
+        strlcpy(out_cfg.mqtt.id, mq["id"] | out_cfg.mqtt.id, sizeof(out_cfg.mqtt.id)); 
+        strlcpy(out_cfg.mqtt.password, mq["password"] | out_cfg.mqtt.password, sizeof(out_cfg.mqtt.password));
+        
         strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
     }
 
@@ -208,6 +213,7 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     st["save_raw"]          = cfg.storage.save_raw;
     st["rotate_keep_max"]   = cfg.storage.rotate_keep_max;
     st["idle_flush_ms"]     = cfg.storage.idle_flush_ms;
+    st["pre_trigger_sec"]   = cfg.storage.pre_trigger_sec; 
 
 
     // t(HW Power & SW Event 분리 적용) ===
@@ -251,6 +257,8 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     mq["enable"]       = cfg.mqtt.enable;
     mq["broker"]       = cfg.mqtt.broker;
     mq["port"]         = cfg.mqtt.port;
+    mq["id"]           = cfg.mqtt.id;           
+    mq["password"]     = cfg.mqtt.password;     
     mq["topic_root"]   = cfg.mqtt.topic_root;
 
 
@@ -265,3 +273,4 @@ void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_
     buildJson(cfg, doc);
     serializeJson(doc, out_str);
 }
+

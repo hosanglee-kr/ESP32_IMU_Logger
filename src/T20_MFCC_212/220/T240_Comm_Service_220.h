@@ -67,4 +67,3 @@ class CL_T20_CommService {
 	ST_T20_ConfigMqtt_t _mqtt_cfg;
 	uint32_t            _last_mqtt_retry_ms;
 };
-

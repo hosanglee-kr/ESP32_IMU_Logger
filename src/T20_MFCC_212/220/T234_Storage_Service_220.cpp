@@ -1,7 +1,23 @@
-/* ============================================================================
+
+/* 
+============================================================================
  * File: T234_Storage_Service_220.cpp
- * Summary: Storage Engine Implementation
- * ========================================================================== */
+ * Summary: Storage Engine Implementation with Pre-Trigger Buffering
+ * * [AI 메모: 제공 기능 요약]
+ * 1. Zero-Copy DMA: 내부 SRAM 핑퐁 버퍼 3개를 순환하며 SD카드 기록 오버헤드를 극소화.
+ * 2. 가변 차원 직렬화: 1축/3축 모드 및 MFCC 계수 크기에 따라 패딩을 제외한 순수 데이터만 추출(Packing)하여 파일 크기 최적화.
+ * 3. Pre-Trigger Buffering: 세션이 닫혀 있을 때 PSRAM 링버퍼에 과거 N초간의 데이터를 
+ * 상시 유지하다가 트리거 발생 시 일괄 기록(Flush)하여 사고 전 징후를 완벽히 캡처.
+ * 4. 자동 파일 분할(Rotation): 설정된 용량(MB) 또는 시간(Min)에 도달하면 끊김 없이 
+ * 새 파일로 분할하고 오래된 인덱스는 삭제.
+ *
+ * [AI 메모: 구현 및 유지보수 주의사항]
+ * 1. 프리-트리거 링버퍼(_pre_buf)는 크기가 크므로 반드시 MALLOC_CAP_SPIRAM(PSRAM)으로 할당해야 합니다.
+ * 2. pushVector 함수는 레코딩 상태(_session_open)와 무관하게 상시 호출되어야 링버퍼가 정상 작동합니다.
+ * 3. DMA 슬롯 커밋(_commitSlot) 도중 I/O 블로킹이 길어지면 FIFO 오버플로우가 날 수 있으므로 
+ * idle_flush_ms 타임아웃 튜닝이 중요합니다.
+ * ========================================================================== 
+ */
 
 #include "T234_Storage_Service_220.h"
 #include "T219_Config_Json_220.h" // JSON 직렬화 엔진 포함
@@ -32,6 +48,16 @@ CL_T20_StorageService::CL_T20_StorageService() {
     memset(_index_items, 0, sizeof(_index_items));
 }
 
+
+// [신규 추가] 소멸자에서 PSRAM 링버퍼 메모리 반환
+CL_T20_StorageService::~CL_T20_StorageService() {
+    if (_pre_buf) {
+        heap_caps_free(_pre_buf);
+        _pre_buf = nullptr;
+    }
+}
+
+
 bool CL_T20_StorageService::begin(const ST_T20_SdmmcProfile_t& profile) {
     _loadIndexJson();
 
@@ -54,10 +80,20 @@ bool CL_T20_StorageService::begin(const ST_T20_SdmmcProfile_t& profile) {
     return true;
 }
 
+void CL_T20_StorageService::setConfig(const ST_T20_Config_t& cfg) {
+    _current_cfg = cfg;
+    _allocatePreBuffer(); // 세션 오픈 전이라도, 설정이 주입되면 즉시 링버퍼를 메모리에 확보합니다.
+}
 
+// ============================================================================
+// 1. 세션 오픈: 파일 생성 및 프리트리거 버퍼 점검
+// ============================================================================
 bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     if (_session_open) return false;
     _current_cfg = cfg;
+    
+    // 설정 갱신 및 버퍼 재확인 (이미 setConfig로 할당되어 있다면 무시됨)
+    setConfig(cfg);
 
     // NVS에서 파일 시퀀스 번호 관리
     Preferences prefs;
@@ -90,12 +126,12 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     ST_T20_RecorderBinaryHeader_t header;
     memset(&header, 0, sizeof(header));
     header.magic = T20::C10_Rec::BINARY_MAGIC;
-    header.version = 219; // v219 포맷 식별용
+    header.version = 219; 
     header.header_size = sizeof(header);
     header.sample_rate_hz = (uint32_t)T20::C10_DSP::SAMPLE_RATE_HZ;
-    header.fft_size = (uint16_t)cfg.feature.fft_size; // 가변 FFT 반영
-    header.mfcc_dim = cfg.feature.mfcc_coeffs;       // 축당 계수
-    header.active_axes = (uint8_t)cfg.feature.axis_count; // 1축 또는 3축
+    header.fft_size = (uint16_t)cfg.feature.fft_size; 
+    header.mfcc_dim = cfg.feature.mfcc_coeffs;       
+    header.active_axes = (uint8_t)cfg.feature.axis_count; 
 
     String json_str;
     CL_T20_ConfigJson::buildJsonString(cfg, json_str);
@@ -106,7 +142,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
         return false;
     }
 
-    // Raw 저장 모드 시 3축 대응을 위해 파일 오픈 (현재는 분석 타겟 축 위주)
+    // Raw 저장 모드 시 3축 대응 파일 오픈
     if (cfg.storage.save_raw) {
         char raw_path[128];
         snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s.bin", time_buffer);
@@ -119,6 +155,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     _session_open = true;
     return true;
 }
+
 
 void CL_T20_StorageService::closeSession(const char* reason) {
     if (!_session_open) return;
@@ -138,52 +175,32 @@ void CL_T20_StorageService::closeSession(const char* reason) {
     _handleRotation();
 }
 
-// 특징량 벡터 기록 (타임스탬프 + 다중 축 대응)
+
+
+// ============================================================================
+// 3. 진입점: 상시 데이터 수신 및 분기 처리
+// ============================================================================
 bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
-    if (!_session_open || !p_vec) return false;
+    if (!p_vec) return false;
 
-    const uint8_t axes = p_vec->active_axes;
-    // 설정된 계수 * 3(Static, Delta, D-Delta)
-    const uint16_t dim_per_axis = _current_cfg.feature.mfcc_coeffs * 3; 
-    const uint16_t feature_bytes = (dim_per_axis * axes * sizeof(float));
-    
-    // 프레임 크기 계산: 
-    // timestamp(8) + frame_id(4) + axes(1) + (39 * active_axes * float(4))
-    const uint16_t total_frame_size = sizeof(p_vec->timestamp_ms) + 
-                                      sizeof(p_vec->frame_id) + 
-                                      sizeof(p_vec->active_axes) + 
-                                      feature_bytes;
-
-    // 슬롯 교체 로직 (DMA_SLOT_BYTES=4096 내에 프레임이 들어가는지 확인)
-    uint8_t slot = _dma_active_slot;
-    if ((_dma_slot_used[slot] + total_frame_size) > DMA_SLOT_BYTES) {
-        if (!_commitSlot(slot)) return false;
-        _dma_active_slot = (slot + 1) % DMA_SLOT_COUNT;
-        slot = _dma_active_slot;
-        if (_dma_slot_used[slot] > 0) return false; 
-    }
-    
-    // 직렬화 (Serialization)
-    uint8_t* ptr = &_dma_slots[slot][_dma_slot_used[slot]];
-    
-    memcpy(ptr, &p_vec->timestamp_ms, sizeof(uint64_t)); ptr += 8;
-    memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += 4;
-    memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += 1;
-    
-    // [핵심] 2D 배열에서 실제 사용 중인 유효 차원 데이터만 추출하여 직렬화
-    for (uint8_t a = 0; a < axes; a++) {
-        memcpy(ptr, &p_vec->features[a][0], dim_per_axis * sizeof(float));
-        ptr += (dim_per_axis * sizeof(float));
+    // [상태 1] 레코딩 중이 아닐 때 -> 프리트리거 링버퍼에 상시 기록 (덮어쓰기)
+    if (!_session_open) {
+        if (_pre_capacity > 0 && _pre_buf) {
+            memcpy(&_pre_buf[_pre_head], p_vec, sizeof(ST_T20_FeatureVector_t));
+            _pre_head = (_pre_head + 1) % _pre_capacity;
+            if (_pre_count < _pre_capacity) _pre_count++;
+        }
+        return true; 
     }
 
-    _dma_slot_used[slot] += total_frame_size;
-    _written_bytes += total_frame_size;
-    _record_count++;
-    _batch_count++;
-    _last_push_ms = millis();
+    // [상태 2] 세션이 열려있고, 과거 데이터가 쌓여있다면 -> 즉시 일괄 플러시
+    // 트리거로 인해 방금 openSession이 호출된 직후의 첫 프레임 진입 시 동작함
+    if (_pre_count > 0) {
+        _flushPreBuffer();
+    }
 
-    if (_batch_count >= _watermark_high) flush();
-    return true;
+    // [상태 3] 현재 들어온 실시간 데이터 기록
+    return _pushToDma(p_vec);
 }
 
 
@@ -351,5 +368,116 @@ void CL_T20_StorageService::checkRotation() {
         closeSession("rotate");
         openSession(_current_cfg); // 즉시 끊김 없이 재시작
     }
+}
+
+
+// ============================================================================
+// 2. 프리-트리거 링버퍼 메모리 동적 할당 관리
+// ============================================================================
+void CL_T20_StorageService::_allocatePreBuffer() {
+    // pre_trigger_sec이 0으로 설정된 경우 기존 메모리 해제 로직 추가
+    if (_current_cfg.storage.pre_trigger_sec == 0) {
+        if (_pre_buf) {
+            heap_caps_free(_pre_buf);
+            _pre_buf = nullptr;
+            _pre_capacity = 0;
+            _pre_head = 0;
+            _pre_count = 0;
+        }
+        return;
+    }
+    
+    // 초당 프레임 수(FPS) = 1600Hz / Hop Size
+    float fps = T20::C10_DSP::SAMPLE_RATE_HZ / (float)_current_cfg.feature.hop_size;
+    uint16_t req_capacity = (uint16_t)(fps * _current_cfg.storage.pre_trigger_sec);
+
+    // 용량이 변경되었거나 아직 할당되지 않은 경우 PSRAM에 재할당
+    if (_pre_capacity != req_capacity) {
+        if (_pre_buf) heap_caps_free(_pre_buf);
+        _pre_buf = (ST_T20_FeatureVector_t*)heap_caps_malloc(req_capacity * sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_SPIRAM);
+        
+        if (_pre_buf) {
+            _pre_capacity = req_capacity;
+            _pre_head = 0;
+            _pre_count = 0;
+        } else {
+            Serial.println(F("[Storage] Pre-Trigger PSRAM Allocation Failed!"));
+            _pre_capacity = 0;
+        }
+    }
+    
+    // [상세 설명]
+    // 포인터 초기화 (_pre_head = 0, _pre_count = 0)는 위처럼 메모리가 "새로 할당"될 때만 수행합니다.
+    // 만약 이미 할당되어 있다면, 세션이 방금 열렸다 하더라도 버퍼 인덱스를 초기화하지 않고 그대로 둡니다.
+    // 이유: 세션이 닫혀 있던 유휴 시간 동안 링버퍼에 과거의 정상/진동 데이터가 차곡차곡 쌓이고 있었으므로,
+    // 세션이 열리는 즉시 이 '과거 기록 이력'을 그대로 보존하여 플러시(Flush)해야 사고 직전의 상황 분석이 가능하기 때문입니다.
+}
+
+
+// ============================================================================
+// 4. 프리-트리거 과거 데이터 일괄 플러시
+// ============================================================================
+void CL_T20_StorageService::_flushPreBuffer() {
+    if (_pre_count == 0 || !_pre_buf) return;
+
+    // 링버퍼에서 가장 오래된 데이터의 인덱스 계산 (데이터가 꽉 찼으면 head가 가장 오래된 데이터)
+    uint16_t oldest_idx = (_pre_count == _pre_capacity) ? _pre_head : 0;
+    uint16_t count_to_flush = _pre_count;
+    
+    // 무한 루프나 중복 기록 방지를 위해 플래그 즉시 초기화
+    _pre_count = 0; 
+    _pre_head = 0;
+
+    // 가장 오래된 과거 데이터부터 순서대로 DMA 기록 로직 태우기
+    for (uint16_t i = 0; i < count_to_flush; i++) {
+        uint16_t idx = (oldest_idx + i) % _pre_capacity;
+        _pushToDma(&_pre_buf[idx]);
+    }
+    
+    Serial.printf("[Storage] Flushed %d pre-trigger frames to SD.\n", count_to_flush);
+}
+
+
+// ============================================================================
+// 5. DMA 슬롯 직렬화 및 물리적 기록 헬퍼
+// ============================================================================
+bool CL_T20_StorageService::_pushToDma(const ST_T20_FeatureVector_t* p_vec) {
+    const uint8_t axes = p_vec->active_axes;
+    const uint16_t dim_per_axis = _current_cfg.feature.mfcc_coeffs * 3; 
+    const uint16_t feature_bytes = (dim_per_axis * axes * sizeof(float));
+    
+    const uint16_t total_frame_size = sizeof(p_vec->timestamp_ms) + 
+                                      sizeof(p_vec->frame_id) + 
+                                      sizeof(p_vec->active_axes) + 
+                                      feature_bytes;
+
+    uint8_t slot = _dma_active_slot;
+    if ((_dma_slot_used[slot] + total_frame_size) > DMA_SLOT_BYTES) {
+        if (!_commitSlot(slot)) return false;
+        _dma_active_slot = (slot + 1) % DMA_SLOT_COUNT;
+        slot = _dma_active_slot;
+        if (_dma_slot_used[slot] > 0) return false; 
+    }
+
+    uint8_t* ptr = &_dma_slots[slot][_dma_slot_used[slot]];
+    
+    memcpy(ptr, &p_vec->timestamp_ms, sizeof(uint64_t)); ptr += 8;
+    memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += 4;
+    memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += 1;
+    
+    // 2D 배열에서 실제 사용 중인 유효 차원 데이터만 추출하여 직렬화 (패딩 버림)
+    for (uint8_t a = 0; a < axes; a++) {
+        memcpy(ptr, &p_vec->features[a][0], dim_per_axis * sizeof(float));
+        ptr += (dim_per_axis * sizeof(float));
+    }
+
+    _dma_slot_used[slot] += total_frame_size;
+    _written_bytes += total_frame_size;
+    _record_count++;
+    _batch_count++;
+    _last_push_ms = millis();
+
+    if (_batch_count >= _watermark_high) flush();
+    return true;
 }
 

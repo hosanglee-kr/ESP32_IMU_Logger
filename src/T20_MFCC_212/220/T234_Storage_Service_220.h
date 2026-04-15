@@ -14,10 +14,12 @@
 class CL_T20_StorageService {
    public:
 	CL_T20_StorageService();
-	~CL_T20_StorageService() = default;
+	~CL_T20_StorageService();
 
 	// 스토리지 마운트 및 초기화
 	bool		begin(const ST_T20_SdmmcProfile_t& profile);
+	
+	void        setConfig(const ST_T20_Config_t& cfg); 
 
 	// 설정 구조체를 직접 전달받아 내부에서 헤더와 파일명을 자동 생성
 	bool		openSession(const ST_T20_Config_t& cfg);
@@ -54,6 +56,11 @@ class CL_T20_StorageService {
 	void _handleRotation();
 	bool _saveIndexJson();
 	bool _loadIndexJson();
+	
+	// DMA 슬롯 저장 전용 내부 함수 및 pretrigger 버퍼 관리
+    bool _pushToDma(const ST_T20_FeatureVector_t* p_vec);
+    void _flushPreBuffer();
+    void _allocatePreBuffer();
 
    private:
 	EM_T20_StorageBackend_t	  _backend;
@@ -94,4 +101,12 @@ class CL_T20_StorageService {
 
 	uint16_t _index_count;
 	uint16_t _rotate_keep_max;
+	
+	// pretrigger 링버퍼 변수
+    ST_T20_FeatureVector_t* _pre_buf = nullptr;
+    uint16_t                _pre_capacity = 0;
+    uint16_t                _pre_head = 0;
+    uint16_t                _pre_count = 0;
+
 };
+

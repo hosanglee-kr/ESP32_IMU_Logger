@@ -378,6 +378,7 @@ typedef struct {
     bool     save_raw;                  // 특징량과 별도로 가공 전 파형 데이터(Raw) 보존 여부
     uint16_t rotate_keep_max;           // 오래된 파일 자동 삭제를 위한 최대 보존 횟수
     uint32_t idle_flush_ms;             // 버퍼가 다 차지 않아도 디스크를 비우는 강제 타임아웃
+    uint8_t  pre_trigger_sec;           // 트리거 발생 전 데이터 보존 시간 (초)
 } ST_T20_ConfigStorage_t;
 
 typedef struct {
@@ -468,6 +469,8 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.storage.rotation_min                        = T20::C10_Rec::ROTATION_MIN_DEF;
     cfg.storage.rotate_keep_max                     = T20::C10_Rec::ROTATE_KEEP_MAX;
     cfg.storage.idle_flush_ms                       = T20::C10_Rec::BATCH_IDLE_FLUSH_MS;
+    
+    cfg.storage.pre_trigger_sec                     = 4;
 
     // [8] 스마트 트리거 제어 기반 절전 및 이벤트 레코딩 정책
     cfg.trigger.hw_power.use_deep_sleep      		= false;
@@ -508,3 +511,4 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     return cfg;
 }
+
