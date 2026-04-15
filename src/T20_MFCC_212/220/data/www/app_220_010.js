@@ -215,39 +215,69 @@ function drawMfccWaterfalls(axis0Mfcc) {
 }
 
 // ==========================================
-// 3. WebSocket 및 60Hz 렌더링 최적화 루프
+// 3. WebSocket 및 최적화된 60Hz 렌더링 루프 (Dynamic Decimation 적용)
+// Downsampling 적용 : FFT 사이즈에 따른 Decimation 간격(step) 계산
+//       512 이하는 1:1, 1024는 2:1, 2048 이상은 4:1
 // ==========================================
 function renderLoop() {
+    // 단일 프레임 모드 (Realtime UI) 처리
     if (isSinglePending && pendingWave && pendingSpec && pendingMfcc) {
-        // [수정] 축 개수만큼 차트에 데이터 매핑
-        for(let i=0; i < sysState.axis_count; i++) {
-            charts.wave.data.datasets[i].data = pendingWave[i];
-            charts.spec.data.datasets[i].data = pendingSpec[i];
-        }
-        charts.mfcc.data.datasets[0].data = pendingMfcc;
         
+        // 1. FFT 사이즈에 따른 Decimation 간격(step) 계산
+        // 512 이하는 1:1, 1024는 2:1, 2048 이상은 4:1
+        const fftSize = sysState.fft_size;
+        const step = fftSize <= 512 ? 1 : (fftSize <= 1024 ? 2 : 4);
+
+        // 2. 축별 데이터셋 업데이트 (Wave & Spectrum)
+        for (let a = 0; a < sysState.axis_count; a++) {
+            const rawW = pendingWave[a];
+            const rawS = pendingSpec[a];
+
+            if (step === 1) {
+                // 원본 그대로 사용
+                charts.wave.data.datasets[a].data = rawW;
+                charts.spec.data.datasets[a].data = rawS;
+            } else {
+                // Decimation 수행: 메모리 할당 최소화를 위해 for 루프 활용
+                const decimatedW = [];
+                const decimatedS = [];
+                for (let i = 0; i < rawW.length; i += step) decimatedW.push(rawW[i]);
+                for (let i = 0; i < rawS.length; i += step) decimatedS.push(rawS[i]);
+                
+                charts.wave.data.datasets[a].data = decimatedW;
+                charts.spec.data.datasets[a].data = decimatedS;
+            }
+        }
+
+        // 3. MFCC 바 차트 업데이트 (Decimation 대상 아님)
+        charts.mfcc.data.datasets[0].data = pendingMfcc;
+
+        // 4. 차트 실제 렌더링 명령 ('none' 옵션으로 불필요한 애니메이션 제거)
         charts.wave.update('none');
         charts.spec.update('none');
         charts.mfcc.update('none');
-        
-        // Waterfall은 첫 번째 축(0번) 기준 렌더링 유지
+
+        // 5. Waterfall 렌더링 (메인 축 0번 기준)
         waterfallSpec.draw(pendingSpec[0]);
         const singleAxisDim = sysState.mfcc_coeffs * 3;
         drawMfccWaterfalls(pendingMfcc.subarray(0, singleAxisDim));
-        
-        isSinglePending = false;
+
+        isSinglePending = false; // 플래그 소비
     } 
+    // 시퀀스 모드 (TinyML) 처리
     else if (isSeqPending && pendingMfcc) {
         charts.mfcc.data.datasets[0].data = pendingMfcc;
         charts.mfcc.update('none');
-        
+
+        // 시퀀스 내의 모든 프레임을 Waterfall에 누적
         pendingSeqFrames.forEach(frame => drawMfccWaterfalls(frame));
         pendingSeqFrames = [];
         isSeqPending = false;
     }
+
+    // 다음 프레임 예약
     requestAnimationFrame(renderLoop);
 }
-
 
 
 function connectWebSocket() {
