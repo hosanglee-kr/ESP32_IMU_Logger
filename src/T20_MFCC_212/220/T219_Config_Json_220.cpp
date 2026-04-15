@@ -210,21 +210,29 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     st["idle_flush_ms"]     = cfg.storage.idle_flush_ms;
 
 
-    JsonObject tr               = out_doc["trigger"].to<JsonObject>();
-    tr["use_threshold"]         = cfg.trigger.use_threshold;
-    tr["threshold_rms"]         = cfg.trigger.threshold_rms;
-    tr["use_deep_sleep"]        = cfg.trigger.use_deep_sleep;
-    tr["sleep_timeout_sec"]     = cfg.trigger.sleep_timeout_sec;
-    tr["any_motion_duration"]   = cfg.trigger.any_motion_duration;
+    // t(HW Power & SW Event 분리 적용) ===
+    JsonObject tr = out_doc["trigger"].to<JsonObject>();
+    
+    JsonObject hw = tr["hw_power"].to<JsonObject>();
+    hw["use_deep_sleep"]    = cfg.trigger.hw_power.use_deep_sleep;
+    hw["sleep_timeout_sec"] = cfg.trigger.hw_power.sleep_timeout_sec;
+    hw["wake_threshold_g"]  = cfg.trigger.hw_power.wake_threshold_g;
+    hw["duration_x20ms"]    = cfg.trigger.hw_power.duration_x20ms;
 
-    JsonArray arr = tr["bands"].to<JsonArray>();
+    JsonObject sw = tr["sw_event"].to<JsonObject>();
+    sw["hold_time_ms"]        = cfg.trigger.sw_event.hold_time_ms;
+    sw["use_rms"]             = cfg.trigger.sw_event.use_rms;
+    sw["rms_threshold_power"] = cfg.trigger.sw_event.rms_threshold_power;
+
+    JsonArray arr = sw["bands"].to<JsonArray>();
     for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
         JsonObject b   = arr.add<JsonObject>();
-        b["enable"]    = cfg.trigger.bands[i].enable;
-        b["start_hz"]  = cfg.trigger.bands[i].start_hz;
-        b["end_hz"]    = cfg.trigger.bands[i].end_hz;
-        b["threshold"] = cfg.trigger.bands[i].threshold;
+        b["enable"]    = cfg.trigger.sw_event.bands[i].enable;
+        b["start_hz"]  = cfg.trigger.sw_event.bands[i].start_hz;
+        b["end_hz"]    = cfg.trigger.sw_event.bands[i].end_hz;
+        b["threshold"] = cfg.trigger.sw_event.bands[i].threshold;
     }
+    
 
     JsonArray multi = wf["multi_ap"].to<JsonArray>();
     for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
@@ -257,6 +265,3 @@ void CL_T20_ConfigJson::buildJsonString(const ST_T20_Config_t& cfg, String& out_
     buildJson(cfg, doc);
     serializeJson(doc, out_str);
 }
-
-
-
