@@ -55,9 +55,27 @@
 ## 5.**다중 축(Multi-axis) 퓨전**: 현재는 한 번에 하나의 축(예: Accel Z)만 분석하지만, 3축 데이터를 동시에 MFCC로 추출하여 특징량을 확장(39D → 117D)함으로써 공간적 진동 특성을 반영합니다.
 
 
-***
----
-***
+## ***
+## --- 
+## ***
+- storage.closeSession("trigger_hold_timeout"); 5초 고정값을 설정값으로 변경
+- 가속도, 자이로 단위 통일 필요(측정,표시,임계값)
+- bmi wakup 임계값(단위확인필요)과 rms 임계값 구분 필요 검토
+- 3축모드 설정시 가속도 3축인지 자이로 3축 구분
+- T234_Storage_Service 내부에서 기록 실패가 N회 이상 발생하면 자동으로 closeSession() 후 다시 begin()을 시도하는 보호 로직
+- 안전한 재부팅: 웹에서 설정을 저장하고 ESP.restart()가 호출될 때, StorageService의 세션이 열려있다면 closeSession()이 호출되지 않고 꺼질 수 있습니다. CommService의 reboot API 핸들러에서 p->storage.closeSession("reboot")을 먼저 호출하도록 보강
+- ST_T20_RecorderBinaryHeader_t의 version이 JSON에서는 219로 되어 있고 코드에서는 220으로 혼용되는 부분이 보입니다. 바이너리 파일 분석 툴(Python 등)과의 호환성을 위해 220으로 통일
+- 프론트엔드] Chart.js 실시간 성능 부하
+   - 현재 app_220_001.js는 requestAnimationFrame을 통해 60Hz로 렌더링을 시도합니다.
+   - 위험: 3축 모드 + 1024 FFT를 켜면, 매 프레임마다 Chart.js가 3000개 이상의 포인트를 다시 그립니다. 모바일 브라우저나 저사양 PC에서는 웹 UI가 급격히 느려질 수 있습니다.
+   - 권장: FFT Size가 512 이상일 경우, pendingWave 데이터를 전송하기 전에 2:1 혹은 4:1로 **Decimation(추출)**하여 차트 포인트 숫자를 줄이는 로직을 JS에 추가하는 것이 좋습니다.
+- [백엔드] Smart Trigger - 밴드 에너지 초기화 문제
+   - 점검: 이 루프는 all_ready 상태가 아닐 때(MFCC 히스토리가 덜 찼을 때)도 매번 실행되어 ws_payload를 채웁니다.
+   - 개선: p->dsp.getBandEnergy()는 FFT 직후에 에너지를 계산하므로 문제가 없으나, 메모리 효율을 위해 all_ready 조건 밖에서 수행하는 것이 맞습니다. 다만, max_band_energy를 p_feature->band_energy에 대입하는 시점은 all_ready 안쪽이어야 합니다. (현재 코드는 적절히 분리되어 있음)
+
+## ***
+## --- 
+## ***
 
 
 ### 2. 데이터 수집 및 라벨링 자동화 (Active Learning Support)
