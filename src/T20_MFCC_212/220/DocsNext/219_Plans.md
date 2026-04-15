@@ -10,17 +10,22 @@
     - trigger 변수 및 임계값 분리/통폐합 검토
 
 ### 1. ⚙️ 명시적 상태 머신 (FSM) 설계
+
 기존의 단순 boolean 플래그들을 통폐합하여, 시스템 전체의 흐름을 관장하는 **메인 FSM**과 **서브 FSM**으로 분리합니다.  
+
 #### **A. 메인 시스템 상태 (System State)**   
 measurement_active를 대체하며, 시스템의 현재 행동을 명확히 정의합니다.
  * SYS_STATE_IDLE: 센서는 작동 중지 또는 초저전력 대기 상태. (딥슬립 진입 대기)
  * SYS_STATE_MONITOR: 센서 수집 및 DSP 연산은 진행하되, **저장(SD)은 하지 않고 트리거만 감시**하는 상태. (웹 UI 실시간 모니터링 유지)
  * SYS_STATE_RECORD: 수동 조작 또는 트리거 조건이 충족되어 **데이터를 스토리지에 기록** 중인 상태.
  * SYS_STATE_FAULT: 센서 먹통(Watchdog), SD카드 에러 등으로 인한 예외 상태.
+ * 
 #### **B. 노이즈 학습 상태 (Noise State)**  
  * NOISE_STATE_IDLE: 노이즈 제거 OFF 또는 초기화 상태.
  * NOISE_STATE_LEARNING: 환경 소음을 수집하여 프로필을 생성 중인 상태 (설정된 Frame 도달 시 자동 전환).
  * NOISE_STATE_ACTIVE: 학습된 노이즈 프로필을 바탕으로 스펙트럼 감산을 적용 중인 상태.
+ * 
+ 
 ### 2. 🚀 시작 모드(Operation Mode) 구분 및 구조체 개선
 단순 auto_start boolean을 없애고, 확장성을 고려한 열거형(Enum)으로 통폐합합니다.
 ```cpp
@@ -32,6 +37,8 @@ typedef enum {
 
 ```
  * **적용 방안:** cfg.system.auto_start를 cfg.system.op_mode로 교체합니다.
+ 
+ 
 ### 3. 🎯 트리거 변수 및 임계값(Threshold) 분리/통폐합
 현재 cfg.trigger 안에는 하드웨어 전원 관리(딥슬립/Wake)와 소프트웨어 연산(DSP 트리거)이 혼재되어 있습니다. 이들의 목적과 임계값 단위를 명확히 분리해야 합니다.
 **개선된 Trigger 구조체 설계안:**
@@ -50,14 +57,17 @@ typedef struct {
         uint32_t hold_time_ms;         // (중요) 기존 소스에 5000ms로 하드코딩된 값을 변수화
         
         bool     use_rms;
-        float    rms_threshold;        // 전체 진동 파워 임계값
+        float    rms_threshold_power;        // 전체 진동 파워 임계값
 
         ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX]; // 다중 밴드 감시
     } sw_event;
 } ST_T20_ConfigTrigger_t;
 
 ```
- * **분리 이유:** 하드웨어를 깨우는 wake_threshold_g는 거칠고 큰 충격(예: 1.0G)에 반응해야 하지만, DSP에서 감시하는 rms_threshold는 미세한 변화(예: 0.1G)를 잡아내야 할 수 있으므로 두 임계값을 분리하는 것이 맞습니다.
+ * **분리 이유:** 하드웨어를 깨우는 wake_threshold_g는 거칠고 큰 충격(예: 1.0G)에 반응해야 하지만,  
+ * DSP에서 감시하는 rms_threshold_power는 미세한 변화(예: 0.1G)를 잡아내야 할 수 있으므로 두 임계값을 분리하는 것이 맞습니다.
+ 
+ 
 ### 4. 🔔 이벤트 유형(Event Type) 정형화
 기존에는 문자열 하드코딩("smart_trigger_alert", "btn_start")으로 이벤트를 처리했습니다. 이를 정형화된 Event Enum으로 관리하여 MQTT와 Storage 로그의 일관성을 높입니다.
 ```cpp
