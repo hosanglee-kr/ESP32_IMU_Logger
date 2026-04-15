@@ -39,34 +39,7 @@ typedef enum {
  * **적용 방안:** cfg.system.auto_start를 cfg.system.op_mode로 교체합니다.
  
  
-### 3. 🎯 트리거 변수 및 임계값(Threshold) 분리/통폐합
-현재 cfg.trigger 안에는 하드웨어 전원 관리(딥슬립/Wake)와 소프트웨어 연산(DSP 트리거)이 혼재되어 있습니다. 이들의 목적과 임계값 단위를 명확히 분리해야 합니다.
-**개선된 Trigger 구조체 설계안:**
-```cpp
-typedef struct {
-    // 1. 하드웨어 전원/모션 제어 (BMI270 칩셋 레벨)
-    struct {
-        bool     use_deep_sleep;
-        uint32_t sleep_timeout_sec;
-        float    wake_threshold_g;     // 하드웨어 Any-Motion 임계값 (G 단위)
-        uint16_t duration_x20ms;
-    } hw_power;
 
-    // 2. 소프트웨어 이벤트 감시 (DSP 레벨)
-    struct {
-        uint32_t hold_time_ms;         // (중요) 기존 소스에 5000ms로 하드코딩된 값을 변수화
-        
-        bool     use_rms;
-        float    rms_threshold_power;        // 전체 진동 파워 임계값
-
-        ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX]; // 다중 밴드 감시
-    } sw_event;
-} ST_T20_ConfigTrigger_t;
-
-```
- * **분리 이유:** 하드웨어를 깨우는 wake_threshold_g는 거칠고 큰 충격(예: 1.0G)에 반응해야 하지만,  
- * DSP에서 감시하는 rms_threshold_power는 미세한 변화(예: 0.1G)를 잡아내야 할 수 있으므로 두 임계값을 분리하는 것이 맞습니다.
- 
  
 ### 4. 🔔 이벤트 유형(Event Type) 정형화
 기존에는 문자열 하드코딩("smart_trigger_alert", "btn_start")으로 이벤트를 처리했습니다. 이를 정형화된 Event Enum으로 관리하여 MQTT와 Storage 로그의 일관성을 높입니다.
@@ -221,3 +194,34 @@ typedef enum {
 
 ## 4. **이벤트 기반 레코딩 트리거**: 단순 버튼이나 설정값이 아닌, 특정 주파수 대역의 에너지가 급증하거나 AI가 "모르는 패턴"이라고 판단할 때 자동으로 SD 카드에 기록을 시작하는 기능을 구현합니다.
 ## 5.**다중 축(Multi-axis) 퓨전**: 현재는 한 번에 하나의 축(예: Accel Z)만 분석하지만, 3축 데이터를 동시에 MFCC로 추출하여 특징량을 확장(39D → 117D)함으로써 공간적 진동 특성을 반영합니다.
+
+
+
+### 3. 🎯 트리거 변수 및 임계값(Threshold) 분리/통폐합
+현재 cfg.trigger 안에는 하드웨어 전원 관리(딥슬립/Wake)와 소프트웨어 연산(DSP 트리거)이 혼재되어 있습니다. 이들의 목적과 임계값 단위를 명확히 분리해야 합니다.
+**개선된 Trigger 구조체 설계안:**
+```cpp
+typedef struct {
+    // 1. 하드웨어 전원/모션 제어 (BMI270 칩셋 레벨)
+    struct {
+        bool     use_deep_sleep;
+        uint32_t sleep_timeout_sec;
+        float    wake_threshold_g;     // 하드웨어 Any-Motion 임계값 (G 단위)
+        uint16_t duration_x20ms;
+    } hw_power;
+
+    // 2. 소프트웨어 이벤트 감시 (DSP 레벨)
+    struct {
+        uint32_t hold_time_ms;         // (중요) 기존 소스에 5000ms로 하드코딩된 값을 변수화
+        
+        bool     use_rms;
+        float    rms_threshold_power;        // 전체 진동 파워 임계값
+
+        ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX]; // 다중 밴드 감시
+    } sw_event;
+} ST_T20_ConfigTrigger_t;
+
+```
+ * **분리 이유:** 하드웨어를 깨우는 wake_threshold_g는 거칠고 큰 충격(예: 1.0G)에 반응해야 하지만,  
+ * DSP에서 감시하는 rms_threshold_power는 미세한 변화(예: 0.1G)를 잡아내야 할 수 있으므로 두 임계값을 분리하는 것이 맞습니다.
+ 

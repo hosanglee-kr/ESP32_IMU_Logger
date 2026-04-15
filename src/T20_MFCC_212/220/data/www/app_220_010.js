@@ -134,7 +134,7 @@ function updateChartDimensions() {
     charts.spec.data.labels = Array(Bins).fill('');
     charts.mfcc.data.labels = Array(mfccTotal).fill('');
     
-    // [수정] 차트 라인 동적 생성 (1축이면 1줄, 3축이면 3줄)
+    // 차트 라인 동적 생성 (1축이면 1줄, 3축이면 3줄)
     charts.wave.data.datasets = [];
     charts.spec.data.datasets = [];
     const lineColors = ['#4caf50', '#ff9800', '#f44336'];
@@ -403,8 +403,8 @@ async function loadSettings() {
             });
         });
 
-        if(cfg.trigger && cfg.trigger.bands) {
-            cfg.trigger.bands.forEach((b, i) => {
+        if(cfg.trigger && cfg.trigger.sw_event && cfg.trigger.sw_event.bands) {
+            cfg.trigger.sw_event.bands.forEach((b, i) => {
                 if(i > 2) return;
                 formConfig[`band_${i}_enable`].value = b.enable ? "true" : "false";
                 formConfig[`band_${i}_start`].value = b.start_hz || "";
@@ -412,6 +412,7 @@ async function loadSettings() {
                 formConfig[`band_${i}_thresh`].value = b.threshold || "";
             });
         }
+
 
         if (cfg.wifi && cfg.wifi.multi_ap && Array.isArray(cfg.wifi.multi_ap)) {
             cfg.wifi.multi_ap.forEach((ap, i) => {
@@ -455,8 +456,11 @@ async function saveSettings() {
             threshold: Number(formConfig[`band_${i}_thresh`].value)
         });
     }
+    
     if(!configData.trigger) configData.trigger = {};
-    configData.trigger.bands = bands;
+    if(!configData.trigger.sw_event) configData.trigger.sw_event = {};
+    configData.trigger.sw_event.bands = bands;
+
 
     const multiApArray = [];
     const f = document.getElementById('form-mqtt') || formConfig;
