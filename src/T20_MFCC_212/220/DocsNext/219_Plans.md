@@ -10,14 +10,14 @@
     - trigger 변수 및 임계값 분리/통폐합 검토
 
 ### 1. ⚙️ 명시적 상태 머신 (FSM) 설계
-기존의 단순 boolean 플래그들을 통폐합하여, 시스템 전체의 흐름을 관장하는 **메인 FSM**과 **서브 FSM**으로 분리합니다.
-**A. 메인 시스템 상태 (System State)**
+기존의 단순 boolean 플래그들을 통폐합하여, 시스템 전체의 흐름을 관장하는 **메인 FSM**과 **서브 FSM**으로 분리합니다.  
+**A. 메인 시스템 상태 (System State)**   
 measurement_active를 대체하며, 시스템의 현재 행동을 명확히 정의합니다.
  * SYS_STATE_IDLE: 센서는 작동 중지 또는 초저전력 대기 상태. (딥슬립 진입 대기)
  * SYS_STATE_MONITOR: 센서 수집 및 DSP 연산은 진행하되, **저장(SD)은 하지 않고 트리거만 감시**하는 상태. (웹 UI 실시간 모니터링 유지)
  * SYS_STATE_RECORD: 수동 조작 또는 트리거 조건이 충족되어 **데이터를 스토리지에 기록** 중인 상태.
  * SYS_STATE_FAULT: 센서 먹통(Watchdog), SD카드 에러 등으로 인한 예외 상태.
-**B. 노이즈 학습 상태 (Noise State)**
+**B. 노이즈 학습 상태 (Noise State)**   
  * NOISE_STATE_IDLE: 노이즈 제거 OFF 또는 초기화 상태.
  * NOISE_STATE_LEARNING: 환경 소음을 수집하여 프로필을 생성 중인 상태 (설정된 Frame 도달 시 자동 전환).
  * NOISE_STATE_ACTIVE: 학습된 노이즈 프로필을 바탕으로 스펙트럼 감산을 적용 중인 상태.
