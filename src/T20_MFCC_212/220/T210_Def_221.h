@@ -1,6 +1,6 @@
 /* ============================================================================
  * File: T210_Def_221.h
- * Summary: T20 MFCC 시스템 통합 정의 
+ * Summary: T20 MFCC 시스템 통합 정의
  * Description: 시스템 전역 상수, 데이터 구조체, 기본 설정 생성 로직 통합
  * ========================================================================== */
 
@@ -30,7 +30,7 @@ namespace T20 {
     namespace C10_Pin {
         inline constexpr uint8_t BTN_CONTROL = 0U;                              // 제어용 사용자 버튼 (일반적으로 Boot 핀 활용)
         inline constexpr uint8_t RGB_LED     = 21U;                             // 상태 인디케이터용 RGB LED 핀
-        
+
         inline constexpr uint8_t BMI_SCK     = 12U;                             // BMI270 센서 SPI 클럭 핀
         inline constexpr uint8_t BMI_MISO    = 13U;                             // BMI270 센서 SPI MISO 핀
         inline constexpr uint8_t BMI_MOSI    = 11U;                             // BMI270 센서 SPI MOSI 핀
@@ -50,7 +50,7 @@ namespace T20 {
         inline constexpr uint32_t SENSOR_STACK   = 6144U;                       // 센서 데이터 수집 태스크 스택 크기
         inline constexpr uint32_t PROCESS_STACK  = 12288U;                      // DSP 및 MFCC 연산 전담 태스크 스택 크기 (메모리 집약)
         inline constexpr uint32_t RECORDER_STACK = 8192U;                       // SD/LittleFS 스토리지 기록 전담 태스크 스택 크기
-        
+
         inline constexpr uint8_t  SENSOR_PRIO    = 4U;                          // 센서 수집 우선순위 (실시간성 보장을 위해 가장 높음)
         inline constexpr uint8_t  PROCESS_PRIO   = 3U;                          // DSP 연산 우선순위
         inline constexpr uint8_t  RECORDER_PRIO  = 2U;                          // 파일 기록 우선순위 (가장 낮음, 큐 버퍼링으로 커버)
@@ -62,21 +62,21 @@ namespace T20 {
         inline constexpr uint16_t FFT_BINS         = (FFT_SIZE / 2U) + 1U;      // Nyquist 정리에 따른 유효 주파수 Bin 개수 (129)
         inline constexpr float    SAMPLE_RATE_HZ   = 1600.0f;                   // 센서 샘플링 및 DSP 연산 기준 주파수 (1.6kHz)
         inline constexpr float    FREQ_RES_HZ      = SAMPLE_RATE_HZ / (float)FFT_SIZE; // 단일 FFT Bin이 나타내는 주파수 대역폭(해상도)
-        
+
         inline constexpr uint16_t MEL_FILTERS      = 26U;                       // MFCC 추출을 위한 Mel-Filter Bank 개수
         inline constexpr float    MEL_SCALE_CONST  = 2595.0f;                   // Mel 스케일 변환 기본 상수
         inline constexpr float    MEL_FREQ_CONST   = 700.0f;                    // Mel 스케일 기준 주파수 편향값
-        
+
         inline constexpr uint16_t MFCC_COEFFS_MAX  = 32U;                       // 할당 가능한 최대 MFCC 계수 차원
         inline constexpr uint16_t MFCC_COEFFS_DEF  = 13U;                       // 기본 설정 시 사용되는 MFCC 계수 (일반적 음성/진동 표준)
         inline constexpr uint16_t MFCC_HISTORY_LEN = 5U;                        // Delta/Delta-Delta 계산을 위한 과거 프레임 보존 길이
         inline constexpr uint16_t MFCC_COMPONENTS  = 3U;                        // 특징량 구성 요소 수 (1:Static, 2:Delta, 3:Delta-Delta)
         inline constexpr uint16_t MFCC_TOTAL_DIM   = MFCC_COEFFS_MAX * MFCC_COMPONENTS; // 단일 축 당 최대 특징량 차원 수 (32 * 3 = 96)
-        
+
         inline constexpr uint8_t  AXIS_COUNT_MAX   = 3U;                        // 동시 연산 가능한 최대 물리 축 개수 (X, Y, Z)
         inline constexpr uint8_t  AXIS_COUNT_DEF   = 3U;                        // 기본 설정 시 사용하는 물리 축 개수
         inline constexpr uint16_t MAX_FEATURE_DIM  = AXIS_COUNT_MAX * MFCC_TOTAL_DIM; // 모든 축을 합산한 최대 1D 특징량 벡터 차원 (3 * 96 = 288)
-        
+
         inline constexpr uint8_t  TRIGGER_BANDS_MAX= 3U;                        // 주파수 도메인 기반 스마트 트리거 동시 감시 최대 대역 수
         inline constexpr uint16_t SIMD_ALIGN       = 16U;                       // ESP32-S3 벡터 연산(SIMD) 최적화를 위한 16바이트 메모리 정렬 기준
     }
@@ -90,17 +90,17 @@ namespace T20 {
         inline constexpr uint16_t FIFO_BATCH_SIZE        = 32U;                 // 인터럽트 발생 시 한 번에 퍼올릴 최대 프레임 개수
         inline constexpr uint32_t ANY_MOTION_STEP_MS     = 20UL;                // 하드웨어 모션 감지(Any-Motion) 내부 타이머의 1틱 기준 시간 (20ms)
     }
-    
+
     // --- [1.6] 레코더 및 스토리지 관리 ---
     namespace C10_Rec {
         inline constexpr uint32_t BINARY_MAGIC        = 0x54323042UL;           // 고유 바이너리 파일 식별자 ("T20B")
         inline constexpr uint16_t BINARY_VERSION_NUM  = 220U;                   // 바이너리 파일 포맷 버전 (하위 호환성 체크용)
         inline constexpr uint16_t BATCH_WMARK_HIGH    = 8U;                     // 버퍼에 이 개수만큼 프레임이 쌓이면 물리적 디스크 쓰기 트리거
         inline constexpr uint32_t BATCH_IDLE_FLUSH_MS = 250U;                   // 데이터가 워터마크에 도달하지 않아도 강제로 디스크를 비우는 유휴 대기 시간
-        
+
         inline constexpr uint8_t  FLAG_NTP_SYNCED     = 0x01U;                  // 타임스탬프가 NTP 서버와 정밀 동기화되었음을 나타내는 비트 플래그
         inline constexpr uint8_t  FLAG_TRIGGERED      = 0x02U;                  // 스마트 트리거 이벤트에 의해 기록된 프레임임을 나타내는 비트 플래그
-        
+
         inline constexpr uint32_t ROTATION_MB_DEF     = 10U;                    // 파일 자동 분할(로테이션) 기준 용량 기본값 (10MB)
         inline constexpr uint32_t ROTATION_MIN_DEF    = 60U;                    // 파일 자동 분할 기준 시간 기본값 (60분)
         inline constexpr uint16_t ROTATE_KEEP_MAX     = 8U;                     // 저장소에 보존할 최근 로테이션 파일 최대 개수
@@ -241,14 +241,38 @@ typedef struct {
     float threshold;                    // 트리거 유발을 위한 누적 에너지 임계값
 } ST_T20_TriggerBand_t;
 
+
+
+
+// ST_T20_ConfigTrigger_t 구조체 교체
 typedef struct {
-    bool                 use_threshold;                                 // 진동 기반 스마트 트리거(RMS) 활성화 여부
-    float                threshold_rms;                                 // 진동 트리거 임계값 (G 단위)
-    uint16_t             any_motion_duration;                           // 센서 내부 하드웨어 모션 감지용 시간값 (x 20ms 단위)
-    bool                 use_deep_sleep;                                // 유휴 시 절전 모드 진입 여부
-    uint32_t             sleep_timeout_sec;                             // 딥슬립 진입 대기 시간(초)
-    ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX];        // 다중 주파수 대역 감시용 배열
+    // 1. 하드웨어 전원/모션 제어 (BMI270 칩셋 레벨)
+    struct {
+        bool     use_deep_sleep;										// 유휴 시 절전 모드 진입 여부
+        uint32_t sleep_timeout_sec;										// 딥슬립 진입 대기 시간(초)
+        float    wake_threshold_g;     									// 하드웨어 Any-Motion 임계값 (G 단위)
+        uint16_t duration_x20ms;       									// 센서 내부 하드웨어 모션 감지용 시간값
+    } hw_power;
+
+    // 2. 소프트웨어 이벤트 감시 (DSP 레벨)
+    struct {
+        bool     use_rms;              									// 진동 기반 스마트 트리거(RMS) 활성화 여부
+        uint32_t hold_time_ms;         									// 트리거 소멸 후 레코딩 유지 시간 (기존 5000ms 하드코딩 대체)
+        float    rms_threshold_power;  									// 전체 진동 파워 임계값
+        ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX]; 	// 다중 밴드 감시
+    } sw_event;
 } ST_T20_ConfigTrigger_t;
+
+
+// typedef struct {
+//     bool                 use_threshold;                                 // 진동 기반 스마트 트리거(RMS) 활성화 여부
+//     float                threshold_rms;                                 // 진동 트리거 임계값 (G 단위)
+//     uint16_t             any_motion_duration;                           // 센서 내부 하드웨어 모션 감지용 시간값 (x 20ms 단위)
+//     bool                 use_deep_sleep;                                // 유휴 시 절전 모드 진입 여부
+//     uint32_t             sleep_timeout_sec;                             // 딥슬립 진입 대기 시간(초)
+//     ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX];        // 다중 주파수 대역 감시용 배열
+// } ST_T20_ConfigTrigger_t;
+
 
 // --- [2.4] 시스템 코어 특징량(Feature) 텐서 구조체 ---
 // 주의: 고속 벡터 연산(SIMD) 효율을 위해 전체 및 내부 배열을 16바이트 정렬(Alignment) 처리함
@@ -257,15 +281,15 @@ typedef struct alignas(T20::C10_DSP::SIMD_ALIGN) {
     uint32_t frame_id;                                                  // 누적 시퀀스 번호 (4바이트)
     uint8_t  active_axes;                                               // 연산에 포함된 유효 축 수 (1바이트)
     uint8_t  status_flags;                                              // 시스템 상태(NTP 동기화, 트리거 등) 플래그 (1바이트)
-    uint8_t  reserved_1[2];                                             // 헤더 구역 16바이트 정렬을 위한 2바이트 패딩 
+    uint8_t  reserved_1[2];                                             // 헤더 구역 16바이트 정렬을 위한 2바이트 패딩
 
     float    rms[T20::C10_DSP::AXIS_COUNT_MAX];                         // 각 물리축별 실시간 실효치(RMS) 진동값 (12바이트)
     float    band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX];              // 감시 대역 내 파워 스펙트럼 총합 에너지 (12바이트)
     uint8_t  reserved_2[8];                                             // 데이터 구역 시작점(48바이트 오프셋)을 16의 배수로 맞추기 위한 패딩
 
-    // 핵심 특징량 행렬: [물리축][39차원 x 3 (Static, Delta, D-Delta)] 
+    // 핵심 특징량 행렬: [물리축][39차원 x 3 (Static, Delta, D-Delta)]
     // float=4바이트이므로 총 3 * 96 * 4 = 1152바이트 (16의 배수로 SIMD 완벽 호환)
-    alignas(T20::C10_DSP::SIMD_ALIGN) float features[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_TOTAL_DIM];  
+    alignas(T20::C10_DSP::SIMD_ALIGN) float features[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_TOTAL_DIM];
 } ST_T20_FeatureVector_t;
 
 typedef struct {
@@ -382,7 +406,7 @@ typedef struct {
 } ST_T20_Config_t;
 
 /* ----------------------------------------------------------------------------
- * [PART 3] 기본 설정 빌더 팩토리 
+ * [PART 3] 기본 설정 빌더 팩토리
  * ------------------------------------------------------------------------- */
 
 /**
@@ -416,16 +440,16 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     // [3] 무선 통신망 폴백 모드 및 AP 인프라 기본 세팅
     cfg.wifi.mode                                   = EN_T20_WIFI_AUTO_FALLBACK;
-    strlcpy(cfg.wifi.ap_ssid, "T20_MFCC_AP", 32);
-    strlcpy(cfg.wifi.ap_password, "12345678", 64);
-    strlcpy(cfg.wifi.ap_ip, "192.168.4.1", 16);
+    strlcpy(cfg.wifi.ap_ssid						, "T20_MFCC_AP", 32);
+    strlcpy(cfg.wifi.ap_password					, "12345678", 64);
+    strlcpy(cfg.wifi.ap_ip							, "192.168.4.1", 16);
 
     // [4] MQTT 통신 (기본 비활성)
     cfg.mqtt.enable                                 = false;
-    strlcpy(cfg.mqtt.broker, "broker.hivemq.com", 64);
+    strlcpy(cfg.mqtt.broker							, "broker.hivemq.com", 64);
     cfg.mqtt.port                                   = T20::C10_Net::MQTT_PORT_DEF;
-    strlcpy(cfg.mqtt.id, "T20_DEVICE", 16);
-    strlcpy(cfg.mqtt.topic_root, "t20/sensor", 64);
+    strlcpy(cfg.mqtt.id								, "T20_DEVICE", 16);
+    strlcpy(cfg.mqtt.topic_root						, "t20/sensor", 64);
 
     // [5] 특징량(Feature) 차원 및 해상도 매핑
     cfg.feature.fft_size                            = (EM_T20_FftSize_t)T20::C10_DSP::FFT_SIZE;
@@ -434,7 +458,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.feature.axis_count                          = (EM_T20_AxisCount_t)T20::C10_DSP::AXIS_COUNT_DEF;
 
     // [6] 외부 출력 파이프라인 제어 (시퀀스 텐서 조립 포함)
-    cfg.output.sequence_frames                      = T20::C10_Sys::SEQUENCE_FRAMES_DEF; 
+    cfg.output.sequence_frames                      = T20::C10_Sys::SEQUENCE_FRAMES_DEF;
     cfg.output.enabled                              = true;
     cfg.output.output_sequence                      = false; // 실시간 모니터링을 위해 단일 프레임 모드로 초기 시작
 
@@ -446,24 +470,41 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.storage.idle_flush_ms                       = T20::C10_Rec::BATCH_IDLE_FLUSH_MS;
 
     // [8] 스마트 트리거 제어 기반 절전 및 이벤트 레코딩 정책
-    cfg.trigger.use_threshold                       = false;
-    cfg.trigger.threshold_rms                       = T20::C10_Trigger::THRES_RMS_DEF; 
-    cfg.trigger.any_motion_duration                 = (uint16_t)(T20::C10_Trigger::DURATION_MS_DEF / T20::C10_BMI::ANY_MOTION_STEP_MS); 
-    cfg.trigger.use_deep_sleep                      = false;
-    cfg.trigger.sleep_timeout_sec                   = T20::C10_Trigger::SLEEP_SEC_DEF; 
+    cfg.trigger.hw_power.use_deep_sleep      		= false;
+    cfg.trigger.hw_power.sleep_timeout_sec   		= T20::C10_Trigger::SLEEP_SEC_DEF;
+    cfg.trigger.hw_power.wake_threshold_g    		= 1.0f; 								// 거친 충격 (예: 1G)
+    cfg.trigger.hw_power.duration_x20ms      		= 5;    								// 100ms 지속
 
-    // 주파수 밴드 감시 객체 배열 초기화
+    cfg.trigger.sw_event.hold_time_ms        		= 5000UL; 								// 기본 5초 유지
+    cfg.trigger.sw_event.use_rms             		= false;
+    cfg.trigger.sw_event.rms_threshold_power 		= T20::C10_Trigger::THRES_RMS_DEF; 		// 정밀 진동 (예: 0.5G)
+
+	// 주파수 밴드 감시 객체 배열 초기화
     for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
-        cfg.trigger.bands[i].enable                 = false;
-        cfg.trigger.bands[i].start_hz               = 0.0f;
-        cfg.trigger.bands[i].end_hz                 = 0.0f;
-        cfg.trigger.bands[i].threshold              = 0.0f;
+        cfg.trigger.sw_event.bands[i].enable    	= false;
+        cfg.trigger.sw_event.bands[i].start_hz  	= 0.0f;
+        cfg.trigger.sw_event.bands[i].end_hz    	= 0.0f;
+        cfg.trigger.sw_event.bands[i].threshold 	= 0.0f;
     }
+
+    // cfg.trigger.use_threshold                       = false;
+    // cfg.trigger.threshold_rms                       = T20::C10_Trigger::THRES_RMS_DEF;
+    // cfg.trigger.any_motion_duration                 = (uint16_t)(T20::C10_Trigger::DURATION_MS_DEF / T20::C10_BMI::ANY_MOTION_STEP_MS);
+    // cfg.trigger.use_deep_sleep                      = false;
+    // cfg.trigger.sleep_timeout_sec                   = T20::C10_Trigger::SLEEP_SEC_DEF;
+
+    // // 주파수 밴드 감시 객체 배열 초기화
+    // for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
+    //     cfg.trigger.bands[i].enable                 = false;
+    //     cfg.trigger.bands[i].start_hz               = 0.0f;
+    //     cfg.trigger.bands[i].end_hz                 = 0.0f;
+    //     cfg.trigger.bands[i].threshold              = 0.0f;
+    // }
 
     // [9] 시스템 구동 특성
     cfg.system.auto_start                           = true;
     cfg.system.button_pin                           = T20::C10_Pin::BTN_CONTROL;
-    cfg.system.watchdog_ms                          = T20::C10_Sys::WATCHDOG_MS_DEF; 
+    cfg.system.watchdog_ms                          = T20::C10_Sys::WATCHDOG_MS_DEF;
 
     return cfg;
 }

@@ -17,7 +17,7 @@ bool CL_T20_ConfigJson::parseFromJson(const char* json_str, ST_T20_Config_t& out
 
 bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& out_cfg) {
     // V7.4.x 규격: const JsonDocument에서 값을 읽을 때는 JsonObjectConst 사용
-    
+
     // 1. Sensor
     JsonObjectConst s = doc["sensor"];
     if (s) {
@@ -38,7 +38,7 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
             out_cfg.preprocess.filter.cutoff_hz_1 = flt["cutoff_hz_1"] | out_cfg.preprocess.filter.cutoff_hz_1;
             out_cfg.preprocess.filter.q_factor    = flt["q_factor"] | out_cfg.preprocess.filter.q_factor;
         }
-        
+
         JsonObjectConst pre = d["preemphasis"];
         if (pre) {
             out_cfg.preprocess.preemphasis.enable = pre["enable"] | out_cfg.preprocess.preemphasis.enable;
@@ -83,26 +83,35 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.storage.idle_flush_ms   = st["idle_flush_ms"] | out_cfg.storage.idle_flush_ms;
     }
 
-    // 6. Trigger
+    // 6. Trigger (HW Power & SW Event 분리)
     JsonObjectConst tr = doc["trigger"];
     if (tr) {
-        out_cfg.trigger.use_threshold       = tr["use_threshold"] | out_cfg.trigger.use_threshold;
-        out_cfg.trigger.threshold_rms       = tr["threshold_rms"] | out_cfg.trigger.threshold_rms;
-        out_cfg.trigger.use_deep_sleep      = tr["use_deep_sleep"] | out_cfg.trigger.use_deep_sleep;
-        out_cfg.trigger.sleep_timeout_sec   = tr["sleep_timeout_sec"] | out_cfg.trigger.sleep_timeout_sec;
-        out_cfg.trigger.any_motion_duration = tr["any_motion_duration"] | out_cfg.trigger.any_motion_duration;
+        JsonObjectConst hw = tr["hw_power"];
+        if (hw) {
+            out_cfg.trigger.hw_power.use_deep_sleep    = hw["use_deep_sleep"] | out_cfg.trigger.hw_power.use_deep_sleep;
+            out_cfg.trigger.hw_power.sleep_timeout_sec = hw["sleep_timeout_sec"] | out_cfg.trigger.hw_power.sleep_timeout_sec;
+            out_cfg.trigger.hw_power.wake_threshold_g  = hw["wake_threshold_g"] | out_cfg.trigger.hw_power.wake_threshold_g;
+            out_cfg.trigger.hw_power.duration_x20ms    = hw["duration_x20ms"] | out_cfg.trigger.hw_power.duration_x20ms;
+        }
 
-        JsonArrayConst arr = tr["bands"];
-        if (arr) {
-            for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX && i < arr.size(); i++) {
-                out_cfg.trigger.bands[i].enable    = arr[i]["enable"] | out_cfg.trigger.bands[i].enable;
-                out_cfg.trigger.bands[i].start_hz  = arr[i]["start_hz"] | out_cfg.trigger.bands[i].start_hz;
-                out_cfg.trigger.bands[i].end_hz    = arr[i]["end_hz"] | out_cfg.trigger.bands[i].end_hz;
-                out_cfg.trigger.bands[i].threshold = arr[i]["threshold"] | out_cfg.trigger.bands[i].threshold;
+        JsonObjectConst sw = tr["sw_event"];
+        if (sw) {
+            out_cfg.trigger.sw_event.hold_time_ms        = sw["hold_time_ms"] | out_cfg.trigger.sw_event.hold_time_ms;
+            out_cfg.trigger.sw_event.use_rms             = sw["use_rms"] | out_cfg.trigger.sw_event.use_rms;
+            out_cfg.trigger.sw_event.rms_threshold_power = sw["rms_threshold_power"] | out_cfg.trigger.sw_event.rms_threshold_power;
+
+            JsonArrayConst arr = sw["bands"];
+            if (arr) {
+                for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX && i < arr.size(); i++) {
+                    out_cfg.trigger.sw_event.bands[i].enable    = arr[i]["enable"] | out_cfg.trigger.sw_event.bands[i].enable;
+                    out_cfg.trigger.sw_event.bands[i].start_hz  = arr[i]["start_hz"] | out_cfg.trigger.sw_event.bands[i].start_hz;
+                    out_cfg.trigger.sw_event.bands[i].end_hz    = arr[i]["end_hz"] | out_cfg.trigger.sw_event.bands[i].end_hz;
+                    out_cfg.trigger.sw_event.bands[i].threshold = arr[i]["threshold"] | out_cfg.trigger.sw_event.bands[i].threshold;
+                }
             }
         }
     }
-    
+
     // === 7. WiFi ===
     JsonObjectConst wf = doc["wifi"];
     if (wf) {
@@ -125,7 +134,7 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
             }
         }
     }
-    
+
     // 8. MQTT
     JsonObjectConst mq = doc["mqtt"];
     if (mq) {
@@ -156,11 +165,11 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
 
     JsonObject d       = out_doc["dsp"].to<JsonObject>();
     d["remove_dc"]     = cfg.preprocess.remove_dc;
-    
+
     JsonObject pre = d["preemphasis"].to<JsonObject>();
     pre["enable"]  = cfg.preprocess.preemphasis.enable;
     pre["alpha"]   = cfg.preprocess.preemphasis.alpha;
-    
+
     JsonObject flt     = d["filter"].to<JsonObject>();
     flt["enable"]      = cfg.preprocess.filter.enable;
     flt["type"]        = (int)cfg.preprocess.filter.type;
@@ -185,7 +194,7 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     o["enabled"]             = cfg.output.enabled;
     o["output_sequence"]     = cfg.output.output_sequence;
     o["sequence_frames"]     = cfg.output.sequence_frames;
-    
+
     // === WiFi ===
     JsonObject wf       = out_doc["wifi"].to<JsonObject>();
     wf["mode"]          = (int)cfg.wifi.mode;
@@ -199,7 +208,8 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     st["save_raw"]          = cfg.storage.save_raw;
     st["rotate_keep_max"]   = cfg.storage.rotate_keep_max;
     st["idle_flush_ms"]     = cfg.storage.idle_flush_ms;
-    
+
+
     JsonObject tr               = out_doc["trigger"].to<JsonObject>();
     tr["use_threshold"]         = cfg.trigger.use_threshold;
     tr["threshold_rms"]         = cfg.trigger.threshold_rms;
@@ -215,7 +225,7 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         b["end_hz"]    = cfg.trigger.bands[i].end_hz;
         b["threshold"] = cfg.trigger.bands[i].threshold;
     }
-    
+
     JsonArray multi = wf["multi_ap"].to<JsonArray>();
     for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
         JsonObject ap = multi.add<JsonObject>();
@@ -228,7 +238,7 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         ap["dns1"]          = cfg.wifi.multi_ap[i].dns1;
         ap["dns2"]          = cfg.wifi.multi_ap[i].dns2;
     }
-    
+
     JsonObject mq      = out_doc["mqtt"].to<JsonObject>();
     mq["enable"]       = cfg.mqtt.enable;
     mq["broker"]       = cfg.mqtt.broker;

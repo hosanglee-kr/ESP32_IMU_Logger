@@ -2,8 +2,8 @@
  * File: T230_Mfcc_Cor_220.cpp
  * Summary: Main Task Logic & Engine Orchestration
  * ========================================================================== */
- 
- /* 
+
+ /*
 ============================================================================
  * [AI 메모: T20_processTask 제공 기능 요약]
  * 1. Core 1에서 동작하며, DSP 파이프라인, 스마트 트리거, 특징량 추출을 총괄하는 메인 엔진.
@@ -13,11 +13,11 @@
  * 5. 거대한 특징량 구조체(약 1.2KB)로 인한 Stack Overflow를 방지하기 위해 Internal SRAM 힙 할당 적용.
  *
  * [AI 메모: 구현 및 유지보수 주의사항]
- * 1. xQueueSend는 포인터가 아닌 값(Value)의 복사를 수행하므로, p_feature가 가리키는 
+ * 1. xQueueSend는 포인터가 아닌 값(Value)의 복사를 수행하므로, p_feature가 가리키는
  * 전체 1152바이트가 큐로 안전하게 복사됩니다.
- * 2. 메모리 복사(memcpy) 단위인 N, bins, mfcc_dim의 크기 계산에 유의해야 합니다. 
+ * 2. 메모리 복사(memcpy) 단위인 N, bins, mfcc_dim의 크기 계산에 유의해야 합니다.
  * ws_payload 메모리 맵: [Wave축1..3] + [Spec축1..3] + [MFCC축1..3]
- * 3. p_feature->features 배열은 16바이트 SIMD 패딩이 포함되어 있으므로, 통신으로 보낼 때는 
+ * 3. p_feature->features 배열은 16바이트 SIMD 패딩이 포함되어 있으므로, 통신으로 보낼 때는
  * a * 39 단위로 순수 데이터만 추출(Packing)하여 대역폭 낭비를 막아야 합니다.
  * ==========================================================================
  */
@@ -154,7 +154,7 @@ void T20_processTask(void* p_arg) {
 
             // [5] 3축(또는 1축) 독립 DSP 연산 수행 및 웹 페이로드 동시 조립
             for (uint8_t a = 0; a < axis_cnt; a++) {
-                
+
                 // PSRAM(raw_buffer) 데이터를 입력으로 주고 연산 수행
                 if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], p_feature, a)) {
                     all_ready = false;
@@ -191,7 +191,7 @@ void T20_processTask(void* p_arg) {
 
                 // [7] 스마트 트리거 판별: 다중 주파수 대역(Multi-band) 에너지 검사 (루프에서 구한 최대치 활용)
                 for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
-                    p_feature->band_energy[b] = max_band_energy[b]; 
+                    p_feature->band_energy[b] = max_band_energy[b];
                     if (p->cfg.trigger.bands[b].enable && max_band_energy[b] > p->cfg.trigger.bands[b].threshold) {
                         event_detected = true;
                     }
@@ -244,7 +244,7 @@ void T20_processTask(void* p_arg) {
                 } else {
                     // (B) 단일 벡터 모드 (Web UI): 파형 + 스펙트럼 버퍼 뒤에 MFCC 데이터를 덧붙여 조립
                     float* mfcc_ptr = ws_payload + (axis_cnt * N) + (axis_cnt * bins);
-                    
+
                     // SIMD 정렬을 위해 96차원(패딩 포함)으로 선언된 데이터에서 순수 데이터(39차원)만 복사(Packing)
                     for(uint8_t a = 0; a < axis_cnt; a++) {
                         memcpy(mfcc_ptr + (a * 39), &p_feature->features[a][0], 39 * sizeof(float));
@@ -295,15 +295,15 @@ CL_T20_Mfcc::CL_T20_Mfcc() {
     _impl = (ST_Impl*)heap_caps_malloc(sizeof(ST_Impl), MALLOC_CAP_SPIRAM);
     if (_impl != nullptr) {
         // 확보된 PSRAM 메모리 공간에 객체 생성자(초기화 리스트 등) 호출
-        new (_impl) ST_Impl(); 
+        new (_impl) ST_Impl();
     } else {
         Serial.println(F("[Critical] PSRAM Allocation Failed for ST_Impl!"));
     }
     g_t20 = this;
 }
 
-CL_T20_Mfcc::~CL_T20_Mfcc() { 
-    stop(); 
+CL_T20_Mfcc::~CL_T20_Mfcc() {
+    stop();
     if (_impl) {
         _impl->~ST_Impl(); // 소멸자 명시적 호출
         heap_caps_free(_impl);
@@ -425,17 +425,18 @@ void CL_T20_Mfcc::run() {
         wd_last_ms = millis();
     }
 
+
     // [딥슬립 로직] 설정된 시간 동안 아무런 트리거 이벤트가 없으면 진입
-    if (_impl->cfg.trigger.use_deep_sleep) {
+    if (_impl->cfg.trigger.hw_power.use_deep_sleep) {
         // last_trigger_ms가 0이면 부팅 직후이므로, 부팅 후 또는 마지막 트리거 이후 시간 검사
         uint32_t idle_time = millis() - _impl->last_trigger_ms;
 
         // 주의: 수동으로 시작한 경우(measurement_active == true)는 딥슬립 무시
-        if (!_impl->measurement_active && idle_time > (_impl->cfg.trigger.sleep_timeout_sec * 1000)) {
+        if (!_impl->measurement_active && idle_time > (_impl->cfg.trigger.hw_power.sleep_timeout_sec * 1000)) {
             Serial.println(F("[Power] Entering Deep Sleep due to inactivity..."));
 
             // 센서 Any-Motion Wakeup 인터럽트 설정
-            _impl->sensor.enableWakeOnMotion(_impl->cfg.trigger.threshold_rms, _impl->cfg.trigger.any_motion_duration);
+            _impl->sensor.enableWakeOnMotion(_impl->cfg.trigger.hw_power.wake_threshold_g, _impl->cfg.trigger.hw_power.duration_x20ms);
 
             // SD 카드 및 시스템 안전 종료
             _impl->storage.closeSession("system_sleep");
