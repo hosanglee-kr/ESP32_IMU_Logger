@@ -1,22 +1,40 @@
 /* ============================================================================
  * File: T231_Dsp_Pipeline_221.h
- * Summary: MFCC & DSP Pipeline Engine (SIMD Optimized)
+ * Summary: Advanced MFCC & DSP Pipeline Engine (v220.020 / SIMD + Matrix Optimized)
  * * [AI 메모: 제공 기능 요약]
- * 1. ESP32-S3 SIMD 가속을 활용한 고속 FFT 및 MFCC 추출 엔진.
- * 2. 16바이트 정렬된 Internal SRAM 버퍼를 사용하여 연산 지연 최소화.
- * 3. 축별 독립적인 IIR 필터 상태 및 노이즈 프로필 관리.
+ * 1. ESP32-S3 SIMD 및 Matrix API(dspm_mult)를 활용한 초고속 행렬 연산 가속.
+ * 2. 다중 필터(Median, Cascade IIR, Notch) 및 가변 Window 함수 완벽 지원.
+ * 3. 16바이트 정렬(Alignment) 예외 처리 및 NaN/Inf 묵음 처리를 통한 무결점 안정성 보장.
  * * [AI 메모: 구현 및 유지보수 주의사항]
- * 1. SIMD 연산용 버퍼(_work_frame, _fft_io_buf 등)는 반드시 MALLOC_CAP_INTERNAL에
- * 할당되어야 하며, PSRAM에 위치할 경우 연산 오류나 심각한 성능 저하가 발생합니다.
- * 2. dsps_fft2r_init_fc32는 실행 시 내부 룩업 테이블을 생성하므로 begin()에서
- * 한 번만 호출되도록 관리합니다.
+ * 1. [정렬] SIMD 연산용 버퍼(_work_frame 등)는 반드시 MALLOC_CAP_INTERNAL에 
+ * 할당되어야 하며, 16바이트 정렬이 깨지면 하드웨어 패닉(LoadStoreError)이 발생합니다.
+ * 2. [안정성] 필터 위상 왜곡을 막기 위해 반드시 [Median -> DC(NaN제거) -> IIR -> Notch -> RMS] 
+ * 순서의 파이프라인을 엄격히 준수합니다.
+ * 3. [성능] _calcRMS는 dsps_dotprod_f32 내적 연산을 이용해 O(N) 루프를 O(1) 수준으로 가속합니다.
+ * ========================================================================== */
+
+
+/* ============================================================================
+ * File: T231_Dsp_Pipeline_221.h
+ * Summary: Advanced MFCC & DSP Pipeline Engine (v220.020 / SIMD + Matrix Optimized)
+ * * [AI 메모: 제공 기능 요약]
+ * 1. ESP32-S3 SIMD 및 Matrix API(dspm)를 활용한 초고속 FFT 및 MFCC 행렬 연산 가속.
+ * 2. 다중 필터(Cascade IIR HPF/LPF, Adaptive Notch) 및 가변 Median/Window 함수 완벽 지원.
+ * 3. 16바이트 정렬된 Internal SRAM 플랫 버퍼를 사용하여 연산 지연 및 메모리 병목 원천 차단.
+ * * [AI 메모: 구현 및 유지보수 주의사항]
+ * 1. SIMD 연산용 버퍼(_work_frame 등)와 행렬 버퍼(_dct_matrix_flat)는 반드시 
+ * MALLOC_CAP_INTERNAL에 할당되어야 S3 PIE 가속기가 정상 작동합니다.
+ * 2. 다중 필터는 위상 왜곡을 막기 위해 반드시 [Median -> DC제거 -> IIR -> Notch -> RMS -> PreEmphasis] 
+ * 순서의 파이프라인을 엄격히 준수해야 합니다.
  * 3. MFCC 계수(Static, Delta, Delta-Delta) 조립 시 메모리 정렬(alignas(16))을 유지합니다.
  * ========================================================================== */
 
 
 
 
- #pragma once
+
+
+#pragma once
 
 #include "T210_Def_221.h"  // ST_T20_Config_t 정의 포함
 #include "esp_dsp.h"
@@ -58,7 +76,8 @@ class CL_T20_DspPipeline {
 
     // 전처리 파이프라인 (순서 분리)
     void _applyMedianFilter(float* p_data, int window_size);
-    void _removeDC_calcRMS(float* p_data, uint8_t axis_idx);
+    void _removeDC(float* p_data);                                 // [분리됨]
+    void _calcRMS(const float* p_data, uint8_t axis_idx);          // [분리됨]
     void _applyAdaptiveNotch(float* p_data, uint8_t axis_idx);
     void _applyPreEmphasis(float* p_data, uint8_t axis_idx);
     void _applyNoiseGate(float* p_data);
@@ -112,3 +131,5 @@ class CL_T20_DspPipeline {
 
 
 };
+
+

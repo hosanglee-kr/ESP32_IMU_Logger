@@ -239,7 +239,11 @@ void T20_processTask(void* p_arg) {
                 xQueueSend(p->recorder_queue, p_feature, 0);
             }
         }
-    }
+        // [안정성 보장] RTOS Task Starvation 방지
+        // Queue에 데이터가 꽉 차서 쉬지 않고 연산이 돌아갈 경우, 하위 우선순위 태스크(Wi-Fi, System Idle)가 
+        // CPU 시간을 할당받지 못해 Watchdog이 터지는 것을 방지하기 위한 명시적 양보(Yield)
+        vTaskDelay(pdMS_TO_TICKS(1));
+    } // for(;;) 루프 끝
 
     // Task 종료 시 안전하게 힙 메모리 해제
     heap_caps_free(p_feature);

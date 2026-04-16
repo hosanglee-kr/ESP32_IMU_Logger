@@ -155,16 +155,24 @@ void CL_T20_DspPipeline::_generateWindow(float* p_out, int n, EM_T20_WindowType_
     }
 }
 
+
 bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVector_t* p_vec_out, uint8_t axis_idx) {
     if (!p_time_in || !p_vec_out || axis_idx >= 3) return false;
-
+    
+    // [안정성 보장] SIMD 가속기의 필수 조건인 16바이트 정렬(Alignment) 무결성 런타임 검사
+    // 포인터 주소의 하위 4비트가 0이 아니면 정렬이 깨진 상태 (하드웨어 패닉 유발)
+    if (((uintptr_t)_work_frame & 15) != 0 || ((uintptr_t)_dct_matrix_flat & 15) != 0) {
+        Serial.println(F("[Critical] DSP Buffers are NOT 16-byte aligned! Process Halted."));
+        return false; 
+    }
+    
     memcpy(_work_frame, p_time_in, sizeof(float) * _current_fft_size);
 
     // [1] 비선형 스파이크 필터 (위상 왜곡 방지를 위해 맨 처음 실행)
     if (_cfg.preprocess.median.enabled) _applyMedianFilter(_work_frame, _cfg.preprocess.median.window_size);
 
-    // [2] 선형 전처리 (DC 편향 제거 및 RMS 계산)
-    _removeDC_calcRMS(_work_frame, axis_idx);
+    // [2] 선형 전처리 (DC 편향 제거를 통한 수치적 안정성 확보)
+    _removeDC(_work_frame);
 
     // [3] Cascaded IIR Filter (HPF -> LPF)
     if (_cfg.preprocess.iir_hpf.enabled) dsps_biquad_f32(_work_frame, _work_frame, _current_fft_size, _hpf_coeffs, _hpf_state[axis_idx]);
@@ -173,17 +181,20 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
     // [4] 특정 주파수 톤 제거 (Notch)
     if (_cfg.preprocess.notch.enabled) dsps_biquad_f32(_work_frame, _work_frame, _current_fft_size, _notch_coeffs, _notch_state[axis_idx]);
 
-    // [5] AI 분석용 고역 강조 (필터링이 다 끝난 깨끗한 신호에 적용)
+    // [5] 💡 필터링이 모두 끝난 깨끗한 파형에서 순수 진동 에너지(RMS) 도출
+    _calcRMS(_work_frame, axis_idx);
+
+    // [6] AI 분석용 고역 강조 (RMS 계산 후 파형 모양 변경)
     _applyPreEmphasis(_work_frame, axis_idx);
 
-    // [6] 미세 묵음 처리
+    // [7] 미세 묵음 처리
     _applyNoiseGate(_work_frame);
 
-    // [7] Windowing & FFT
+    // [8] Windowing & FFT
     dsps_mul_f32(_work_frame, _window, _work_frame, _current_fft_size, 1, 1, 1);
     _computePowerSpectrum(_work_frame);
 
-    // [8] 노이즈 감산 및 특징 추출
+    // [9] 노이즈 감산 및 특징 추출
     _learnNoiseSpectrum(axis_idx);
     _applySpectralSubtraction(axis_idx);
     _applyMelFilterbank(_log_mel);
@@ -191,7 +202,7 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
     alignas(16) float current_mfcc[T20::C10_DSP::MFCC_COEFFS_MAX];
     _computeDCT2(_log_mel, current_mfcc);
 
-    // [9] 조립
+    // [10] 조립
     p_vec_out->rms[axis_idx] = _current_rms[axis_idx];
     _pushHistory(current_mfcc, axis_idx);
 
@@ -202,58 +213,45 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
     return false;
 }
 
-// bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVector_t* p_vec_out, uint8_t axis_idx) {
-//     if (!p_time_in || !p_vec_out || axis_idx >= 3) return false;
 
-// 	// PSRAM의 raw_buffer 데이터를 연산 전용 SRAM 버퍼로 복사 (SIMD 가속 준비)
-//     memcpy(_work_frame, p_time_in, sizeof(float) * _current_fft_size);
 
-//     _applyPreprocess(_work_frame, axis_idx);
-//     _applyNoiseGate(_work_frame);
-//     _applyRuntimeFilter(_work_frame, axis_idx);
 
-// 	// 벡터 곱셈 (Windowing) - SIMD 활용
-//     dsps_mul_f32(_work_frame, _window, _work_frame, _current_fft_size, 1, 1, 1);
-//     _computePowerSpectrum(_work_frame);
-
-//     // [중요 수정] axis_idx 전달
-//     _learnNoiseSpectrum(axis_idx);
-//     _applySpectralSubtraction(axis_idx);
-
-//     _applyMelFilterbank(_log_mel);
-
-//     alignas(16) float current_mfcc[T20::C10_DSP::MFCC_COEFFS_MAX];
-//     _computeDCT2(_log_mel, current_mfcc);
-
-//     p_vec_out->rms[axis_idx] = _current_rms[axis_idx];
-
-//     _pushHistory(current_mfcc, axis_idx);
-
-//     if (_history_count[axis_idx] >= T20::C10_DSP::MFCC_HISTORY_LEN) {
-//         _build39DVector(p_vec_out, axis_idx);
-//         return true;
-//     }
-
-//     return false;
-// }
-
-// === 분리된 전처리 함수 1: DC 제거 및 RMS ===
-void CL_T20_DspPipeline::_removeDC_calcRMS(float* p_data, uint8_t axis_idx) {
-    float sum = 0.0f;
+// === 1. DC 편향 제거 및 NaN 방어 (수치적 안정성 확보) ===
+void CL_T20_DspPipeline::_removeDC(float* p_data) {
     uint16_t N = _current_fft_size;
+    float sum = 0.0f;
 
-    for (int i = 0; i < N; i++) sum += p_data[i];
-    float mean = sum / (float)N;
-
-    float sum_sq = 0.0f;
     for (int i = 0; i < N; i++) {
-        if (_cfg.preprocess.remove_dc) p_data[i] -= mean;
-        sum_sq += (p_data[i] * p_data[i]);
+        // [안정성 보장] 센서 노이즈로 인한 NaN 또는 Inf 값 유입 시 0.0f로 초기화 (필터 발산 원천 차단)
+        if (isnan(p_data[i]) || isinf(p_data[i])) {
+            p_data[i] = 0.0f;
+        }
+        sum += p_data[i];
     }
-    _current_rms[axis_idx] = sqrtf(sum_sq / (float)N);
+    
+    if (!_cfg.preprocess.remove_dc) return;
+
+    float mean = sum / (float)N;
+    for (int i = 0; i < N; i++) {
+        p_data[i] -= mean;
+    }
 }
 
-// === 분리된 전처리 함수 2: 고역 강조 (Pre-emphasis) ===
+// === 2. 순수 RMS 계산 (SIMD 내적 가속) ===
+void CL_T20_DspPipeline::_calcRMS(const float* p_data, uint8_t axis_idx) {
+    float sum_sq = 0.0f;
+    uint16_t N = _current_fft_size;
+
+    // [성능 최적화] for 루프를 통한 제곱 합산을 SIMD 하드웨어 내적(Dot Product) API로 대체
+    // p_data 벡터 자기 자신과의 내적은 곧 각 성분 제곱의 합과 같음
+    dsps_dotprod_f32(p_data, p_data, &sum_sq, N);
+
+    // 1e-12f를 더해 0으로 나누기(Divide by Zero) 예외 방지
+    _current_rms[axis_idx] = sqrtf(fmaxf(sum_sq / (float)N, 1e-12f));
+}
+
+
+// ===  2: 고역 강조 (Pre-emphasis) ===
 void CL_T20_DspPipeline::_applyPreEmphasis(float* p_data, uint8_t axis_idx) {
     if (!_cfg.preprocess.preemphasis.enable) return;
     float alpha = _cfg.preprocess.preemphasis.alpha;
@@ -266,31 +264,48 @@ void CL_T20_DspPipeline::_applyPreEmphasis(float* p_data, uint8_t axis_idx) {
 
 void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
     if (window_size < 3) return;
+    
+    // CPU 부하 방지를 위해 최대 7-tap으로 제한 (홀수 보정)
+    if (window_size > 7) window_size = 7;
+    if (window_size % 2 == 0) window_size--; 
+    
     uint16_t N = _current_fft_size;
+    int half = window_size / 2;
+    
+    // 1600Hz, 최대 7-tap 정렬이므로 스택 메모리(SRAM) 사용 (속도 극대화)
+    float temp_buf[7];
+    float history[7];
+    
+    // 이력 버퍼를 초기 데이터로 채움
+    for(int i = 0; i < window_size; i++) history[i] = p_data[0]; 
 
-    // 원본 데이터 보존을 위한 히스토리 변수
-    float prev2 = p_data[0];
-    float prev1 = p_data[1];
-
-    for (int i = 1; i < N - 1; i++) {
-        float a = prev2;           // 과거의 순수 원본값
-        float b = prev1;           // 현재의 순수 원본값
-        float c = p_data[i + 1];   // 미래의 원본값
-
-        float median;
-        // Sorting Network (3-tap)
-        if ((a <= b && b <= c) || (c <= b && b <= a)) median = b;
-        else if ((b <= a && a <= c) || (c <= a && a <= b)) median = a;
-        else median = c;
-
-        // 원본 이력 밀기 (덮어쓰기 전에 수행)
-        prev2 = prev1;
-        prev1 = c;
-
-        // In-place 업데이트
-        p_data[i] = median;
+    for (int i = 0; i < N; i++) {
+        // 1. Sliding Window 갱신 (가장 오래된 데이터 밀어내기)
+        for(int j = 0; j < window_size - 1; j++) history[j] = history[j + 1];
+        
+        // 2. 미래 데이터 로드 (배열 끝에 도달하면 마지막 값 복사)
+        history[window_size - 1] = (i + half < N) ? p_data[i + half] : p_data[N - 1];
+        
+        // 3. 정렬을 위해 임시 버퍼에 복사
+        memcpy(temp_buf, history, window_size * sizeof(float));
+        
+        // 4. 고속 삽입 정렬 (Insertion Sort - 7개 이하 요소 정렬 시 퀵소트보다 빠름)
+        for (int j = 1; j < window_size; j++) {
+            float key = temp_buf[j];
+            int k = j - 1;
+            while (k >= 0 && temp_buf[k] > key) {
+                temp_buf[k + 1] = temp_buf[k];
+                k--;
+            }
+            temp_buf[k + 1] = key;
+        }
+        
+        // 5. 원본 배열에 중간값 업데이트 (In-place)
+        p_data[i] = temp_buf[half];
     }
 }
+
+
 
 void CL_T20_DspPipeline::_applyAdaptiveNotch(float* p_data, uint8_t axis_idx) {
     if (!_cfg.preprocess.notch.enabled) return;
@@ -301,39 +316,6 @@ void CL_T20_DspPipeline::_applyAdaptiveNotch(float* p_data, uint8_t axis_idx) {
 }
 
 
-// void CL_T20_DspPipeline::_applyPreprocess(float* p_data, uint8_t axis_idx) {
-//     float sum = 0.0f;
-//     uint16_t N = _current_fft_size;
-
-//     // 1. 평균(Mean) 계산
-//     for (int i = 0; i < N; i++) {
-//         sum += p_data[i];
-//     }
-//     float mean = sum / (float)N;
-
-//     // 2. DC 제거 및 순수 진동(AC) RMS 계산
-//     float sum_sq = 0.0f;
-//     for (int i = 0; i < N; i++) {
-//         if (_cfg.preprocess.remove_dc) {
-//             p_data[i] -= mean;
-//         }
-//         sum_sq += (p_data[i] * p_data[i]); // DC가 제거된 값의 제곱
-//     }
-
-//     _current_rms[axis_idx] = sqrtf(sum_sq / (float)N);
-
-//     // 3. 축별 독립 Pre-emphasis 적용
-//     if (_cfg.preprocess.preemphasis.enable) {
-//         float alpha = _cfg.preprocess.preemphasis.alpha;
-//         for (int i = 0; i < N; i++) {
-//             float cur = p_data[i];
-//             p_data[i] = cur - (alpha * _prev_sample[axis_idx]);
-//             _prev_sample[axis_idx] = cur;
-//         }
-//     }
-// }
-
-
 void CL_T20_DspPipeline::_applyNoiseGate(float* p_data) {
     if (!_cfg.preprocess.noise.enable_gate) return;
     float threshold = _cfg.preprocess.noise.gate_threshold_abs;
@@ -342,13 +324,6 @@ void CL_T20_DspPipeline::_applyNoiseGate(float* p_data) {
         if (fabsf(p_data[i]) < threshold) p_data[i] = 0.0f;
     }
 }
-
-// void CL_T20_DspPipeline::_applyRuntimeFilter(float* p_data, uint8_t axis_idx) {
-//     if (!_cfg.preprocess.filter.enable || _cfg.preprocess.filter.type == EN_T20_FILTER_OFF) return;
-
-//     // [수정] _biquad_state[axis_idx]를 사용하여 축별 필터 상태 유지
-//     dsps_biquad_f32(p_data, p_data, _current_fft_size, _biquad_coeffs, _biquad_state[axis_idx]);
-// }
 
 
 void CL_T20_DspPipeline::_computePowerSpectrum(const float* p_time) {
@@ -441,14 +416,6 @@ void CL_T20_DspPipeline::_computeDCT2(const float* p_in, float* p_out) {
     dspm_mult_f32(p_in, _dct_matrix_flat, p_out, m, n, k);
 }
 
-// void CL_T20_DspPipeline::_computeDCT2(const float* p_in, float* p_out) {
-// 	uint16_t dim = _cfg.feature.mfcc_coeffs;
-// 	for (int i = 0; i < dim; i++) {
-// 		float sum = 0.0f;
-// 		dsps_dotprod_f32(p_in, _dct_matrix[i], &sum, T20::C10_DSP::MEL_FILTERS);
-// 		p_out[i] = sum;
-// 	}
-// }
 
 void CL_T20_DspPipeline::_pushHistory(const float* p_mfcc, uint8_t axis_idx) {
     uint16_t dim = _cfg.feature.mfcc_coeffs;
