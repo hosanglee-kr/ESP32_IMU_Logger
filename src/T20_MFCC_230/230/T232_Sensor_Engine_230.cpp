@@ -1,6 +1,6 @@
 
 /* ============================================================================
- * File: T232_Sensor_Engine_2e0.cpp
+ * File: T232_Sensor_Engine_230.cpp
  * Summary: BMI270 Driver & Data Acquisition Engine Implementation
  * ========================================================================== */
 #include "T232_Sensor_Engine_230.h"

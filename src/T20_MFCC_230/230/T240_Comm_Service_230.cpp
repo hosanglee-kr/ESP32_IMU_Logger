@@ -3,7 +3,7 @@
  * Summary: Network, MQTT & OTA Implementation 
  * ========================================================================== */
 
-#include "T240_Comm_Service_2e0.h"
+#include "T240_Comm_Service_230.h"
 #include "T221_Mfcc_Inter_230.h" // ST_Impl 의존성 (엔진간 상호작용 용도)
 #include <LittleFS.h>
 #include <SD_MMC.h>

@@ -1,6 +1,6 @@
 
 /* ============================================================================
- * File: T232_Sensor_Engine_2e0.h
+ * File: T232_Sensor_Engine_230.h
  * Summary: BMI270 Sensor Driver & Data Acquisition Engine
  * * [AI 메모: 제공 기능 요약]
  * 1. SparkFun_BMI270_Arduino_Library 기반의 SPI 통신 엔진(10MHz).

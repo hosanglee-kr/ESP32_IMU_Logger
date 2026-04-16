@@ -24,7 +24,7 @@
 
 
 #include "T220_Mfcc_230.h"
-#include "T221_Mfcc_Inter_2e0.h"
+#include "T221_Mfcc_Inter_230.h"
 #include "T210_Def_230.h"
 
 CL_T20_Mfcc* g_t20 = nullptr;
