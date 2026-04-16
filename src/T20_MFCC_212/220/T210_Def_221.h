@@ -201,11 +201,21 @@ typedef enum {
 } EM_T20_AxisCount_t;
 
 // --- [2.2] DSP 전처리 및 동작 모드 열거형 ---
+/*
 typedef enum {
     EN_T20_FILTER_OFF = 0,
     EN_T20_FILTER_LPF,
     EN_T20_FILTER_HPF
 } EM_T20_FilterType_t;
+*/
+
+typedef enum {
+    EN_T20_WINDOW_HANN = 0,
+    EN_T20_WINDOW_HAMMING,
+    EN_T20_WINDOW_BLACKMAN,
+    EN_T20_WINDOW_FLATTOP,
+    EN_T20_WINDOW_RECTANGULAR
+} EM_T20_WindowType_t;
 
 typedef enum {
     EN_T20_NOISE_OFF = 0,
@@ -305,12 +315,37 @@ typedef struct {
     float alpha;                        // 강조 필터 가중치 (일반적으로 0.97 사용)
 } ST_T20_PreproEmphasisConfig_t;
 
+/*
 typedef struct {
     bool                enable;         // IIR 런타임 필터링 적용 여부
     EM_T20_FilterType_t type;           // 필터 특성 (HPF/LPF)
     float               cutoff_hz_1;    // 컷오프 주파수
     float               q_factor;       // 필터 Q 팩터 (일반적으로 0.707)
 } ST_T20_PreproFilterConfig_t;
+*/
+
+
+// 1. IIR 단일 필터 설정 (LPF, HPF 공용)
+typedef struct {
+    bool  enabled;
+    float cutoff_hz;
+    float q_factor;
+} ST_T20_FilterIIRConfig_t;
+
+// 2. Median Filter (충격성 튀는 노이즈 제거)
+typedef struct {
+    bool    enabled;
+    uint8_t window_size; // 3, 5, 7 등 (홀수 권장)
+} ST_T20_FilterMedianConfig_t;
+
+// 3. Adaptive Notch Filter (특정 주파수 성분 추적 제거)
+typedef struct {
+    bool  enabled;
+    float target_freq_hz; // 제거 대상 주파수 (예: 60Hz 전원 노이즈)
+    float bandwidth_hz;   // 제거 대역폭
+    float learning_rate;  // 추적 속도 (LMS 기반일 경우)
+} ST_T20_FilterNotchConfig_t;
+
 
 typedef struct {
     bool               enable_gate;                 // 특정 진폭 이하 파형을 0으로 묵음처리하는 노이즈 게이트 적용 여부
@@ -321,13 +356,27 @@ typedef struct {
     uint16_t           noise_learn_frames;          // 고정형 모드 시 노이즈 프로필 구성을 위해 취득할 프레임 수
 } ST_T20_PreproNoiseConfig_t;
 
+// 4. 전처리 통합 설정 구조체 (신호처리 순서대로 재배치)
+typedef struct {
+    bool                        remove_dc;
+    ST_T20_FilterMedianConfig_t median;      // [1] 스파이크 제거
+    ST_T20_FilterIIRConfig_t    iir_hpf;     // [2] 저주파 차단
+    ST_T20_FilterIIRConfig_t    iir_lpf;     // [3] 고주파 차단
+    ST_T20_FilterNotchConfig_t  notch;       // [4] 특정 주파수 제거
+    ST_T20_PreproEmphasisConfig_t preemphasis; // [5] 고역 강조
+    ST_T20_PreproNoiseConfig_t    noise;       // [6] 스펙트럼 감산
+    EM_T20_WindowType_t         window_type; // [7] FFT 윈도우
+} ST_T20_PreprocessConfig_t;
+
+
+/*
 typedef struct {
     bool remove_dc;                                 // 파형의 DC 성분(평균 편향) 제거 여부
     ST_T20_PreproEmphasisConfig_t preemphasis;
     ST_T20_PreproFilterConfig_t   filter;
     ST_T20_PreproNoiseConfig_t    noise;
 } ST_T20_PreprocessConfig_t;
-
+*/
 // --- [2.6] 네트워크, 통신, 저장 하위 구조체 ---
 typedef struct {
     char ssid[32];
@@ -417,22 +466,41 @@ typedef struct {
 static inline ST_T20_Config_t T20_makeDefaultConfig() {
     ST_T20_Config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
+    
+     // [1] 전처리(DSP) 파이프라인 신규 설정 적용
+    cfg.preprocess.remove_dc              = true;
+    cfg.preprocess.window_type            = EN_T20_WINDOW_HANN;
 
-    // [1] 전처리(DSP) 파이프라인 기본 상태 구성
-    cfg.preprocess.remove_dc                        = true;
-    cfg.preprocess.preemphasis.enable               = true;
-    cfg.preprocess.preemphasis.alpha                = 0.97f;
-    cfg.preprocess.filter.enable                    = true;
-    cfg.preprocess.filter.type                      = EN_T20_FILTER_HPF;
-    cfg.preprocess.filter.cutoff_hz_1               = 15.0f;
-    cfg.preprocess.filter.q_factor                  = 0.707f;
+    // Median Filter 기본값
+    cfg.preprocess.median.enabled         = false;
+    cfg.preprocess.median.window_size     = 3;
 
-    cfg.preprocess.noise.enable_gate                = true;
-    cfg.preprocess.noise.gate_threshold_abs         = 0.002f;
-    cfg.preprocess.noise.mode                       = EN_T20_NOISE_ADAPTIVE;
+    // IIR HPF (15Hz 이하 제거)
+    cfg.preprocess.iir_hpf.enabled        = true;
+    cfg.preprocess.iir_hpf.cutoff_hz      = 15.0f;
+    cfg.preprocess.iir_hpf.q_factor       = 0.707f;
+
+    // IIR LPF (800Hz 이상 차단 - Nyquist)
+    cfg.preprocess.iir_lpf.enabled        = false;
+    cfg.preprocess.iir_lpf.cutoff_hz      = 750.0f;
+    cfg.preprocess.iir_lpf.q_factor       = 0.707f;
+
+    // Adaptive Notch (60Hz 전원 노이즈 대비)
+    cfg.preprocess.notch.enabled          = false;
+    cfg.preprocess.notch.target_freq_hz   = 60.0f;
+    cfg.preprocess.notch.bandwidth_hz     = 5.0f;
+    cfg.preprocess.notch.learning_rate    = 0.01f;
+
+    cfg.preprocess.preemphasis.enable     = true;
+    cfg.preprocess.preemphasis.alpha      = 0.97f;
+
+    cfg.preprocess.noise.enable_gate      = true;
+    cfg.preprocess.noise.gate_threshold_abs = 0.002f;
+    cfg.preprocess.noise.mode             = EN_T20_NOISE_ADAPTIVE;
     cfg.preprocess.noise.spectral_subtract_strength = 1.0f;
-    cfg.preprocess.noise.adaptive_alpha             = 0.05f;
-    cfg.preprocess.noise.noise_learn_frames         = 8U;
+    cfg.preprocess.noise.adaptive_alpha   = 0.05f;
+    cfg.preprocess.noise.noise_learn_frames = 8U;
+
 
     // [2] 센서 물리 한계치 및 메인 축 설정
     cfg.sensor.axis                                 = EN_T20_AXIS_ACCEL_Z;
