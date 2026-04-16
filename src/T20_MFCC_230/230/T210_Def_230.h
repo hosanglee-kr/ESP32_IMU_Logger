@@ -201,13 +201,6 @@ typedef enum {
 } EM_T20_AxisCount_t;
 
 // --- [2.2] DSP 전처리 및 동작 모드 열거형 ---
-/*
-typedef enum {
-    EN_T20_FILTER_OFF = 0,
-    EN_T20_FILTER_LPF,
-    EN_T20_FILTER_HPF
-} EM_T20_FilterType_t;
-*/
 
 typedef enum {
     EN_T20_WINDOW_HANN = 0,
@@ -273,17 +266,6 @@ typedef struct {
     } sw_event;
 } ST_T20_ConfigTrigger_t;
 
-
-// typedef struct {
-//     bool                 use_threshold;                                 // 진동 기반 스마트 트리거(RMS) 활성화 여부
-//     float                threshold_rms;                                 // 진동 트리거 임계값 (G 단위)
-//     uint16_t             any_motion_duration;                           // 센서 내부 하드웨어 모션 감지용 시간값 (x 20ms 단위)
-//     bool                 use_deep_sleep;                                // 유휴 시 절전 모드 진입 여부
-//     uint32_t             sleep_timeout_sec;                             // 딥슬립 진입 대기 시간(초)
-//     ST_T20_TriggerBand_t bands[T20::C10_DSP::TRIGGER_BANDS_MAX];        // 다중 주파수 대역 감시용 배열
-// } ST_T20_ConfigTrigger_t;
-
-
 // --- [2.4] 시스템 코어 특징량(Feature) 텐서 구조체 ---
 // 주의: 고속 벡터 연산(SIMD) 효율을 위해 전체 및 내부 배열을 16바이트 정렬(Alignment) 처리함
 typedef struct alignas(T20::C10_DSP::SIMD_ALIGN) {
@@ -314,16 +296,6 @@ typedef struct {
     bool  enable;                       // Pre-emphasis(고역 강조) 적용 여부
     float alpha;                        // 강조 필터 가중치 (일반적으로 0.97 사용)
 } ST_T20_PreproEmphasisConfig_t;
-
-/*
-typedef struct {
-    bool                enable;         // IIR 런타임 필터링 적용 여부
-    EM_T20_FilterType_t type;           // 필터 특성 (HPF/LPF)
-    float               cutoff_hz_1;    // 컷오프 주파수
-    float               q_factor;       // 필터 Q 팩터 (일반적으로 0.707)
-} ST_T20_PreproFilterConfig_t;
-*/
-
 
 // 1. IIR 단일 필터 설정 (LPF, HPF 공용)
 typedef struct {
@@ -368,15 +340,6 @@ typedef struct {
     EM_T20_WindowType_t         window_type; // [7] FFT 윈도우
 } ST_T20_PreprocessConfig_t;
 
-
-/*
-typedef struct {
-    bool remove_dc;                                 // 파형의 DC 성분(평균 편향) 제거 여부
-    ST_T20_PreproEmphasisConfig_t preemphasis;
-    ST_T20_PreproFilterConfig_t   filter;
-    ST_T20_PreproNoiseConfig_t    noise;
-} ST_T20_PreprocessConfig_t;
-*/
 // --- [2.6] 네트워크, 통신, 저장 하위 구조체 ---
 typedef struct {
     char ssid[32];
@@ -557,20 +520,6 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
         cfg.trigger.sw_event.bands[i].end_hz    	= 0.0f;
         cfg.trigger.sw_event.bands[i].threshold 	= 0.0f;
     }
-
-    // cfg.trigger.use_threshold                       = false;
-    // cfg.trigger.threshold_rms                       = T20::C10_Trigger::THRES_RMS_DEF;
-    // cfg.trigger.any_motion_duration                 = (uint16_t)(T20::C10_Trigger::DURATION_MS_DEF / T20::C10_BMI::ANY_MOTION_STEP_MS);
-    // cfg.trigger.use_deep_sleep                      = false;
-    // cfg.trigger.sleep_timeout_sec                   = T20::C10_Trigger::SLEEP_SEC_DEF;
-
-    // // 주파수 밴드 감시 객체 배열 초기화
-    // for (int i = 0; i < T20::C10_DSP::TRIGGER_BANDS_MAX; i++) {
-    //     cfg.trigger.bands[i].enable                 = false;
-    //     cfg.trigger.bands[i].start_hz               = 0.0f;
-    //     cfg.trigger.bands[i].end_hz                 = 0.0f;
-    //     cfg.trigger.bands[i].threshold              = 0.0f;
-    // }
 
     // [9] 시스템 구동 특성
     cfg.system.auto_start                           = true;
