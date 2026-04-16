@@ -26,17 +26,38 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.sensor.gyro_range  = (EM_T20_GyroRange_t)(s["gyro_range"] | out_cfg.sensor.gyro_range);
     }
 
-    // 2. DSP (Preprocess)
+    // 2. DSP (Preprocess) - v220.020 신규 다중 필터 적용
     JsonObjectConst d = doc["dsp"];
     if (d) {
-        out_cfg.preprocess.remove_dc = d["remove_dc"] | out_cfg.preprocess.remove_dc;
+        out_cfg.preprocess.remove_dc   = d["remove_dc"] | out_cfg.preprocess.remove_dc;
+        out_cfg.preprocess.window_type = (EM_T20_WindowType_t)(d["window_type"] | (int)out_cfg.preprocess.window_type);
 
-        JsonObjectConst flt = d["filter"];
-        if (flt) {
-            out_cfg.preprocess.filter.enable      = flt["enable"] | out_cfg.preprocess.filter.enable;
-            out_cfg.preprocess.filter.type        = (EM_T20_FilterType_t)(flt["type"] | out_cfg.preprocess.filter.type);
-            out_cfg.preprocess.filter.cutoff_hz_1 = flt["cutoff_hz_1"] | out_cfg.preprocess.filter.cutoff_hz_1;
-            out_cfg.preprocess.filter.q_factor    = flt["q_factor"] | out_cfg.preprocess.filter.q_factor;
+        JsonObjectConst med = d["median"];
+        if (med) {
+            out_cfg.preprocess.median.enabled     = med["enabled"] | out_cfg.preprocess.median.enabled;
+            out_cfg.preprocess.median.window_size = med["window_size"] | out_cfg.preprocess.median.window_size;
+        }
+
+        JsonObjectConst hpf = d["iir_hpf"];
+        if (hpf) {
+            out_cfg.preprocess.iir_hpf.enabled   = hpf["enabled"] | out_cfg.preprocess.iir_hpf.enabled;
+            out_cfg.preprocess.iir_hpf.cutoff_hz = hpf["cutoff_hz"] | out_cfg.preprocess.iir_hpf.cutoff_hz;
+            out_cfg.preprocess.iir_hpf.q_factor  = hpf["q_factor"] | out_cfg.preprocess.iir_hpf.q_factor;
+        }
+
+        JsonObjectConst lpf = d["iir_lpf"];
+        if (lpf) {
+            out_cfg.preprocess.iir_lpf.enabled   = lpf["enabled"] | out_cfg.preprocess.iir_lpf.enabled;
+            out_cfg.preprocess.iir_lpf.cutoff_hz = lpf["cutoff_hz"] | out_cfg.preprocess.iir_lpf.cutoff_hz;
+            out_cfg.preprocess.iir_lpf.q_factor  = lpf["q_factor"] | out_cfg.preprocess.iir_lpf.q_factor;
+        }
+
+        JsonObjectConst notch = d["notch"];
+        if (notch) {
+            out_cfg.preprocess.notch.enabled        = notch["enabled"] | out_cfg.preprocess.notch.enabled;
+            out_cfg.preprocess.notch.target_freq_hz = notch["target_freq_hz"] | out_cfg.preprocess.notch.target_freq_hz;
+            out_cfg.preprocess.notch.gain           = notch["gain"] | out_cfg.preprocess.notch.gain;
+            out_cfg.preprocess.notch.q_factor       = notch["q_factor"] | out_cfg.preprocess.notch.q_factor;
         }
 
         JsonObjectConst pre = d["preemphasis"];
@@ -82,7 +103,7 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.storage.rotate_keep_max = st["rotate_keep_max"] | out_cfg.storage.rotate_keep_max;
         out_cfg.storage.idle_flush_ms   = st["idle_flush_ms"] | out_cfg.storage.idle_flush_ms;
         out_cfg.storage.pre_trigger_sec = st["pre_trigger_sec"] | out_cfg.storage.pre_trigger_sec; // [추가]
-    
+
     }
 
     // 6. Trigger (HW Power & SW Event 분리)
@@ -143,9 +164,9 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
         out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
         strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
         out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
-        strlcpy(out_cfg.mqtt.id, mq["id"] | out_cfg.mqtt.id, sizeof(out_cfg.mqtt.id)); 
+        strlcpy(out_cfg.mqtt.id, mq["id"] | out_cfg.mqtt.id, sizeof(out_cfg.mqtt.id));
         strlcpy(out_cfg.mqtt.password, mq["password"] | out_cfg.mqtt.password, sizeof(out_cfg.mqtt.password));
-        
+
         strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
     }
 
@@ -163,24 +184,42 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
 void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_doc) {
     out_doc.clear();
 
+    // 1. Sensor (누락 복구 완료)
     JsonObject s       = out_doc["sensor"].to<JsonObject>();
     s["axis"]          = (int)cfg.sensor.axis;
     s["accel_range"]   = (int)cfg.sensor.accel_range;
     s["gyro_range"]    = (int)cfg.sensor.gyro_range;
 
+    // 2. DSP (v220.020 다중 필터 직렬화 적용)
     JsonObject d       = out_doc["dsp"].to<JsonObject>();
     d["remove_dc"]     = cfg.preprocess.remove_dc;
+    d["window_type"]   = (int)cfg.preprocess.window_type;
+
+    JsonObject med = d["median"].to<JsonObject>();
+    med["enabled"]     = cfg.preprocess.median.enabled;
+    med["window_size"] = cfg.preprocess.median.window_size;
+
+    JsonObject hpf = d["iir_hpf"].to<JsonObject>();
+    hpf["enabled"]     = cfg.preprocess.iir_hpf.enabled;
+    hpf["cutoff_hz"]   = cfg.preprocess.iir_hpf.cutoff_hz;
+    hpf["q_factor"]    = cfg.preprocess.iir_hpf.q_factor;
+
+    JsonObject lpf = d["iir_lpf"].to<JsonObject>();
+    lpf["enabled"]     = cfg.preprocess.iir_lpf.enabled;
+    lpf["cutoff_hz"]   = cfg.preprocess.iir_lpf.cutoff_hz;
+    lpf["q_factor"]    = cfg.preprocess.iir_lpf.q_factor;
+
+    JsonObject notch = d["notch"].to<JsonObject>();
+    notch["enabled"]        = cfg.preprocess.notch.enabled;
+    notch["target_freq_hz"] = cfg.preprocess.notch.target_freq_hz;
+    notch["gain"]           = cfg.preprocess.notch.gain;
+    notch["q_factor"]       = cfg.preprocess.notch.q_factor;
 
     JsonObject pre = d["preemphasis"].to<JsonObject>();
     pre["enable"]  = cfg.preprocess.preemphasis.enable;
     pre["alpha"]   = cfg.preprocess.preemphasis.alpha;
 
-    JsonObject flt     = d["filter"].to<JsonObject>();
-    flt["enable"]      = cfg.preprocess.filter.enable;
-    flt["type"]        = (int)cfg.preprocess.filter.type;
-    flt["cutoff_hz_1"] = cfg.preprocess.filter.cutoff_hz_1;
-    flt["q_factor"]    = cfg.preprocess.filter.q_factor;
-
+    // 중복 제거 완료
     JsonObject nz                    = d["noise"].to<JsonObject>();
     nz["enable_gate"]                = cfg.preprocess.noise.enable_gate;
     nz["gate_threshold_abs"]         = cfg.preprocess.noise.gate_threshold_abs;
@@ -189,24 +228,26 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     nz["adaptive_alpha"]             = cfg.preprocess.noise.adaptive_alpha;
     nz["noise_learn_frames"]         = cfg.preprocess.noise.noise_learn_frames;
 
+    // 3. Feature
     JsonObject f       = out_doc["feature"].to<JsonObject>();
     f["hop_size"]      = cfg.feature.hop_size;
     f["mfcc_coeffs"]   = cfg.feature.mfcc_coeffs;
     f["fft_size"]      = (int)cfg.feature.fft_size;
     f["axis_count"]    = (int)cfg.feature.axis_count;
 
+    // 4. Output
     JsonObject o             = out_doc["output"].to<JsonObject>();
     o["enabled"]             = cfg.output.enabled;
     o["output_sequence"]     = cfg.output.output_sequence;
     o["sequence_frames"]     = cfg.output.sequence_frames;
 
-    // === WiFi ===
+    // 5. WiFi
     JsonObject wf       = out_doc["wifi"].to<JsonObject>();
     wf["mode"]          = (int)cfg.wifi.mode;
     wf["ap_ssid"]       = cfg.wifi.ap_ssid;
     wf["ap_password"]   = cfg.wifi.ap_password;
     wf["ap_ip"]         = cfg.wifi.ap_ip;
-    
+
     JsonArray multi = wf["multi_ap"].to<JsonArray>();
     for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX; i++) {
         JsonObject ap = multi.add<JsonObject>();
@@ -220,18 +261,18 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         ap["dns2"]          = cfg.wifi.multi_ap[i].dns2;
     }
 
+    // 6. Storage
     JsonObject st           = out_doc["storage"].to<JsonObject>();
     st["rotation_mb"]       = cfg.storage.rotation_mb;
     st["rotation_min"]      = cfg.storage.rotation_min;
     st["save_raw"]          = cfg.storage.save_raw;
     st["rotate_keep_max"]   = cfg.storage.rotate_keep_max;
     st["idle_flush_ms"]     = cfg.storage.idle_flush_ms;
-    st["pre_trigger_sec"]   = cfg.storage.pre_trigger_sec; 
+    st["pre_trigger_sec"]   = cfg.storage.pre_trigger_sec;
 
-
-    // t(HW Power & SW Event 분리 적용) ===
+    // 7. Trigger (HW Power & SW Event 분리 적용)
     JsonObject tr = out_doc["trigger"].to<JsonObject>();
-    
+
     JsonObject hw = tr["hw_power"].to<JsonObject>();
     hw["use_deep_sleep"]    = cfg.trigger.hw_power.use_deep_sleep;
     hw["sleep_timeout_sec"] = cfg.trigger.hw_power.sleep_timeout_sec;
@@ -251,17 +292,17 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
         b["end_hz"]    = cfg.trigger.sw_event.bands[i].end_hz;
         b["threshold"] = cfg.trigger.sw_event.bands[i].threshold;
     }
-    
 
+    // 8. MQTT
     JsonObject mq      = out_doc["mqtt"].to<JsonObject>();
     mq["enable"]       = cfg.mqtt.enable;
     mq["broker"]       = cfg.mqtt.broker;
     mq["port"]         = cfg.mqtt.port;
-    mq["id"]           = cfg.mqtt.id;           
-    mq["password"]     = cfg.mqtt.password;     
+    mq["id"]           = cfg.mqtt.id;
+    mq["password"]     = cfg.mqtt.password;
     mq["topic_root"]   = cfg.mqtt.topic_root;
 
-
+    // 9. System
     JsonObject sys         = out_doc["system"].to<JsonObject>();
     sys["auto_start"]      = cfg.system.auto_start;
     sys["watchdog_ms"]     = cfg.system.watchdog_ms;

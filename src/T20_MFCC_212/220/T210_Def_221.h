@@ -342,8 +342,8 @@ typedef struct {
 typedef struct {
     bool  enabled;
     float target_freq_hz; // 제거 대상 주파수 (예: 60Hz 전원 노이즈)
-    float bandwidth_hz;   // 제거 대역폭
-    float learning_rate;  // 추적 속도 (LMS 기반일 경우)
+    float gain;           // Notch Gain (API 요구 파라미터, 보통 0.0)
+    float q_factor;       // 컷팅 대역폭을 결정하는 Q-Factor (클수록 좁게 파임)
 } ST_T20_FilterNotchConfig_t;
 
 
@@ -466,7 +466,7 @@ typedef struct {
 static inline ST_T20_Config_t T20_makeDefaultConfig() {
     ST_T20_Config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
-    
+
      // [1] 전처리(DSP) 파이프라인 신규 설정 적용
     cfg.preprocess.remove_dc              = true;
     cfg.preprocess.window_type            = EN_T20_WINDOW_HANN;
@@ -485,11 +485,11 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.preprocess.iir_lpf.cutoff_hz      = 750.0f;
     cfg.preprocess.iir_lpf.q_factor       = 0.707f;
 
-    // Adaptive Notch (60Hz 전원 노이즈 대비)
+    // Adaptive Notch (60Hz 전원 노이즈 대비) 기본값 세팅 수정
     cfg.preprocess.notch.enabled          = false;
     cfg.preprocess.notch.target_freq_hz   = 60.0f;
-    cfg.preprocess.notch.bandwidth_hz     = 5.0f;
-    cfg.preprocess.notch.learning_rate    = 0.01f;
+    cfg.preprocess.notch.gain             = 0.0f;  // 감쇠 이득 기본값
+    cfg.preprocess.notch.q_factor         = 10.0f; // Q 팩터 (10.0 정도면 좁고 깊게 차단됨)
 
     cfg.preprocess.preemphasis.enable     = true;
     cfg.preprocess.preemphasis.alpha      = 0.97f;
@@ -537,7 +537,7 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     cfg.storage.rotation_min                        = T20::C10_Rec::ROTATION_MIN_DEF;
     cfg.storage.rotate_keep_max                     = T20::C10_Rec::ROTATE_KEEP_MAX;
     cfg.storage.idle_flush_ms                       = T20::C10_Rec::BATCH_IDLE_FLUSH_MS;
-    
+
     cfg.storage.pre_trigger_sec                     = 4;
 
     // [8] 스마트 트리거 제어 기반 절전 및 이벤트 레코딩 정책
