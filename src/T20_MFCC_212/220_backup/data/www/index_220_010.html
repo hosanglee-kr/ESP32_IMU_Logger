@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T20 MFCC v220 Control Center</title>
+    <link rel="stylesheet" href="style_220_010.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">T20 MFCC <span>v220.010</span></div>
+        <div id="status-tag" class="tag offline">OFFLINE</div>
+    </header>
+
+    <nav class="tab-bar">
+        <button class="tab-btn active" onclick="showTab('tab-dash', event)">Dashboard</button>
+        <button class="tab-btn" onclick="showTab('tab-settings', event)">Engine Settings</button>
+        <button class="tab-btn" onclick="showTab('tab-wifi', event)">Network</button>
+        <button class="tab-btn" onclick="showTab('tab-files', event)">Explorer & OTA</button>
+        <button class="tab-btn" onclick="showTab('tab-diag', event)">Diagnostics</button>
+    </nav>
+
+    <main class="container">
+        <section id="tab-dash" class="tab-content active">
+            <div class="toolbar">
+                <button id="btn-start" class="btn primary">START</button>
+                <button id="btn-stop" class="btn danger">STOP</button>
+                <button id="btn-learn" class="btn warning">NOISE LEARN</button>
+                <div class="mini-stat">
+                    Dropped: <span id="val-dropped">0</span> |
+                    Hash: <span id="val-samples">0</span>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="chart-container"><canvas id="chart-waveform"></canvas></div>
+                <div class="chart-container"><canvas id="chart-spectrum"></canvas></div>
+                <div class="chart-container"><canvas id="chart-mfcc"></canvas></div>
+            </div>
+
+            <h4 style="margin: 15px 0 5px 0; color: #888;">Time-Series Waterfalls (Main Target Axis)</h4>
+            <div class="grid">
+                <div class="chart-container" style="height: 300px;"><canvas id="chart-waterfall-spec"></canvas></div>
+                <div class="chart-container" style="height: 300px; display: flex; flex-direction: column; gap: 5px; background: transparent; border: none; padding: 0;">
+                    <div class="sub-chart-box">
+                        <span style="color: #4caf50;">Static (C0~Cn)</span>
+                        <canvas id="chart-waterfall-mfcc-static"></canvas>
+                    </div>
+                    <div class="sub-chart-box">
+                        <span style="color: #ff9800;">Delta (D1~Dn)</span>
+                        <canvas id="chart-waterfall-mfcc-delta"></canvas>
+                    </div>
+                    <div class="sub-chart-box">
+                        <span style="color: #f44336;">Delta-Delta (DD1~DDn)</span>
+                        <canvas id="chart-waterfall-mfcc-deltadelta"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-settings" class="tab-content">
+            <form id="form-config">
+                <div class="grid">
+                    <div class="card">
+                        <h3 class="section-title">Hardware & System</h3>
+                        <div class="form-group highlight"><label>DSP Axis Mode</label><select name="feature.axis_count"><option value="1">1-Axis (Single)</option><option value="3">3-Axis (X+Y+Z Fusion)</option></select></div>
+                        <div class="form-group"><label>Main Target Axis</label><select name="sensor.axis"><option value="0">Accel X</option><option value="1">Accel Y</option><option value="2">Accel Z</option><option value="3">Gyro X</option><option value="4">Gyro Y</option><option value="5">Gyro Z</option></select></div>
+                        <div class="form-group"><label>Accel Range</label><select name="sensor.accel_range"><option value="0">± 2G</option><option value="1">± 4G</option><option value="2">± 8G</option><option value="3">± 16G</option></select></div>
+                        <div class="form-group"><label>Gyro Range</label><select name="sensor.gyro_range"><option value="0">125 dps</option><option value="1">250 dps</option><option value="2">500 dps</option><option value="3">1000 dps</option><option value="4">2000 dps</option></select></div>
+                        
+                        <h3 class="section-title" style="margin-top:20px;">System Behavior</h3>
+                        <div class="form-group"><label>Auto Start on Boot</label><select name="system.auto_start"><option value="false">Disable</option><option value="true">Enable</option></select></div>
+                        <div class="form-group"><label>Control Button GPIO</label><input type="number" name="system.button_pin"></div>
+                        <div class="form-group"><label>Stall Watchdog (ms)</label><input type="number" name="system.watchdog_ms"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title" style="color: #ff9800;">Hardware Power (Deep Sleep)</h3>
+                        <div class="form-group"><label>Enable Deep Sleep</label><select name="trigger.hw_power.use_deep_sleep"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Idle Timeout (s)</label><input type="number" name="trigger.hw_power.sleep_timeout_sec" placeholder="ex) 300"></div>
+                        <div class="form-group"><label>Wake Threshold (G)</label><input type="number" step="0.1" name="trigger.hw_power.wake_threshold_g" placeholder="ex) 1.0"></div>
+                        <div class="form-group"><label>Wake Duration (x20ms)</label><input type="number" name="trigger.hw_power.duration_x20ms" placeholder="ex) 5"></div>
+
+                        <h3 class="section-title" style="margin-top:20px; color: #4caf50;">Software Trigger (DSP Recording)</h3>
+                        <div class="form-group highlight"><label>Record Hold Time (ms)</label><input type="number" name="trigger.sw_event.hold_time_ms" placeholder="ex) 5000"></div>
+                        <div class="form-group"><label>Global RMS Trigger</label><select name="trigger.sw_event.use_rms"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>RMS Threshold (G)</label><input type="number" step="0.01" name="trigger.sw_event.rms_threshold_power" placeholder="ex) 0.5"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title">Smart Trigger (Freq. Bands)</h3>
+                        <div class="form-group highlight"><label>Freq Band 1</label><select name="band_0_enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Range (Hz)</label><div style="display:flex; gap:5px;"><input type="number" name="band_0_start" placeholder="Min" style="width:70px;"> - <input type="number" name="band_0_end" placeholder="Max" style="width:70px;"></div></div>
+                        <div class="form-group"><label>Energy Threshold</label><input type="number" step="0.1" name="band_0_thresh"></div>
+                        
+                        <div class="form-group highlight" style="margin-top: 10px;"><label>Freq Band 2</label><select name="band_1_enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Range (Hz)</label><div style="display:flex; gap:5px;"><input type="number" name="band_1_start" placeholder="Min" style="width:70px;"> - <input type="number" name="band_1_end" placeholder="Max" style="width:70px;"></div></div>
+                        <div class="form-group"><label>Energy Threshold</label><input type="number" step="0.1" name="band_1_thresh"></div>
+
+                        <div class="form-group highlight" style="margin-top: 10px;"><label>Freq Band 3</label><select name="band_2_enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Range (Hz)</label><div style="display:flex; gap:5px;"><input type="number" name="band_2_start" placeholder="Min" style="width:70px;"> - <input type="number" name="band_2_end" placeholder="Max" style="width:70px;"></div></div>
+                        <div class="form-group"><label>Energy Threshold</label><input type="number" step="0.1" name="band_2_thresh"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title">DSP & Filters</h3>
+                        <div class="form-group"><label>Remove DC Offset</label><select name="dsp.remove_dc"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Pre-emphasis Filter</label><select name="dsp.preemphasis.enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Emphasis Alpha</label><input type="number" step="0.01" name="dsp.preemphasis.alpha"></div>
+                        
+                        <div class="form-group" style="margin-top:10px;"><label>IIR Runtime Filter</label><select name="dsp.filter.enable"><option value="false">BYPASS</option><option value="true">ENABLE</option></select></div>
+                        <div class="form-group"><label>Filter Type</label><select name="dsp.filter.type"><option value="0">OFF</option><option value="1">Low Pass</option><option value="2">High Pass</option></select></div>
+                        <div class="form-group"><label>Cutoff Freq (Hz)</label><input type="number" name="dsp.filter.cutoff_hz_1"></div>
+                        <div class="form-group"><label>Q-Factor</label><input type="number" step="0.001" name="dsp.filter.q_factor"></div>
+
+                        <h3 class="section-title" style="margin-top:20px;">MFCC Extractor</h3>
+                        <div class="form-group highlight"><label>FFT Window Size</label><select name="feature.fft_size"><option value="256">256</option><option value="512">512</option><option value="1024">1024</option><option value="2048">2048</option><option value="4096">4096</option></select></div>
+                        <div class="form-group"><label>Hop Size (Overlap)</label><input type="number" name="feature.hop_size"></div>
+                        <div class="form-group"><label>MFCC Coefficients</label><input type="number" name="feature.mfcc_coeffs" min="1" max="32"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title">Noise Suppression</h3>
+                        <div class="form-group"><label>Noise Gate</label><select name="dsp.noise.enable_gate"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Gate Threshold (Abs)</label><input type="number" step="0.001" name="dsp.noise.gate_threshold_abs"></div>
+                        
+                        <div class="form-group" style="margin-top:10px;"><label>Spectral Subtraction</label><select name="dsp.noise.mode"><option value="0">OFF</option><option value="1">FIXED Profile</option><option value="2">ADAPTIVE Learning</option></select></div>
+                        <div class="form-group"><label>Subtract Strength</label><input type="number" step="0.1" name="dsp.noise.spectral_subtract_strength"></div>
+                        <div class="form-group"><label>Adaptive Alpha (Speed)</label><input type="number" step="0.01" name="dsp.noise.adaptive_alpha"></div>
+                        <div class="form-group"><label>Profile Learn Frames</label><input type="number" name="dsp.noise.noise_learn_frames"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title">Data Output & Storage</h3>
+                        <div class="form-group"><label>Stream Out Enabled</label><select name="output.enabled"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Payload Format</label><select name="output.output_sequence"><option value="false">Single Frame (Realtime UI)</option><option value="true">Sequence Tensor (TinyML)</option></select></div>
+                        <div class="form-group"><label>Sequence Pack Frames</label><input type="number" name="output.sequence_frames"></div>
+                        
+                        <h3 class="section-title" style="margin-top:20px;">SD_MMC Logging</h3>
+                        <div class="form-group"><label>Save Raw Waveform</label><select name="storage.save_raw"><option value="false">OFF</option><option value="true">ON (Interleaved)</option></select></div>
+                        <div class="form-group"><label>File Rotation (MB)</label><input type="number" name="storage.rotation_mb"></div>
+                        <div class="form-group"><label>File Rotation (Min)</label><input type="number" name="storage.rotation_min"></div>
+                        <div class="form-group"><label>Max File Keep (0:∞)</label><input type="number" name="storage.rotate_keep_max"></div>
+                        <div class="form-group"><label>Idle Force Flush (ms)</label><input type="number" name="storage.idle_flush_ms"></div>
+                        <div class="form-group"><label>Pre-Trigger Buffer (Sec)</label><input type="number" name="storage.pre_trigger_sec" placeholder="ex) 4"></div>
+                    </div>
+                </div>
+
+                <div class="sticky-footer">
+                    <button type="button" onclick="saveSettings()" class="btn primary">SAVE CONFIG</button>
+                    <button type="button" id="btn-calibrate" class="btn warning">SENSOR CALIBRATE</button>
+                    <button type="button" onclick="rebootDevice()" class="btn danger">REBOOT</button>
+                </div>
+            </form>
+        </section>
+
+        <section id="tab-wifi" class="tab-content">
+            <form id="form-mqtt">
+                <div class="grid">
+                    <div class="card">
+                        <h3 class="section-title">Wi-Fi Connection Mode</h3>
+                        <div class="form-group">
+                            <label>Operation Mode</label>
+                            <select name="wifi.mode" id="wifi_mode" onchange="toggleWifiFields()">
+                                <option value="0">Station (STA) Only</option>
+                                <option value="1">Access Point (AP) Only</option>
+                                <option value="2">AP + STA (Concurrent)</option>
+                                <option value="3">Auto Fallback</option>
+                            </select>
+                        </div>
+                        <div id="section_ap_config" class="config-box">
+                            <h4 class="sub-title">Soft-AP Settings</h4>
+                            <div class="form-group"><label>SSID</label><input type="text" name="wifi.ap_ssid"></div>
+                            <div class="form-group"><label>Password</label><input type="password" name="wifi.ap_password"></div>
+                            <div class="form-group"><label>AP IP (Custom)</label><input type="text" name="wifi.ap_ip" placeholder="192.168.4.1"></div>
+                        </div>
+                        <div id="section_sta_config" class="config-box">
+                            <h4 class="sub-title">Target Routers (WiFi Multi)</h4>
+                            <div id="routers_container"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="section-title">MQTT Cloud Connectivity</h3>
+                        <div class="form-group highlight"><label>Enable MQTT</label><select name="mqtt.enable"><option value="false">OFF</option><option value="true">ON</option></select></div>
+                        <div class="form-group"><label>Broker URL</label><input type="text" name="mqtt.broker" placeholder="broker.hivemq.com"></div>
+                        <div class="form-group"><label>Port</label><input type="number" name="mqtt.port" placeholder="1883"></div>
+                        <div class="form-group"><label>Client ID</label><input type="text" name="mqtt.id" placeholder="T20_DEVICE"></div>
+                        <div class="form-group"><label>Password</label><input type="password" name="mqtt.password" placeholder="Optional"></div>
+                        <div class="form-group"><label>Topic Root</label><input type="text" name="mqtt.topic_root" placeholder="t20/sensor"></div>
+                    </div>
+                </div>
+            </form>
+            <div style="margin-top: 20px;">
+                <button type="button" onclick="saveSettings()" class="btn primary" style="width: 100%;">APPLY NETWORK & MQTT SETTINGS</button>
+            </div>
+        </section>
+
+        <section id="tab-files" class="tab-content">
+            <div class="grid">
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="toolbar">
+                        <h3>SD_MMC File Explorer</h3>
+                        <button onclick="refreshFileList()" class="btn">Refresh List</button>
+                    </div>
+                    <table>
+                        <thead><tr><th>File Name</th><th>Size</th><th>Records</th><th>Action</th></tr></thead>
+                        <tbody id="file-list"></tbody>
+                    </table>
+                </div>
+
+                <div class="card" style="grid-column: 1 / -1;">
+                    <h3 class="section-title">Firmware OTA Update (v220)</h3>
+                    <p style="font-size: 0.9em; color: #aaa; margin-bottom: 15px;">Upload a new <code>.bin</code> firmware file to update the ESP32-S3 over the air. Do not power off during the process.</p>
+                    <div class="form-group highlight" style="flex-direction: row;">
+                        <input type="file" id="ota-file" accept=".bin" style="flex: 2; padding: 6px;">
+                        <button type="button" onclick="uploadOTA()" class="btn warning" style="flex: 1; padding: 10px;">UPLOAD & FLASH</button>
+                    </div>
+                    <div id="ota-progress" style="display:none; color: var(--accent); font-weight: bold; text-align: center; margin-top: 15px; font-size: 1.1em;">Uploading: 0%</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-diag" class="tab-content">
+            <div class="grid">
+                <div class="card"><h3>System Health</h3><pre id="diag-health" class="log-box"></pre></div>
+                <div class="card"><h3>Sensor Stats</h3><pre id="diag-sensor" class="log-box"></pre></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script src="app_220_010.js"></script>
+</body>
+</html>
+
+
+
+
+
+                       
