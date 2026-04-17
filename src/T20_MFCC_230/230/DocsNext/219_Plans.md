@@ -11,6 +11,149 @@
     - 관련 설정항목 통폐합 및 분리 검토
     - trigger 이벤트 유형, 상태관리 검토
     - trigger 변수 및 임계값 분리/통폐합 검토
+    - 
+    - 
+
+현재 분산되어 있는 상태 플래그(Flag)와 트리거 변수들을 통폐합하고, **명시적인 유한 상태 머신(FSM, Finite State Machine)** 구조로 개편하는 것은 시스템의 확장성(스케줄링 도입 등)과 무결성을 위해 반드시 거쳐야 할 핵심 엔지니어링 과정입니다.
+T20 시스템의 아키텍처를 한 단계 도약시키기 위한 **트리거, 이벤트 및 상태 관리 개편 방안**을 5가지 관점에서 종합 검토 및 설계해 드립니다.
+### 1. 명시적 상태 머신(FSM) 도입 및 플래그 통폐합
+현재 is_recording, is_learning, is_triggered 처럼 개별적으로 놀고 있는 bool 변수들을 하나의 **시스템 전역 상태(State)**로 통합해야 합니다. 이렇게 하면 "학습 중이면서 대기 중"과 같은 논리적 모순(Deadlock)이 원천 차단됩니다.
+**[개선된 시스템 상태 (System State Enum)]**
+```cpp
+typedef enum {
+    SYS_STATE_INIT = 0,         // 부팅 및 하드웨어 초기화
+    SYS_STATE_READY,            // Manual 모드에서의 대기 상태 (센서 정지 또는 최소 가동)
+    SYS_STATE_MONITORING,       // 센서 가동 및 데이터 분석 중 (트리거 대기)
+    SYS_STATE_RECORDING,        // 트리거 조건 충족 -> SD카드 및 스트림 출력 중
+    SYS_STATE_NOISE_LEARNING,   // 수동 노이즈 프로필 학습 중 (기록 중지)
+    SYS_STATE_ERROR             // 센서 통신 단절 등 치명적 오류 상태
+} EM_T20_SysState_t;
+
+```
+### 2. 시작 모드 (Operation Mode) 분리 및 개편
+기존의 system.auto_start (bool) 항목을 폐기하고, 확장 가능한 **운영 모드(Op Mode)**로 개편합니다. 향후 스케줄링 기능이 추가될 자리를 미리 확보합니다.
+**[개선된 운영 모드 설정 구조]**
+```cpp
+typedef enum {
+    OP_MODE_MANUAL = 0,   // 사용자 시작(START)/종료(STOP) API 호출 시에만 가동
+    OP_MODE_AUTO = 1,     // 부팅 직후 자동으로 MONITORING 상태 진입
+    OP_MODE_SCHEDULE = 2  // [향후구현] RTC 시간 기반 특정 요일/시간대 가동
+} EM_T20_OpMode_t;
+
+// 설정 구조체 반영
+typedef struct {
+    EM_T20_OpMode_t op_mode;      // 기존 auto_start 대체
+    uint32_t        watchdog_ms;
+    uint8_t         button_pin;
+} ST_T20_SystemConfig_t;
+
+```
+ * **동작 원리:** 부팅 완료 후 SYS_STATE_INIT에서 op_mode를 검사합니다. AUTO면 바로 MONITORING으로, MANUAL이거나 SCHEDULE 대기 시간이면 READY 상태로 진입합니다.
+### 3. 노이즈 학습 로직의 명확한 분리 (Policy vs Action)
+현재 노이즈 처리는 '학습 모드'와 '감산 모드'가 혼재되어 헷갈릴 수 있습니다. **적용 정책(Policy)**과 **수동 트리거 이벤트(Action)**를 명확히 분리합니다.
+ * **설정 항목 (Policy):** dsp.noise.mode
+   * FIXED: 고정된 프로필 사용. (이 프로필은 Manual Learn 액션을 통해서만 갱신됨)
+   * ADAPTIVE: SYS_STATE_MONITORING 상태에서 백그라운드로 소음을 계속 추적하며 자동 갱신됨. (사용자 개입 불필요)
+ * **제어 명령 (Action):** Manual Learn 버튼 클릭
+   * **이벤트 흐름:** CMD_LEARN_START 이벤트 수신 -> 상태를 SYS_STATE_NOISE_LEARNING으로 변경 -> noise_learn_frames 개수만큼 정지 상태 소음 수집 -> 완료 후 원래 상태(MONITORING 또는 READY)로 자동 복귀.
+### 4. Trigger 변수 및 임계값(Threshold) 통폐합 설계
+현재 HW(Wake), SW(RMS), SW(Bands)로 흩어진 트리거 설정은 유지하되, **런타임 상태를 관리하는 변수 구조체(Context)**를 하나로 통합하여 RTOS 태스크에서 관리하기 쉽게 만듭니다.
+**[개선된 런타임 트리거 컨텍스트 (메모리상에만 존재)]**
+```cpp
+// 어떤 트리거에 의해 레코딩이 시작되었는지 추적
+typedef enum {
+    TRIG_SRC_NONE = 0,
+    TRIG_SRC_HW_WAKE,    // 딥슬립 깨어남
+    TRIG_SRC_SW_RMS,     // 전체 진동 초과
+    TRIG_SRC_SW_BAND_0,  // 밴드 1 초과
+    TRIG_SRC_SW_BAND_1,
+    TRIG_SRC_SW_BAND_2,
+    TRIG_SRC_MANUAL      // 사용자가 웹에서 START 누름
+} EM_T20_TriggerSource_t;
+
+typedef struct {
+    bool                   is_triggered;      // 현재 레코딩 조건 충족 여부
+    EM_T20_TriggerSource_t active_source;     // 트리거 발동 원인
+    uint32_t               last_trigger_tick; // 마지막 트리거 발생 RTOS Tick
+    uint32_t               hold_time_ms;      // 설정된 유지 시간 (Damping Time)
+} ST_T20_TriggerContext_t;
+
+```
+### 5. 상태 머신 기반의 이벤트 처리 흐름 (RTOS Loop 구조)
+상태 머신이 도입되면 메인 루프(T20_processTask)의 구조가 매우 간결해지고 예측 가능해집니다. if-else의 지옥에서 벗어날 수 있습니다.
+**[상태 머신 적용 로직 의사코드 (Pseudo-code)]**
+```cpp
+void T20_processTask(void *pvParameters) {
+    ST_T20_TriggerContext_t trig_ctx = {0};
+    EM_T20_SysState_t current_state = SYS_STATE_INIT;
+
+    // 모드에 따른 초기 상태 진입
+    if (cfg.system.op_mode == OP_MODE_AUTO) current_state = SYS_STATE_MONITORING;
+    else current_state = SYS_STATE_READY;
+
+    for(;;) {
+        // 1. 이벤트 큐 확인 (웹 UI 명령 수신)
+        Event_t evt;
+        if (xQueueReceive(event_queue, &evt, 0)) {
+            switch(evt.cmd) {
+                case CMD_MANUAL_START:
+                    if(current_state == SYS_STATE_READY) current_state = SYS_STATE_MONITORING;
+                    break;
+                case CMD_MANUAL_STOP:
+                    current_state = SYS_STATE_READY;
+                    trig_ctx.is_triggered = false;
+                    break;
+                case CMD_LEARN_NOISE:
+                    current_state = SYS_STATE_NOISE_LEARNING;
+                    break;
+            }
+        }
+
+        // 2. 상태별 동작 수행 (State Action)
+        switch(current_state) {
+            case SYS_STATE_READY:
+                // 센서 딥슬립 진입 검사 또는 데이터 폐기 (Pre-trigger 링버퍼만 유지)
+                break;
+
+            case SYS_STATE_NOISE_LEARNING:
+                // 노이즈 수집 로직 실행. 목표 프레임 도달 시 MONITORING으로 상태 변경
+                if (dsp.learnNoise()) current_state = SYS_STATE_MONITORING;
+                break;
+
+            case SYS_STATE_MONITORING:
+            case SYS_STATE_RECORDING:
+                // DSP 파이프라인 가동 (공통)
+                dsp.processFrame(raw_data, &feature);
+                
+                // 트리거 조건 검사 및 갱신
+                _evaluateTriggers(&trig_ctx, &feature, cfg);
+
+                if (trig_ctx.is_triggered) {
+                    current_state = SYS_STATE_RECORDING;
+                    storage.writeToFile(feature); // Pre-trigger 포함 기록
+                } else {
+                    // Hold Time이 지나면 자동으로 Monitoring으로 복귀
+                    if (current_state == SYS_STATE_RECORDING) {
+                        storage.closeFile(); 
+                    }
+                    current_state = SYS_STATE_MONITORING;
+                }
+                break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1)); // Starvation 방지
+    }
+}
+
+```
+### 💡 개편 방안 총평 및 도입 이점
+ 1. **코드 응집도 향상:** 변수 통폐합을 통해 "트리거 조건 판별 로직(_evaluateTriggers)"과 "저장 로직(storage.write)"을 완벽히 분리할 수 있습니다.
+ 2. **확장성 보장:** 향후 **스케줄 모드**가 도입되더라도, CMD_SCHEDULE_WAKE 이벤트를 발생시켜 SYS_STATE_MONITORING으로 상태만 전이시키면 기존 코드를 한 줄도 수정할 필요가 없습니다.
+ 3. **디버깅 용이성:** 현재 상태(current_state) 변수 하나만 모니터링하면 기기가 왜 레코딩을 안 하는지, 왜 소음 학습에 멈춰있는지 100% 추적이 가능합니다.
+이 설계안을 바탕으로 실제 T210_Def.h 및 Config 파싱 모듈에 적용하기 위한 소스 코드 작업을 바로 진행할까요?
+
+
+
+
 
 ### 1. ⚙️ 명시적 상태 머신 (FSM) 설계
 
@@ -41,8 +184,6 @@ typedef enum {
 ```
  * **적용 방안:** cfg.system.auto_start를 cfg.system.op_mode로 교체합니다.
  
- 
-
  
 ### 4. 🔔 이벤트 유형(Event Type) 정형화
 기존에는 문자열 하드코딩("smart_trigger_alert", "btn_start")으로 이벤트를 처리했습니다. 이를 정형화된 Event Enum으로 관리하여 MQTT와 Storage 로그의 일관성을 높입니다.
