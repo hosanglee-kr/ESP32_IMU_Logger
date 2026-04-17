@@ -43,7 +43,7 @@ void CL_T20_DspPipeline::_freeBuffers() {
 }
 
 /* ============================================================================
- * [v230.011] DSP 엔진 초기화 및 프리컴퓨팅 로직 (FIR 필터 추가 및 정합성 보완)
+ * DSP 엔진 초기화 및 프리컴퓨팅 로직 (FIR 필터 추가 및 정합성 보완)
  * ========================================================================== */
 bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
     _cfg = cfg;
@@ -69,6 +69,7 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
 
         if (!_work_frame || !_window || !_power || !_fft_io_buf || !_mel_bank_flat || !_noise_spectrum || !_dct_matrix_flat) {
             Serial.println(F("[DSP] Critical: Internal SRAM OOM!"));
+            _freeBuffers(); // [추가됨] 일부만 성공한 할당 메모리를 모두 토해내어 영구 누수 방지
             return false;
         }
         if (dsps_fft2r_init_fc32(NULL, N) != ESP_OK) return false;

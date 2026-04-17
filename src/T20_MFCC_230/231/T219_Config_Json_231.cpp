@@ -145,26 +145,26 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
             }
         }
     }
-
+    
     // === 7. WiFi ===
     JsonObjectConst wf = doc["wifi"];
     if (wf) {
         out_cfg.wifi.mode = (EM_T20_WiFiMode_t)(wf["mode"] | out_cfg.wifi.mode);
-        strlcpy(out_cfg.wifi.ap_ssid, wf["ap_ssid"] | out_cfg.wifi.ap_ssid, sizeof(out_cfg.wifi.ap_ssid));
-        strlcpy(out_cfg.wifi.ap_password, wf["ap_password"] | out_cfg.wifi.ap_password, sizeof(out_cfg.wifi.ap_password));
-        strlcpy(out_cfg.wifi.ap_ip, wf["ap_ip"] | out_cfg.wifi.ap_ip, sizeof(out_cfg.wifi.ap_ip));
+        strlcpy(out_cfg.wifi.ap_ssid, wf["ap_ssid"] | (const char*)out_cfg.wifi.ap_ssid, sizeof(out_cfg.wifi.ap_ssid));
+        strlcpy(out_cfg.wifi.ap_password, wf["ap_password"] | (const char*)out_cfg.wifi.ap_password, sizeof(out_cfg.wifi.ap_password));
+        strlcpy(out_cfg.wifi.ap_ip, wf["ap_ip"] | (const char*)out_cfg.wifi.ap_ip, sizeof(out_cfg.wifi.ap_ip));
 
         JsonArrayConst multi = wf["multi_ap"];
         if (multi) {
             for (int i = 0; i < T20::C10_Net::WIFI_MULTI_MAX && i < multi.size(); i++) {
-                strlcpy(out_cfg.wifi.multi_ap[i].ssid, multi[i]["ssid"] | out_cfg.wifi.multi_ap[i].ssid, sizeof(out_cfg.wifi.multi_ap[i].ssid));
-                strlcpy(out_cfg.wifi.multi_ap[i].password, multi[i]["password"] | out_cfg.wifi.multi_ap[i].password, sizeof(out_cfg.wifi.multi_ap[i].password));
+                strlcpy(out_cfg.wifi.multi_ap[i].ssid, multi[i]["ssid"] | (const char*)out_cfg.wifi.multi_ap[i].ssid, sizeof(out_cfg.wifi.multi_ap[i].ssid));
+                strlcpy(out_cfg.wifi.multi_ap[i].password, multi[i]["password"] | (const char*)out_cfg.wifi.multi_ap[i].password, sizeof(out_cfg.wifi.multi_ap[i].password));
                 out_cfg.wifi.multi_ap[i].use_static_ip = multi[i]["use_static_ip"] | out_cfg.wifi.multi_ap[i].use_static_ip;
-                strlcpy(out_cfg.wifi.multi_ap[i].local_ip, multi[i]["local_ip"] | out_cfg.wifi.multi_ap[i].local_ip, sizeof(out_cfg.wifi.multi_ap[i].local_ip));
-                strlcpy(out_cfg.wifi.multi_ap[i].gateway, multi[i]["gateway"] | out_cfg.wifi.multi_ap[i].gateway, sizeof(out_cfg.wifi.multi_ap[i].gateway));
-                strlcpy(out_cfg.wifi.multi_ap[i].subnet, multi[i]["subnet"] | out_cfg.wifi.multi_ap[i].subnet, sizeof(out_cfg.wifi.multi_ap[i].subnet));
-                strlcpy(out_cfg.wifi.multi_ap[i].dns1, multi[i]["dns1"] | out_cfg.wifi.multi_ap[i].dns1, sizeof(out_cfg.wifi.multi_ap[i].dns1));
-                strlcpy(out_cfg.wifi.multi_ap[i].dns2, multi[i]["dns2"] | out_cfg.wifi.multi_ap[i].dns2, sizeof(out_cfg.wifi.multi_ap[i].dns2));
+                strlcpy(out_cfg.wifi.multi_ap[i].local_ip, multi[i]["local_ip"] | (const char*)out_cfg.wifi.multi_ap[i].local_ip, sizeof(out_cfg.wifi.multi_ap[i].local_ip));
+                strlcpy(out_cfg.wifi.multi_ap[i].gateway, multi[i]["gateway"] | (const char*)out_cfg.wifi.multi_ap[i].gateway, sizeof(out_cfg.wifi.multi_ap[i].gateway));
+                strlcpy(out_cfg.wifi.multi_ap[i].subnet, multi[i]["subnet"] | (const char*)out_cfg.wifi.multi_ap[i].subnet, sizeof(out_cfg.wifi.multi_ap[i].subnet));
+                strlcpy(out_cfg.wifi.multi_ap[i].dns1, multi[i]["dns1"] | (const char*)out_cfg.wifi.multi_ap[i].dns1, sizeof(out_cfg.wifi.multi_ap[i].dns1));
+                strlcpy(out_cfg.wifi.multi_ap[i].dns2, multi[i]["dns2"] | (const char*)out_cfg.wifi.multi_ap[i].dns2, sizeof(out_cfg.wifi.multi_ap[i].dns2));
             }
         }
     }
@@ -173,12 +173,11 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
     JsonObjectConst mq = doc["mqtt"];
     if (mq) {
         out_cfg.mqtt.enable = mq["enable"] | out_cfg.mqtt.enable;
-        strlcpy(out_cfg.mqtt.broker, mq["broker"] | out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
+        strlcpy(out_cfg.mqtt.broker, mq["broker"] | (const char*)out_cfg.mqtt.broker, sizeof(out_cfg.mqtt.broker));
         out_cfg.mqtt.port = mq["port"] | out_cfg.mqtt.port;
-        strlcpy(out_cfg.mqtt.id, mq["id"] | out_cfg.mqtt.id, sizeof(out_cfg.mqtt.id));
-        strlcpy(out_cfg.mqtt.password, mq["password"] | out_cfg.mqtt.password, sizeof(out_cfg.mqtt.password));
-
-        strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
+        strlcpy(out_cfg.mqtt.id, mq["id"] | (const char*)out_cfg.mqtt.id, sizeof(out_cfg.mqtt.id));
+        strlcpy(out_cfg.mqtt.password, mq["password"] | (const char*)out_cfg.mqtt.password, sizeof(out_cfg.mqtt.password));
+        strlcpy(out_cfg.mqtt.topic_root, mq["topic_root"] | (const char*)out_cfg.mqtt.topic_root, sizeof(out_cfg.mqtt.topic_root));
     }
 
     // 9. System (auto_start -> op_mode로 변경 반영)

@@ -207,34 +207,34 @@ bool CL_T20_StorageService::pushVector(const ST_T20_FeatureVector_t* p_vec) {
     return _pushToDma(p_vec);
 }
 
-
 // Raw 데이터 기록 (3축 모드 시 3축 파형 통합 기록 대응 가능)
 bool CL_T20_StorageService::pushRaw(const float* p_raw_x, const float* p_raw_y, const float* p_raw_z, uint16_t len, uint8_t active_axes) {
     if (!_session_open || !_raw_file || !p_raw_x) return false;
 
     if (active_axes == 1) {
-        // 1축 모드는 기존처럼 일괄 쓰기
         size_t bytes = len * sizeof(float);
         size_t w = _raw_file.write((const uint8_t*)p_raw_x, bytes);
         _written_bytes += w;
         return (w == bytes);
     } else {
-        // 3축 데이터 인터리빙 (Interleaving) 저장
-        // 분석 툴(Python 등)에서 3채널 오디오처럼 쉽게 읽게 만들기 위함
-        float inter_buf[3];
-        size_t total_written = 0;
+        // [최적화됨] 12바이트씩 분할 쓰기 방지. 일괄 버퍼링 후 단일 I/O 기록으로 SD 병목 원천 차단.
+        size_t total_bytes = len * 3 * sizeof(float);
+        float* inter_buf = (float*)malloc(total_bytes);
+        if (!inter_buf) return false; // 메모리 부족 시 안전 반환
+
         for (uint16_t i = 0; i < len; i++) {
-            inter_buf[0] = p_raw_x[i];
-            inter_buf[1] = p_raw_y[i];
-            inter_buf[2] = p_raw_z[i];
-            total_written += _raw_file.write((const uint8_t*)inter_buf, sizeof(inter_buf));
+            inter_buf[i * 3 + 0] = p_raw_x[i];
+            inter_buf[i * 3 + 1] = p_raw_y[i];
+            inter_buf[i * 3 + 2] = p_raw_z[i];
         }
+        
+        size_t total_written = _raw_file.write((const uint8_t*)inter_buf, total_bytes);
+        free(inter_buf);
+        
         _written_bytes += total_written;
-        return (total_written == len * sizeof(inter_buf));
+        return (total_written == total_bytes);
     }
 }
-
-
 
 bool CL_T20_StorageService::flush() {
     if (!_session_open) return false;
@@ -398,7 +398,8 @@ void CL_T20_StorageService::_allocatePreBuffer() {
     // 용량이 변경되었거나 아직 할당되지 않은 경우 PSRAM에 재할당
     if (_pre_capacity != req_capacity) {
         if (_pre_buf) heap_caps_free(_pre_buf);
-        _pre_buf = (ST_T20_FeatureVector_t*)heap_caps_malloc(req_capacity * sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_SPIRAM);
+        // SIMD 구조체 호환을 위해 16바이트 정렬 할당 적용
+        _pre_buf = (ST_T20_FeatureVector_t*)heap_caps_aligned_alloc(16, req_capacity * sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_SPIRAM);
         
         if (_pre_buf) {
             _pre_capacity = req_capacity;

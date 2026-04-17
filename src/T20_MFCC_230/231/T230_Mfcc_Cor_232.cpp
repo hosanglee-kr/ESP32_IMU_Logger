@@ -20,6 +20,9 @@
 #include "T221_Mfcc_Inter_231.h"
 #include "T210_Def_231.h"
 
+#include <sys/time.h> // gettimeofday 사용ㅁ
+
+
 CL_T20_Mfcc* g_t20 = nullptr;
 static TaskHandle_t g_isr_sensor_task = nullptr;
 
@@ -147,8 +150,10 @@ static void _evaluateTriggers(ST_T20_TriggerCtx_t* ctx, const ST_T20_FeatureVect
         }
     }
     g_isr_sensor_task = nullptr;
+    if (p->sensor_task == xTaskGetCurrentTaskHandle()) p->sensor_task = nullptr;
     vTaskDelete(nullptr);
 }
+
 
 /* ============================================================================
  * [Task 2] Core 1: DSP 연산 및 유한 상태 머신 (FSM)
@@ -361,6 +366,8 @@ void T20_processTask(void* p_arg) {
     heap_caps_free(p_feature);
     heap_caps_free(seq_buffer);
     heap_caps_free(ws_payload);
+
+    if (p->process_task == xTaskGetCurrentTaskHandle()) p->process_task = nullptr;
     vTaskDelete(nullptr);
 }
 
@@ -380,6 +387,9 @@ void T20_processTask(void* p_arg) {
             else break;
         }
     }
+    
+    if (p->recorder_task == xTaskGetCurrentTaskHandle()) p->recorder_task = nullptr;
+     
     vTaskDelete(nullptr);
 }
 
@@ -460,7 +470,7 @@ bool CL_T20_Mfcc::start() {
     return true;
 }
 
-// [최적화] 강제 사살(vTaskDelete) 대신 태스크 자진 종료 유도
+
 void CL_T20_Mfcc::stop() {
     if (!_impl->running) return;
     _impl->running = false; // 루프 탈출 플래그 설정
@@ -470,8 +480,13 @@ void CL_T20_Mfcc::stop() {
         xTaskNotifyGive(g_isr_sensor_task);
     }
     
-    // 태스크들이 스스로 루프를 빠져나와 메모리를 정리할 시간을 줍니다.
-    delay(50);
+    // [개선됨] 단순 50ms 지연이 아닌, 스토리지 플러시를 마친 태스크들이 
+    // 스스로 핸들을 지우고 완전 종료될 때까지 최대 1000ms 폴링 대기
+    uint32_t wait_start = millis();
+    while ((_impl->sensor_task != nullptr || _impl->process_task != nullptr || _impl->recorder_task != nullptr) 
+            && (millis() - wait_start < 1000)) {
+        delay(10); 
+    }
     
     _impl->sensor_task = nullptr;
     _impl->process_task = nullptr;
