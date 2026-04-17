@@ -642,3 +642,4 @@ float CL_T20_DspPipeline::getBandEnergy(float start_hz, float end_hz) {
     return energy;
 }
 
+

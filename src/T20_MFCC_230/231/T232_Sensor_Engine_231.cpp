@@ -66,13 +66,15 @@ bool CL_T20_SensorEngine::begin(const ST_T20_ConfigSensor_t& s_cfg) {
 /* ============================================================================
  *  FSM 최적화: 센서 절전 모드 제어
  * ========================================================================== */
+ 
+ /* ============================================================================
+ * [FSM 최적화] 센서 절전 모드 제어 (에러 수정됨)
+ * ========================================================================== */
 void CL_T20_SensorEngine::pause() {
     if (!_initialized || _is_paused) return;
     
-    // 배터리 소모가 심한 자이로스코프를 강제 수면(Suspend) 상태로 전환
-    _bmi.setGyroPowerMode(BMI2_SUSPEND_MODE);
-    // 가속도계는 인터럽트를 위해 저전력(Power Opt) 모드로 전환
-    _bmi.setAccelPowerMode(BMI2_POWER_OPT_MODE);
+    // SparkFun 라이브러리 지원 함수를 통한 전력 최적화 절전 모드 진입
+    _bmi.enableAdvancedPowerSave(true);
     
     _is_paused = true;
     strlcpy(_status_text, "paused", sizeof(_status_text));
@@ -81,9 +83,8 @@ void CL_T20_SensorEngine::pause() {
 void CL_T20_SensorEngine::resume() {
     if (!_initialized || !_is_paused) return;
     
-    // 정상 가동 상태로 복귀
-    _bmi.setGyroPowerMode(BMI2_POWER_NORMAL_MODE);
-    _bmi.setAccelPowerMode(BMI2_POWER_NORMAL_MODE);
+    // 절전 모드 해제 및 정상 가동 복귀
+    _bmi.disableAdvancedPowerSave();
     
     _is_paused = false;
     strlcpy(_status_text, "1600Hz_active", sizeof(_status_text));
@@ -269,4 +270,8 @@ uint8_t CL_T20_SensorEngine::_mapGyroRange(EM_T20_GyroRange_t r) {
         default:               return BMI2_GYR_RANGE_2000;
     }
 }
+
+
+
+
 

@@ -193,8 +193,8 @@ void T20_processTask(void* p_arg) {
             p_feature->timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
             p_feature->frame_id = ++frame_id;
             p_feature->active_axes = axis_cnt;
-            p_feature->status_flags = (tv.tv_sec > 1000000) ? C10_Rec::FLAG_NTP_SYNCED : 0x00;
-
+            p_feature->status_flags = (tv.tv_sec > 1000000) ? T20::C10_Rec::FLAG_NTP_SYNCED : 0x00;
+            
             if (p->cfg.storage.save_raw) {
                 p->storage.pushRaw(p->raw_buffer[0][read_idx], p->raw_buffer[1][read_idx], p->raw_buffer[2][read_idx], N, axis_cnt);
             }
@@ -223,7 +223,7 @@ void T20_processTask(void* p_arg) {
 
                 if (trig_ctx.is_triggered) {
                     p->current_state = EN_T20_STATE_RECORDING;
-                    p_feature->status_flags |= C10_Rec::FLAG_TRIGGERED;
+                    p_feature->status_flags |= T20::C10_Rec::FLAG_TRIGGERED;
                     
                     if (!p->storage.isOpen()) {
                         p->storage.openSession(p->cfg);
@@ -419,4 +419,3 @@ void CL_T20_Mfcc::printStatus(Stream& out) const {
     out.printf("Storage: %s (Records: %lu)\n", _impl->storage.isOpen() ? "Active" : "Idle", _impl->storage.getRecordCount());
     out.println("-------------------------");
 }
-
