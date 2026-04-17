@@ -8,10 +8,11 @@
  * 3. [최적화] TinyML 텐서 출력 프레임 정렬(Alignment) 버그 수정.
  * 4. [최적화] 태스크 Graceful Exit 적용을 통한 힙 메모리 누수(Leak) 원천 차단.
  * 5. [최적화] 프레임 드롭 시 연속성 보장을 위한 memmove 오버랩 보존 로직 적용.
-  * 1. [정합성] 웹소켓 페이로드 크기 오계산 수정 (가변 MFCC 계수 대응).
- * 2. [실시간성] 고속 연산 시 시스템 타스크 기아(Starvation) 방지를 위한 taskYIELD 최적화.
- * 3. [메모리 무결성] Task 종료 시 큐 잔여 데이터를 모두 기록하는 Drain(털어내기) 로직 추가.
- * 4. [신뢰성] 프레임 드롭 시 위상 연속성 보장을 위한 memmove 오버랩 복원 적용.
+ * 6. [정합성] 웹소켓 페이로드 크기 오계산 수정 (가변 MFCC 계수 대응).
+ * 7. [실시간성] 고속 연산 시 시스템 타스크 기아(Starvation) 방지를 위한 taskYIELD 최적화.
+ * 8. [메모리 무결성] Task 종료 시 큐 잔여 데이터를 모두 기록하는 Drain(털어내기) 로직 추가.
+ * 9. [메모리 무결성] VLA 제거를 통한 FreeRTOS 스택 오버플로우 원천 차단.
+ * 10.[정합성] Tick Wrap-around 방어 및 낡은 데이터(Stale Frame) 초기화 로직 적용.
 
  * ========================================================================== */
 
@@ -70,7 +71,8 @@ static void _evaluateTriggers(ST_T20_TriggerCtx_t* ctx, const ST_T20_FeatureVect
         ctx->is_triggered = true;
         ctx->hold_end_tick = current_tick + pdMS_TO_TICKS(cfg.trigger.sw_event.hold_time_ms);
     } else {
-        if (ctx->is_triggered && current_tick >= ctx->hold_end_tick && ctx->active_source != EN_T20_TRIG_SRC_MANUAL) {
+        // [정합성 최적화] FreeRTOS 50일 롤오버(Wrap-around) 버그 방지를 위해 부호 연산으로 시간차 검증
+        if (ctx->is_triggered && (int32_t)(current_tick - ctx->hold_end_tick) >= 0 && ctx->active_source != EN_T20_TRIG_SRC_MANUAL) {
             ctx->is_triggered = false;
             ctx->active_source = EN_T20_TRIG_SRC_NONE;
         }
@@ -184,15 +186,18 @@ void T20_processTask(void* p_arg) {
 
     // [메모리 무결성] 실행 중이거나, 태스크 종료 시점(running=false)이라도 큐에 잔여 프레임이 있으면 끝까지 털어냄(Drain)
     while (p->running || uxQueueMessagesWaiting(p->frame_queue) > 0) {
-        
-        // -------------------------------------------------------------
-        // [FSM 1단계] 외부 명령(Command) 수신 및 모듈 생명주기 초기화
-        // -------------------------------------------------------------
+
+        // 1. 커맨드 처리 (종료 시에는 커맨드 무시)
         EM_T20_Command_t cmd;
         if (p->running && xQueueReceive(p->cmd_queue, &cmd, 0) == pdTRUE) {
             switch(cmd) {
             	case EN_T20_CMD_START:
                     if (p->current_state == EN_T20_STATE_READY) {
+                        
+                        // [정합성 보완] 가동 시작 전, 큐에 남아있는 낡은 대기 상태의 데이터를 완전히 비워냅니다.
+                        uint8_t dummy; 
+                        while (xQueueReceive(p->frame_queue, &dummy, 0) == pdTRUE) {}
+                        
                         p->current_state = EN_T20_STATE_MONITORING;
                         p->dsp.resetFilterStates(); 
                         p->seq_builder.reset();
@@ -306,14 +311,17 @@ void T20_processTask(void* p_arg) {
                     }
                 }
             }
-
+            
             if (all_ready) {
                 for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
                     p_feature->band_energy[b] = max_band_energy[b];
                 }
 
-                // [정합성] SIMD 패딩(16 bytes)을 제외한 순수 데이터만 추출하여 직렬화
-                float flat_features[mfcc_dim_raw];
+                // [메모리 무결성] VLA(가변 길이 배열) 사용으로 인한 FreeRTOS 스택 오버플로우 패닉 방지를 위해,
+                // 항상 상수 크기(MAX_FEATURE_DIM)로 스택을 정적 할당하고 사용하는 만큼만 복사합니다.
+                float flat_features[T20::C10_DSP::MAX_FEATURE_DIM];
+                memset(flat_features, 0, sizeof(flat_features)); // 가비지 값 초기화
+
                 for(uint8_t a = 0; a < axis_cnt; a++) {
                     memcpy(flat_features + (a * mfcc_coeffs * 3), &p_feature->features[a][0], mfcc_coeffs * 3 * sizeof(float));
                 }
