@@ -1,7 +1,20 @@
 /* ============================================================================
  * File: T230_Mfcc_Cor_231.cpp
  * Summary: Main Task Logic, FSM Orchestration & Trigger Evaluator
+ * ========================================================================== 
+ * * [AI 메모: 제공 기능 요약]
+ * 1. FSM 기반의 상태 전이 및 모듈 생명주기(Lifecycle) 동기화 적용.
+ * 2. 수동 연속 레코딩(Manual) 및 스마트 트리거(Auto) 의도 자동 판별 기능.
+ * 3. [최적화] TinyML 텐서 출력 프레임 정렬(Alignment) 버그 수정.
+ * 4. [최적화] 태스크 Graceful Exit 적용을 통한 힙 메모리 누수(Leak) 원천 차단.
+ * 5. [최적화] 프레임 드롭 시 연속성 보장을 위한 memmove 오버랩 보존 로직 적용.
+  * 1. [정합성] 웹소켓 페이로드 크기 오계산 수정 (가변 MFCC 계수 대응).
+ * 2. [실시간성] 고속 연산 시 시스템 타스크 기아(Starvation) 방지를 위한 taskYIELD 최적화.
+ * 3. [메모리 무결성] Task 종료 시 큐 잔여 데이터를 모두 기록하는 Drain(털어내기) 로직 추가.
+ * 4. [신뢰성] 프레임 드롭 시 위상 연속성 보장을 위한 memmove 오버랩 복원 적용.
+
  * ========================================================================== */
+
 #include "T220_Mfcc_231.h"
 #include "T221_Mfcc_Inter_231.h"
 #include "T210_Def_231.h"
@@ -17,15 +30,16 @@ static void IRAM_ATTR T20_bmi_isr_handler() {
     }
 }
 
+
 // ============================================================================
-// [트리거 판별기 캡슐화]
+// [트리거 판별기 캡슐화] 수동 판별 로직 제거 (FSM에서 제어)
 // ============================================================================
 static void _evaluateTriggers(ST_T20_TriggerCtx_t* ctx, const ST_T20_FeatureVector_t* p_feature, 
                               const ST_T20_Config_t& cfg, const float* max_band_energy) {
     bool condition_met = false;
     const uint8_t axis_cnt = (uint8_t)cfg.feature.axis_count;
 
-    // 1. RMS 트리거 판별 (어느 한 축이라도 넘으면 발동)
+    // 1. RMS 트리거 판별
     if (cfg.trigger.sw_event.use_rms) {
         for (uint8_t a = 0; a < axis_cnt; a++) {
             if (p_feature->rms[a] > cfg.trigger.sw_event.rms_threshold_power) {
@@ -47,24 +61,28 @@ static void _evaluateTriggers(ST_T20_TriggerCtx_t* ctx, const ST_T20_FeatureVect
         }
     }
 
-    // 3. 런타임 컨텍스트 갱신 (Hold Time 연장 처리)
+    // [정합성 보완] 3. 수동(Manual) 모드는 이 함수(evaluate)를 무시하고 
+    // FSM 메인 루프에서 ctx->is_triggered를 강제 유지하므로 여기서는 스마트 트리거만 판별합니다.
+
+    // 4. 런타임 컨텍스트 갱신 (Hold Time 연장)
     uint32_t current_tick = xTaskGetTickCount();
     if (condition_met) {
         ctx->is_triggered = true;
         ctx->hold_end_tick = current_tick + pdMS_TO_TICKS(cfg.trigger.sw_event.hold_time_ms);
     } else {
-        // 조건이 맞지 않더라도 Hold Time이 남아있으면 레코딩 유지 (Damping 기록 보장)
-        if (ctx->is_triggered && current_tick >= ctx->hold_end_tick) {
+        if (ctx->is_triggered && current_tick >= ctx->hold_end_tick && ctx->active_source != EN_T20_TRIG_SRC_MANUAL) {
             ctx->is_triggered = false;
             ctx->active_source = EN_T20_TRIG_SRC_NONE;
         }
     }
 }
 
-// ============================================================================
-// [Task 1] Core 0: 센서 데이터 수집
-// ============================================================================
-void T20_sensorTask(void* p_arg) {
+
+
+/* ============================================================================
+ * [Task 1] Core 0: 센서 데이터 수집 (정합성 및 버퍼 오버플로우 방어 최적화)
+ * ========================================================================== */
+ void T20_sensorTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
     g_isr_sensor_task = xTaskGetCurrentTaskHandle();
 
@@ -73,11 +91,10 @@ void T20_sensorTask(void* p_arg) {
 
     alignas(16) float batch_x[32], batch_y[32], batch_z[32];
 
-    for (;;) {
+    while (p->running) { // [최적화] for(;;)를 while(p->running)으로 변경하여 안전한 종료 유도
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        if (!p->running) continue;
-
-        // [FSM 개선] READY 상태일 때는 FIFO 버퍼만 비워주고(Overflow 방지), 핑퐁 연산은 무시합니다.
+        if (!p->running) break;
+        
         if (p->current_state == EN_T20_STATE_READY) {
             p->sensor.readFifoBatch(batch_x, batch_y, batch_z, 32, p->cfg.feature.axis_count, p->cfg.sensor.axis);
             continue;
@@ -102,66 +119,99 @@ void T20_sensorTask(void* p_arg) {
 
             if (p->active_sample_index >= fft_sz) {
                 uint8_t ready_idx = p->active_fill_buffer;
+                uint8_t next_slot = (p->active_fill_buffer + 1) % T20::C10_Sys::RAW_FRAME_BUFFERS;
+                uint16_t overlap_samples = fft_sz - hop_sz;
+                
                 if (xQueueSend(p->frame_queue, &ready_idx, 0) == pdPASS) {
-                    uint8_t next_slot = (p->active_fill_buffer + 1) % T20::C10_Sys::RAW_FRAME_BUFFERS;
-                    uint16_t overlap_samples = fft_sz - hop_sz;
                     if (overlap_samples > 0) {
                         for (uint8_t a = 0; a < (uint8_t)p->cfg.feature.axis_count; a++) {
                             memcpy(p->raw_buffer[a][next_slot], &p->raw_buffer[a][ready_idx][hop_sz], overlap_samples * sizeof(float));
                         }
                     }
-                    p->active_fill_buffer = next_slot;
                     p->active_sample_index = overlap_samples;
+                    p->active_fill_buffer = next_slot; 
+                } else {
+                    // [정합성 보완] 큐 전송 실패 시(Frame Drop), 다음 프레임의 위상 연속성을 보장하기 위해
+                    // 슬롯을 전진시키지 않고 현재 슬롯 내부에서 오버랩 데이터를 맨 앞으로 당겨옵니다.
+                    if (overlap_samples > 0) {
+                        for (uint8_t a = 0; a < (uint8_t)p->cfg.feature.axis_count; a++) {
+                            memmove(p->raw_buffer[a][ready_idx], &p->raw_buffer[a][ready_idx][hop_sz], overlap_samples * sizeof(float));
+                        }
+                    }
+                    p->active_sample_index = overlap_samples;
+                    // active_fill_buffer는 그대로 유지하여 다음 루프에서 덮어쓰기 유도
                 }
             }
         }
     }
+    g_isr_sensor_task = nullptr;
+    vTaskDelete(nullptr);
 }
 
-// ============================================================================
-// [Task 2] Core 1: DSP 연산 및 유한 상태 머신 (FSM)
-// ============================================================================
+/=//////###
+
 void T20_processTask(void* p_arg) {
     auto* p = static_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
     if (!p) { vTaskDelete(nullptr); return; }
 
     uint32_t frame_id = 0;
-    const uint16_t axis_cnt = (uint8_t)p->cfg.feature.axis_count;
-    const uint16_t mfcc_dim = (uint16_t)p->cfg.feature.mfcc_coeffs * 3 * axis_cnt;
-    const uint16_t N = p->cfg.feature.fft_size;
-    const uint16_t bins = (N / 2) + 1;
+    uint32_t seq_push_cnt = 0;
 
-    // SIMD 힙 할당
+    const uint8_t  axis_cnt     = (uint8_t)p->cfg.feature.axis_count;
+    const uint16_t mfcc_coeffs  = p->cfg.feature.mfcc_coeffs;
+    const uint16_t mfcc_dim_raw = mfcc_coeffs * 3 * axis_cnt; // 패딩 없는 순수 데이터 차원
+    const uint16_t N            = p->cfg.feature.fft_size;
+    const uint16_t bins         = (N / 2) + 1;
+
+    // [정합성] 웹소켓 페이로드 길이 동적 계산: (Wave + Spec + MFCC) * axis_cnt
+    const size_t ws_payload_len = (N * axis_cnt) + (bins * axis_cnt) + (mfcc_coeffs * 3 * axis_cnt);
+
     ST_T20_FeatureVector_t* p_feature = (ST_T20_FeatureVector_t*)heap_caps_aligned_alloc(16, sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_INTERNAL);
-    float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim * sizeof(float), MALLOC_CAP_INTERNAL);
-    const size_t ws_payload_len = (N * axis_cnt) + (bins * axis_cnt) + (39 * axis_cnt);
+    float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim_raw * sizeof(float), MALLOC_CAP_INTERNAL);
     float* ws_payload = (float*)heap_caps_aligned_alloc(16, ws_payload_len * sizeof(float), MALLOC_CAP_INTERNAL);
 
     if (!p_feature || !seq_buffer || !ws_payload) {
-        Serial.println(F("[Critical] DSP Task OOM!"));
+        if (p_feature) heap_caps_free(p_feature);
+        if (seq_buffer) heap_caps_free(seq_buffer);
+        if (ws_payload) heap_caps_free(ws_payload);
         vTaskDelete(nullptr); return;
     }
 
-    // 트리거 런타임 제어 컨텍스트 초기화
     ST_T20_TriggerCtx_t trig_ctx = {false, EN_T20_TRIG_SRC_NONE, 0};
 
-    for (;;) {
-        // -------------------------------------------------------------
-        // [FSM 1단계] 외부 명령(Command) 수신 및 상태 전이
-        // -------------------------------------------------------------
+    // [메모리 무결성] 실행 중이거나, 종료 시점에 큐에 잔여 프레임이 있는 동안 루프 유지
+    while (p->running || uxQueueMessagesWaiting(p->frame_queue) > 0) {
+        
+        // 1. 커맨드 처리 (종료 시에는 커맨드 무시)
         EM_T20_Command_t cmd;
-        if (xQueueReceive(p->cmd_queue, &cmd, 0) == pdTRUE) {
+        if (p->running && xQueueReceive(p->cmd_queue, &cmd, 0) == pdTRUE) {
             switch(cmd) {
-                case EN_T20_CMD_START:
-                    if (p->current_state == EN_T20_STATE_READY) p->current_state = EN_T20_STATE_MONITORING;
+            	case EN_T20_CMD_START:
+                    if (p->current_state == EN_T20_STATE_READY) {
+                        p->current_state = EN_T20_STATE_MONITORING;
+                        p->dsp.resetFilterStates(); 
+                        p->seq_builder.reset();
+                        seq_push_cnt = 0; frame_id = 0;
+                        p->sensor.resume(); 
+                        memset(ws_payload, 0, ws_payload_len * sizeof(float));
+
+                        if (!p->cfg.trigger.sw_event.use_rms && !p->cfg.trigger.sw_event.bands[0].enable && 
+                            !p->cfg.trigger.sw_event.bands[1].enable && !p->cfg.trigger.sw_event.bands[2].enable) {
+                            trig_ctx.is_triggered = true;
+                            trig_ctx.active_source = EN_T20_TRIG_SRC_MANUAL;
+                            trig_ctx.hold_end_tick = portMAX_DELAY;
+                        }
+                    }
                     break;
                 case EN_T20_CMD_STOP:
                     p->current_state = EN_T20_STATE_READY;
                     trig_ctx.is_triggered = false;
+                    trig_ctx.active_source = EN_T20_TRIG_SRC_NONE;
                     if (p->storage.isOpen()) p->storage.closeSession("manual_stop");
+                    p->sensor.pause();          
                     break;
                 case EN_T20_CMD_LEARN_NOISE:
-                    if (p->current_state == EN_T20_STATE_MONITORING || p->current_state == EN_T20_STATE_RECORDING) {
+                    if (p->current_state >= EN_T20_STATE_MONITORING) {
                         p->current_state = EN_T20_STATE_NOISE_LEARNING;
                         p->dsp.setNoiseLearning(true);
                         p->dsp.resetNoiseStats();
@@ -170,26 +220,22 @@ void T20_processTask(void* p_arg) {
                         p->dsp.setNoiseLearning(false);
                     }
                     break;
+                case EN_T20_CMD_CALIBRATE: p->sensor.runCalibration(); break;
                 default: break;
             }
         }
 
-        // -------------------------------------------------------------
-        // [FSM 2단계] 상태별 액션 수행 (State Action)
-        // -------------------------------------------------------------
-        if (p->current_state == EN_T20_STATE_READY) {
-            uint8_t dummy; // 큐를 비워 메모리 병목 방지
+        if (p->current_state == EN_T20_STATE_READY && p->running) {
+            uint8_t dummy; 
             while (xQueueReceive(p->frame_queue, &dummy, 0) == pdTRUE) {}
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
+            vTaskDelay(pdMS_TO_TICKS(10)); continue;
         }
 
-        // MONITORING, RECORDING, NOISE_LEARNING 공통 로직
+        // 2. 데이터 프로세싱
         uint8_t read_idx;
-        if (xQueueReceive(p->frame_queue, &read_idx, pdMS_TO_TICKS(10)) == pdTRUE) {
-            
-            struct timeval tv;
-            gettimeofday(&tv, NULL);
+        // 종료 중(Drain)일 때는 대기하지 않고 즉시 가져옴
+        if (xQueueReceive(p->frame_queue, &read_idx, p->running ? pdMS_TO_TICKS(10) : 0) == pdTRUE) {
+            struct timeval tv; gettimeofday(&tv, NULL);
             p_feature->timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
             p_feature->frame_id = ++frame_id;
             p_feature->active_axes = axis_cnt;
@@ -204,64 +250,57 @@ void T20_processTask(void* p_arg) {
 
             for (uint8_t a = 0; a < axis_cnt; a++) {
                 if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], p_feature, a)) all_ready = false; 
-
                 for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
                     if (p->cfg.trigger.sw_event.bands[b].enable) {
                         float nrg = p->dsp.getBandEnergy(p->cfg.trigger.sw_event.bands[b].start_hz, p->cfg.trigger.sw_event.bands[b].end_hz);
                         if (nrg > max_band_energy[b]) max_band_energy[b] = nrg;
                     }
                 }
-
-                // 페이로드 조립
+                // 웹소켓 페이로드 조립 (Wave + Spec)
                 memcpy(ws_payload + (a * N), p->raw_buffer[a][read_idx], N * sizeof(float));
                 memcpy(ws_payload + (axis_cnt * N) + (a * bins), p->dsp.getPowerSpectrum(), bins * sizeof(float));
             }
 
-            // 노이즈 학습 중이 아닐 때만 트리거 판별 실행
             if (p->current_state != EN_T20_STATE_NOISE_LEARNING) {
-                _evaluateTriggers(&trig_ctx, p_feature, p->cfg, max_band_energy);
-
+                if (trig_ctx.active_source != EN_T20_TRIG_SRC_MANUAL) _evaluateTriggers(&trig_ctx, p_feature, p->cfg, max_band_energy);
                 if (trig_ctx.is_triggered) {
-                    p->current_state = EN_T20_STATE_RECORDING;
+                    if (p->current_state != EN_T20_STATE_RECORDING) {
+                        p->current_state = EN_T20_STATE_RECORDING;
+                        p->storage.openSession(p->cfg, (trig_ctx.active_source == EN_T20_TRIG_SRC_MANUAL) ? "man" : "trg");
+                    }
                     p_feature->status_flags |= T20::C10_Rec::FLAG_TRIGGERED;
-                    
-                    if (!p->storage.isOpen()) {
-                        p->storage.openSession(p->cfg);
-                        p->storage.writeEvent("smart_trigger_started");
-                        p->last_trigger_ms = millis();
-                    }
-                } else {
+                } else if (p->current_state == EN_T20_STATE_RECORDING) {
                     p->current_state = EN_T20_STATE_MONITORING;
-                    if (p->storage.isOpen()) {
-                        p->storage.closeSession("trigger_hold_timeout");
-                    }
+                    p->storage.closeSession("trigger_hold_timeout");
                 }
             }
 
             if (all_ready) {
-                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
-                    p_feature->band_energy[b] = max_band_energy[b];
-                }
-
-                p->seq_builder.pushVector(&p_feature->features[0][0]);
+                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) p_feature->band_energy[b] = max_band_energy[b];
+                
+                // 특징량 평탄화 적재
+                float flat_features[mfcc_dim_raw];
+                for(uint8_t a=0; a < axis_cnt; a++) memcpy(flat_features + (a * mfcc_coeffs * 3), &p_feature->features[a][0], mfcc_coeffs * 3 * sizeof(float));
+                
+                p->seq_builder.pushVector(flat_features);
+                seq_push_cnt++;
 
                 if (p->cfg.output.output_sequence) {
-                    if (p->seq_builder.isReady() && (frame_id % p->cfg.output.sequence_frames == 0)) {
+                    if (p->seq_builder.isReady() && (seq_push_cnt % p->cfg.output.sequence_frames == 0)) {
                         p->seq_builder.getSequenceFlat(seq_buffer);
-                        p->comm.broadcastBinary(seq_buffer, p->seq_builder.getSequenceFrames() * mfcc_dim);
+                        p->comm.broadcastBinary(seq_buffer, p->cfg.output.sequence_frames * mfcc_dim_raw);
                     }
                 } else {
+                    // [정합성] MFCC 영역을 동적 크기로 정확히 복사
                     float* mfcc_ptr = ws_payload + (axis_cnt * N) + (axis_cnt * bins);
-                    for(uint8_t a = 0; a < axis_cnt; a++) {
-                        memcpy(mfcc_ptr + (a * 39), &p_feature->features[a][0], 39 * sizeof(float));
-                    }
+                    memcpy(mfcc_ptr, flat_features, mfcc_dim_raw * sizeof(float));
                     p->comm.broadcastBinary(ws_payload, ws_payload_len);
                 }
-
                 xQueueSend(p->recorder_queue, p_feature, 0);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        // [실시간성] 큐가 비었을 때만 명시적 양보, 종료 중에는 Yield 생략하여 최대 속도 드레인
+        if (p->running) taskYIELD();
     }
 
     heap_caps_free(p_feature);
@@ -270,21 +309,236 @@ void T20_processTask(void* p_arg) {
     vTaskDelete(nullptr);
 }
 
+
+
+######
+
 // ============================================================================
-// [Task 3] Core 1: 스토리지 기록 전담 태스크
+// [Task 2] Core 1: DSP 연산 및 유한 상태 머신 (FSM)
 // ============================================================================
-void T20_recorderTask(void* p_arg) {
+
+    
+    const uint16_t mfcc_coeffs  = p->cfg.feature.mfcc_coeffs;
+    const uint16_t mfcc_dim_raw = mfcc_coeffs * 3 * axis_cnt; // 패딩 없는 순수 데이터 차원
+    
+
+void T20_processTask(void* p_arg) {
+    auto* p = static_cast<CL_T20_Mfcc::ST_Impl*>(p_arg);
+    if (!p) { vTaskDelete(nullptr); return; }
+
+    uint32_t frame_id = 0;
+    uint32_t seq_push_cnt = 0; // [정합성 보완] 텐서 조립 정렬을 위한 독립 카운터
+
+    const uint16_t axis_cnt = (uint8_t)p->cfg.feature.axis_count;
+    const uint16_t mfcc_coeffs  = p->cfg.feature.mfcc_coeffs;
+    const uint16_t mfcc_dim = (uint16_t)p->cfg.feature.mfcc_coeffs * 3 * axis_cnt;
+    const uint16_t mfcc_dim_raw = mfcc_coeffs * 3 * axis_cnt; // 패딩 없는 순수 데이터 차원
+    const uint16_t N = p->cfg.feature.fft_size;
+    const uint16_t bins = (N / 2) + 1;
+
+    // SIMD 힙 할당
+    // [정합성] 웹소켓 페이로드 길이 동적 계산: (Wave + Spec + MFCC) * axis_cnt
+    const size_t ws_payload_len = (N * axis_cnt) + (bins * axis_cnt) + (mfcc_coeffs * 3 * axis_cnt);
+
+    ST_T20_FeatureVector_t* p_feature = (ST_T20_FeatureVector_t*)heap_caps_aligned_alloc(16, sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_INTERNAL);
+    float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim * sizeof(float), MALLOC_CAP_INTERNAL);
+    float* ws_payload = (float*)heap_caps_aligned_alloc(16, ws_payload_len * sizeof(float), MALLOC_CAP_INTERNAL);
+
+    // [정합성 보완] 할당 실패 시 성공한 메모리들을 안전하게 반환하여 누수(Leak) 원천 차단
+    if (!p_feature || !seq_buffer || !ws_payload) {
+        Serial.println(F("[Critical] DSP Task OOM! Cleaning up..."));
+        if (p_feature) heap_caps_free(p_feature);
+        if (seq_buffer) heap_caps_free(seq_buffer);
+        if (ws_payload) heap_caps_free(ws_payload);
+        vTaskDelete(nullptr); return;
+    }
+
+    ST_T20_TriggerCtx_t trig_ctx = {false, EN_T20_TRIG_SRC_NONE, 0};
+
+    // [메모리 무결성] 실행 중이거나, 종료 시점에 큐에 잔여 프레임이 있는 동안 루프 유지
+    while (p->running || uxQueueMessagesWaiting(p->frame_queue) > 0) {
+        // -------------------------------------------------------------
+        // [FSM 1단계] 외부 명령(Command) 수신 및 모듈 생명주기 초기화
+        // -------------------------------------------------------------
+        
+        // 1. 커맨드 처리 (종료 시에는 커맨드 무시)
+        EM_T20_Command_t cmd;
+        if (xQueueReceive(p->cmd_queue, &cmd, 0) == pdTRUE) {
+            switch(cmd) {
+            	case EN_T20_CMD_START:
+                    if (p->current_state == EN_T20_STATE_READY) {
+                        p->current_state = EN_T20_STATE_MONITORING;
+                        p->dsp.resetFilterStates(); 
+                        p->seq_builder.reset();
+                        seq_push_cnt = 0; 
+                        p->sensor.resume(); 
+
+                        // [정합성 보완] 1. 스트리밍 버퍼 초기화 (UI Glitch 방어)
+                        memset(ws_payload, 0, ws_payload_len * sizeof(float));
+
+                        // [정합성 보완] 2. 사용자가 스마트 트리거 기능을 모두 꺼두었다면, START 버튼은 "무조건 연속 저장"을 의미함.
+                        if (!p->cfg.trigger.sw_event.use_rms && 
+                            !p->cfg.trigger.sw_event.bands[0].enable && 
+                            !p->cfg.trigger.sw_event.bands[1].enable && 
+                            !p->cfg.trigger.sw_event.bands[2].enable) {
+                            trig_ctx.is_triggered = true;
+                            trig_ctx.active_source = EN_T20_TRIG_SRC_MANUAL;
+                            trig_ctx.hold_end_tick = portMAX_DELAY; // 무한대 유지
+                        }
+                    }
+                    break;
+                case EN_T20_CMD_STOP:
+                    p->current_state = EN_T20_STATE_READY;
+                    trig_ctx.is_triggered = false;
+                    trig_ctx.active_source = EN_T20_TRIG_SRC_NONE;
+                    if (p->storage.isOpen()) p->storage.closeSession("manual_stop");
+                    p->sensor.pause();          
+                    break;   
+                case EN_T20_CMD_LEARN_NOISE:
+                    if (p->current_state == EN_T20_STATE_MONITORING || p->current_state == EN_T20_STATE_RECORDING) {
+                        p->current_state = EN_T20_STATE_NOISE_LEARNING;
+                        p->dsp.setNoiseLearning(true);
+                        p->dsp.resetNoiseStats();
+                    } else if (p->current_state == EN_T20_STATE_NOISE_LEARNING) {
+                        p->current_state = EN_T20_STATE_MONITORING;
+                        p->dsp.setNoiseLearning(false);
+                    }
+                    break;
+                case EN_T20_CMD_CALIBRATE:
+                    p->sensor.runCalibration();
+                    break;
+                default: break;
+            }
+        }
+
+        // -------------------------------------------------------------
+        // [FSM 2단계] 상태별 액션 수행
+        // -------------------------------------------------------------
+        if (p->current_state == EN_T20_STATE_READY && p->running) {
+            uint8_t dummy; 
+            while (xQueueReceive(p->frame_queue, &dummy, 0) == pdTRUE) {}
+            vTaskDelay(pdMS_TO_TICKS(10)); continue;
+        }
+        
+       // 2. 데이터 프로세싱 
+        uint8_t read_idx;
+        // 종료 중(Drain)일 때는 대기하지 않고 즉시 가져옴
+        if (xQueueReceive(p->frame_queue, &read_idx, p->running ? pdMS_TO_TICKS(10) : 0) == pdTRUE) {
+               
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            p_feature->timestamp_ms = (uint64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+            p_feature->frame_id = ++frame_id;
+            p_feature->active_axes = axis_cnt;
+            p_feature->status_flags = (tv.tv_sec > 1000000) ? T20::C10_Rec::FLAG_NTP_SYNCED : 0x00;
+            
+            if (p->cfg.storage.save_raw) {
+                p->storage.pushRaw(p->raw_buffer[0][read_idx], p->raw_buffer[1][read_idx], p->raw_buffer[2][read_idx], N, axis_cnt);
+            }
+            
+            bool all_ready = true;
+            float max_band_energy[T20::C10_DSP::TRIGGER_BANDS_MAX] = {0.0f};
+
+            for (uint8_t a = 0; a < axis_cnt; a++) {
+                if (!p->dsp.processFrame(p->raw_buffer[a][read_idx], p_feature, a)) all_ready = false; 
+
+                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
+                    if (p->cfg.trigger.sw_event.bands[b].enable) {
+                        float nrg = p->dsp.getBandEnergy(p->cfg.trigger.sw_event.bands[b].start_hz, p->cfg.trigger.sw_event.bands[b].end_hz);
+                        if (nrg > max_band_energy[b]) max_band_energy[b] = nrg;
+                    }
+                }
+
+                // 웹소켓 페이로드 조립 (Wave + Spec)
+                memcpy(ws_payload + (a * N), p->raw_buffer[a][read_idx], N * sizeof(float));
+                memcpy(ws_payload + (axis_cnt * N) + (a * bins), p->dsp.getPowerSpectrum(), bins * sizeof(float));
+            }
+
+            // 노이즈 학습 중이 아닐 때만 트리거 판별 실행
+            if (p->current_state != EN_T20_STATE_NOISE_LEARNING) {
+                
+                // [정합성 보완] 수동(Manual) 모드가 아닐 때만 센서 기반 스마트 트리거 평가를 수행함
+                if (trig_ctx.active_source != EN_T20_TRIG_SRC_MANUAL) {
+                    _evaluateTriggers(&trig_ctx, p_feature, p->cfg, max_band_energy);
+                }
+
+                if (trig_ctx.is_triggered) {
+                    if (p->current_state != EN_T20_STATE_RECORDING) {
+                        p->current_state = EN_T20_STATE_RECORDING;
+                        const char* prefix = (trig_ctx.active_source == EN_T20_TRIG_SRC_MANUAL) ? "man" : "trg";
+                        
+                        if (!p->storage.isOpen()) {
+                            p->storage.openSession(p->cfg, prefix);
+                            p->storage.writeEvent("trigger_started");
+                            p->last_trigger_ms = millis();
+                        }
+                    }
+                    p_feature->status_flags |= T20::C10_Rec::FLAG_TRIGGERED;
+                } else {
+                    if (p->current_state == EN_T20_STATE_RECORDING) {
+                        p->current_state = EN_T20_STATE_MONITORING;
+                        if (p->storage.isOpen()) {
+                            p->storage.closeSession("trigger_hold_timeout");
+                        }
+                    }
+                }
+            }
+
+            // 특징량(MFCC 등)이 완성되었을 때만 출력 처리
+            if (all_ready) {
+                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
+                    p_feature->band_energy[b] = max_band_energy[b];
+                }
+
+                p->seq_builder.pushVector(flat_features);
+                seq_push_cnt++; // 실제 추출된 횟수 증가
+
+                // [정합성 보완] 텐서 조립 정렬 버그 수정. 무조건 증가하는 frame_id 대신 seq_push_cnt 사용
+                if (p->cfg.output.output_sequence) {
+                    if (p->seq_builder.isReady() && (seq_push_cnt % p->cfg.output.sequence_frames == 0)) {
+                        p->seq_builder.getSequenceFlat(seq_buffer);
+                        p->comm.broadcastBinary(seq_buffer, p->seq_builder.getSequenceFrames() * mfcc_dim);
+                    }
+                } else {
+                    // [정합성] MFCC 영역을 동적 크기로 정확히 복사
+                    float* mfcc_ptr = ws_payload + (axis_cnt * N) + (axis_cnt * bins);
+                    memcpy(mfcc_ptr, flat_features, mfcc_dim_raw * sizeof(float));
+                    p->comm.broadcastBinary(ws_payload, ws_payload_len);
+                }
+
+                xQueueSend(p->recorder_queue, p_feature, 0);
+            }
+        }
+        // [실시간성] 큐가 비었을 때만 명시적 양보, 종료 중에는 Yield 생략하여 최대 속도 드레인
+        if (p->running) taskYIELD();
+    }
+
+    // [최적화] 태스크가 종료될 때 반드시 실행되어 메모리 누수를 막음
+    heap_caps_free(p_feature);
+    heap_caps_free(seq_buffer);
+    heap_caps_free(ws_payload);
+    vTaskDelete(nullptr);
+}
+
+/* ============================================================================
+ * [Task 3] Core 1: 스토리지 기록 전담 태스크
+ * ========================================================================== */
+ void T20_recorderTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
     ST_T20_FeatureVector_t msg;
 
-    for (;;) {
-        if (xQueueReceive(p->recorder_queue, &msg, pdMS_TO_TICKS(200)) == pdTRUE) {
+    // 프로세스 태스크가 종료된 후에도 레코더 큐가 비워질 때까지 가동
+    while (p->running || uxQueueMessagesWaiting(p->recorder_queue) > 0) {
+        if (xQueueReceive(p->recorder_queue, &msg, p->running ? pdMS_TO_TICKS(200) : 0) == pdTRUE) {
             p->storage.pushVector(&msg);
         } else {
-            p->storage.checkIdleFlush();
+            if (p->running) p->storage.checkIdleFlush();
+            else break;
         }
     }
+    vTaskDelete(nullptr);
 }
+
 
 // ============================================================================
 // [Main Class] Method Implementation
@@ -304,6 +558,7 @@ CL_T20_Mfcc::~CL_T20_Mfcc() {
     }
 }
 
+
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (p_cfg) _impl->cfg = *p_cfg;
     else _impl->cfg = T20_makeDefaultConfig();
@@ -313,15 +568,16 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     _impl->cmd_queue = xQueueCreate(10, sizeof(EM_T20_Command_t));
     _impl->mutex = xSemaphoreCreateMutex();
 
-    // 부팅 시 운영 모드에 따른 초기 FSM 상태 세팅
+    if (!_impl->sensor.begin(_impl->cfg.sensor)) return false;
+    if (!_impl->dsp.begin(_impl->cfg)) return false;
+
+    // [정합성 최적화] 부팅 시 운영 모드에 따른 초기 FSM 상태 세팅 및 센서 제어
     if (_impl->cfg.system.op_mode == EN_T20_OP_AUTO) {
         _impl->current_state = EN_T20_STATE_MONITORING;
     } else {
         _impl->current_state = EN_T20_STATE_READY;
+        _impl->sensor.pause(); // 시작부터 대기 상태라면 센서를 멈춰 전력 보존
     }
-
-    if (!_impl->sensor.begin(_impl->cfg.sensor)) return false;
-    if (!_impl->dsp.begin(_impl->cfg)) return false;
 
     uint16_t vector_dim = (p_cfg->feature.mfcc_coeffs * 3) * (uint8_t)p_cfg->feature.axis_count;
     _impl->seq_builder.begin(_impl->cfg.output.sequence_frames, vector_dim);
@@ -341,6 +597,8 @@ bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     return true;
 }
 
+
+
 void CL_T20_Mfcc::postCommand(EM_T20_Command_t cmd) {
     if (_impl && _impl->cmd_queue) {
         xQueueSend(_impl->cmd_queue, &cmd, 0);
@@ -358,13 +616,26 @@ bool CL_T20_Mfcc::start() {
     return true;
 }
 
+// [최적화] 강제 사살(vTaskDelete) 대신 태스크 자진 종료 유도
 void CL_T20_Mfcc::stop() {
-    _impl->running = false;
-    if (_impl->sensor_task) { vTaskDelete(_impl->sensor_task); _impl->sensor_task = nullptr; }
-    if (_impl->process_task) { vTaskDelete(_impl->process_task); _impl->process_task = nullptr; }
-    if (_impl->recorder_task) { vTaskDelete(_impl->recorder_task); _impl->recorder_task = nullptr; }
-    _impl->storage.closeSession();
+    if (!_impl->running) return;
+    _impl->running = false; // 루프 탈출 플래그 설정
+    
+    // 센서 태스크는 portMAX_DELAY로 멈춰있을 수 있으므로 강제로 깨워줍니다.
+    if (g_isr_sensor_task) {
+        xTaskNotifyGive(g_isr_sensor_task);
+    }
+    
+    // 태스크들이 스스로 루프를 빠져나와 메모리를 정리할 시간을 줍니다.
+    delay(50);
+    
+    _impl->sensor_task = nullptr;
+    _impl->process_task = nullptr;
+    _impl->recorder_task = nullptr;
+    
+    _impl->storage.closeSession("system_stop");
 }
+
 
 void CL_T20_Mfcc::run() {
     if (!_impl || !_impl->running) return;
@@ -419,3 +690,4 @@ void CL_T20_Mfcc::printStatus(Stream& out) const {
     out.printf("Storage: %s (Records: %lu)\n", _impl->storage.isOpen() ? "Active" : "Idle", _impl->storage.getRecordCount());
     out.println("-------------------------");
 }
+
