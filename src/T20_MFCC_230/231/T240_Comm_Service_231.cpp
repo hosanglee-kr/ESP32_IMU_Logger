@@ -153,19 +153,19 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
         req->send(200, "application/json", "{\"ok\":true}");
     });
 
-    _server.on("/api/t20/recorder_end", HTTP_POST, [request](AsyncWebServerRequest* req) {
+    _server.on("/api/t20/recorder_end", HTTP_POST, [](AsyncWebServerRequest* req) {
         // [FSM 개선] 메인 FSM 큐로 정지(대기) 명령을 위임합니다.
         if (g_t20) g_t20->postCommand(EN_T20_CMD_STOP);
         req->send(200, "application/json", "{\"ok\":true}");
     });
 
-    _server.on("/api/t20/noise_learn", HTTP_POST, [request](AsyncWebServerRequest* req) {
+    _server.on("/api/t20/noise_learn", HTTP_POST, [](AsyncWebServerRequest* req) {
         // [FSM 개선] 파라미터 유무와 상관없이 토글(Toggle) 커맨드로 전달
         if (g_t20) g_t20->postCommand(EN_T20_CMD_LEARN_NOISE);
         req->send(200, "application/json", "{\"ok\":true}");
     });
 
-    _server.on("/api/t20/calibrate", HTTP_POST, [request](AsyncWebServerRequest* req) {
+    _server.on("/api/t20/calibrate", HTTP_POST, [](AsyncWebServerRequest* req) {
         // 센서 캘리브레이션은 즉각적인 I2C/SPI 제어가 필요하므로 Command Queue로 전달합니다.
         if (g_t20) g_t20->postCommand(EN_T20_CMD_CALIBRATE);
         req->send(200, "application/json", "{\"ok\":true}");
