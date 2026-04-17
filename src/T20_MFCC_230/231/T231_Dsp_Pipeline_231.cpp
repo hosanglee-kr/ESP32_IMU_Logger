@@ -76,16 +76,34 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
 
     _generateWindow(_window, N, _cfg.preprocess.window_type);
 
-    // [2] 🚨 정합성 보완: 계수(Coeffs)들을 먼저 생성해야만 이후 resetFilterStates()에서 에러가 발생하지 않음.
-    
     // FIR 계수 생성
+    // [2] : FIR 필터 계수 직접 생성 (Windowed-Sinc 알고리즘 연동)
+    // HPF는 Spectral Inversion을 위해 무조건 홀수 탭(Odd Taps)이어야 완벽한 Linear Phase를 보장함
     if (_cfg.preprocess.fir_hpf.enabled) {
-        dsps_fir_gen_hpf_f32(_fir_hpf_coeffs, _cfg.preprocess.fir_hpf.num_taps, _cfg.preprocess.fir_hpf.cutoff_hz / fs);
-    }
-    if (_cfg.preprocess.fir_lpf.enabled) {
-        dsps_fir_gen_lpf_f32(_fir_lpf_coeffs, _cfg.preprocess.fir_lpf.num_taps, _cfg.preprocess.fir_lpf.cutoff_hz / fs);
-    }
+        uint16_t taps = _cfg.preprocess.fir_hpf.num_taps;
+        if (taps % 2 == 0) taps--;   // 짝수일 경우 홀수로 1 감소 보정
+        if (taps > 127) taps = 127;  // 버퍼 선언 크기(128) 오버플로우 한계 방어
 
+        // 내부 구현된 Windowed-Sinc 기반 알고리즘 호출
+        _generateFirHpfWindowedSinc(_fir_hpf_coeffs, taps, _cfg.preprocess.fir_hpf.cutoff_hz);
+        
+        for(uint8_t a = 0; a < (uint8_t)_cfg.feature.axis_count; a++) {
+            dsps_fir_init_f32(&_fir_hpf_inst[a], _fir_hpf_coeffs, _fir_hpf_state[a], taps);
+        }
+    }
+    
+    if (_cfg.preprocess.fir_lpf.enabled) {
+        uint16_t taps = _cfg.preprocess.fir_lpf.num_taps;
+        if (taps % 2 == 0) taps--;
+        if (taps > 127) taps = 127;
+
+        _generateFirLpfWindowedSinc(_fir_lpf_coeffs, taps, _cfg.preprocess.fir_lpf.cutoff_hz);
+        
+        for(uint8_t a = 0; a < (uint8_t)_cfg.feature.axis_count; a++) {
+            dsps_fir_init_f32(&_fir_lpf_inst[a], _fir_lpf_coeffs, _fir_lpf_state[a], taps);
+        }
+    }
+    
     // IIR 및 Notch 계수 생성
     if (_cfg.preprocess.iir_hpf.enabled) dsps_biquad_gen_hpf_f32(_hpf_coeffs, _cfg.preprocess.iir_hpf.cutoff_hz / fs, _cfg.preprocess.iir_hpf.q_factor);
     if (_cfg.preprocess.iir_lpf.enabled) dsps_biquad_gen_lpf_f32(_lpf_coeffs, _cfg.preprocess.iir_lpf.cutoff_hz / fs, _cfg.preprocess.iir_lpf.q_factor);
@@ -642,4 +660,56 @@ float CL_T20_DspPipeline::getBandEnergy(float start_hz, float end_hz) {
     return energy;
 }
 
+
+
+/* ============================================================================
+ * Windowed-Sinc 기반 FIR 필터 계수 생성기 (ESP-DSP Window 가속 결합)
+ * ========================================================================== */
+void CL_T20_DspPipeline::_generateFirLpfWindowedSinc(float* coeffs, uint16_t num_taps, float cutoff_hz) {
+    float fs = T20::C10_DSP::SAMPLE_RATE_HZ;
+    float normalized_cutoff = cutoff_hz / fs;
+    
+    // ESP-DSP 내장 윈도우 함수 가속기 활용을 위한 임시 버퍼 (Blackman 윈도우는 FIR에 최적)
+    float* win = (float*)heap_caps_malloc(num_taps * sizeof(float), MALLOC_CAP_INTERNAL);
+    if (!win) return;
+
+    // ESP-DSP 함수로 블랙만 윈도우 배열 일괄 생성
+    dsps_wind_blackman_f32(win, num_taps);
+
+    float M = (float)(num_taps - 1);
+    float sum = 0.0f;
+    
+    // Windowed-Sinc 알고리즘 연산
+    for (int i = 0; i < num_taps; i++) {
+        float x = (float)i - (M / 2.0f);
+        if (x == 0.0f) {
+            coeffs[i] = 2.0f * normalized_cutoff; // Sinc 중심점 (x->0 일때 극한값)
+        } else {
+            coeffs[i] = sinf(2.0f * (float)M_PI * normalized_cutoff * x) / ((float)M_PI * x);
+        }
+        coeffs[i] *= win[i]; // ESP-DSP에서 생성한 윈도우 씌우기
+        sum += coeffs[i];
+    }
+    
+    // Low-Pass Filter 정규화 (DC Gain = 1.0)
+    for (int i = 0; i < num_taps; i++) {
+        coeffs[i] /= sum;
+    }
+    
+    heap_caps_free(win);
+}
+
+void CL_T20_DspPipeline::_generateFirHpfWindowedSinc(float* coeffs, uint16_t num_taps, float cutoff_hz) {
+    // 1. 동일한 Cutoff를 가지는 LPF 계수 선행 생성
+    _generateFirLpfWindowedSinc(coeffs, num_taps, cutoff_hz);
+    
+    // 2. Spectral Inversion (스펙트럼 반전)을 통한 HPF 변환
+    // HPF[n] = DiracDelta[n - M/2] - LPF[n]
+    uint16_t center = (num_taps - 1) / 2;
+    for (int i = 0; i < num_taps; i++) {
+        coeffs[i] = -coeffs[i];
+    }
+    // 중간 탭(센터)에 1.0(Dirac Delta) 더하기
+    coeffs[center] += 1.0f;
+}
 

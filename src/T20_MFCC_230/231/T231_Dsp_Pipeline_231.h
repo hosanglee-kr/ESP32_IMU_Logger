@@ -10,7 +10,12 @@
  * 호출하여 FIR/IIR 필터의 딜레이 라인(Delay Line) 찌꺼기로 인한 오탐지를 방지해야 합니다.
  * 2. 필터는 위상 왜곡을 막기 위해 반드시 [Median -> DC제거 -> FIR -> IIR -> Notch] 
  * 순서의 파이프라인을 엄격히 준수합니다.
+ * ==========================================================================
+ * 1. ESP-DSP의 Blackman Window 가속 함수를 활용한 Windowed-Sinc FIR 계수 자체 생성.
+ * 2. 스펙트럼 반전(Spectral Inversion)을 통한 초정밀 Linear Phase HPF 생성.
+ * 3. 16바이트 정렬된 Internal SRAM 플랫 버퍼를 사용하여 연산 지연 원천 차단.
  * ========================================================================== */
+
 
 
 #pragma once
@@ -71,6 +76,10 @@ class CL_T20_DspPipeline {
     void _applySpectralSubtraction(uint8_t axis_idx);
     void _applyMelFilterbank(float* p_log_mel_out);
     void _computeDCT2(const float* p_in, float* p_out);
+    
+    // Windowed-Sinc 기반 FIR 필터 계수 자체 생성기
+    void _generateFirLpfWindowedSinc(float* coeffs, uint16_t num_taps, float cutoff_hz);
+    void _generateFirHpfWindowedSinc(float* coeffs, uint16_t num_taps, float cutoff_hz);
 
     // 39차원 벡터 조립
     void _pushHistory(const float* p_mfcc, uint8_t axis_idx);
