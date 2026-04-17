@@ -88,7 +88,8 @@ void CL_T20_StorageService::setConfig(const ST_T20_Config_t& cfg) {
 // ============================================================================
 // 1. 세션 오픈: 파일 생성 및 프리트리거 버퍼 점검
 // ============================================================================
-bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
+bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg, const char* prefix) {
+
     if (_session_open) return false;
     _current_cfg = cfg;
     
@@ -113,7 +114,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
         snprintf(time_buffer, sizeof(time_buffer), "%04lu_notime", (unsigned long)file_seq);
     }
 
-    // [정합성 보완] 접두어(Prefix) 적용: rec_trg_0001_...bin 또는 rec_man_0002_...bin 형태
+     // 접두어(Prefix) 적용: rec_trg_0001_...bin 또는 rec_man_0002_...bin 형태
     if (_backend == EN_T20_STORAGE_SDMMC) {
         snprintf(_active_path, sizeof(_active_path), "%s/rec_%s_%s.bin", T20::C10_Path::SD_DIR_BIN, prefix, time_buffer);
     } else {
@@ -121,6 +122,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     }
 
     _active_file = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(_active_path, "w") : LittleFS.open(_active_path, "w");
+    
     if (!_active_file) return false;
 
     // 확장된 바이너리 헤더 작성
@@ -146,7 +148,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     // Raw 저장 모드 시 3축 대응 파일 오픈
     if (cfg.storage.save_raw) {
         char raw_path[128];
-        snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s.bin", time_buffer);
+        snprintf(raw_path, sizeof(raw_path), "/t20_data/raw/raw_%s_%s.bin", prefix, time_buffer);
         _raw_file = (_backend == EN_T20_STORAGE_SDMMC) ? SD_MMC.open(raw_path, "w") : LittleFS.open(raw_path, "w");
     }
 
@@ -154,6 +156,7 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg) {
     _written_bytes = sizeof(header);
     _session_start_ms = millis();
     _session_open = true;
+    
     return true;
 }
 

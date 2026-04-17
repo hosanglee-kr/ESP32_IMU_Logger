@@ -147,8 +147,8 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
     // ========================================================================
     // 2. 레코더 및 커맨드 제어 API (FSM Command Queue 하달)
     // ========================================================================
-    _server.on("/api/t20/recorder_begin", HTTP_POST, [request](AsyncWebServerRequest* req) {
-        // [FSM 개선] 변수 직접 조작 및 스토리지 접근을 제거하고, 메인 FSM 큐로 명령을 위임합니다.
+    _server.on("/api/t20/recorder_begin", HTTP_POST, [](AsyncWebServerRequest* req) {
+     	// [FSM 개선] 변수 직접 조작 및 스토리지 접근을 제거하고, 메인 FSM 큐로 명령을 위임합니다.
         if (g_t20) g_t20->postCommand(EN_T20_CMD_START);
         req->send(200, "application/json", "{\"ok\":true}");
     });
@@ -391,4 +391,3 @@ bool CL_T20_CommService::publishMqtt(const char* sub_topic, const JsonDocument& 
 
     return _mqtt_client.publish(full_topic, payload);
 }
-
