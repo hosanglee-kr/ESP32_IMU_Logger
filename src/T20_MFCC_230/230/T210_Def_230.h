@@ -297,20 +297,29 @@ typedef struct {
     float alpha;                        // 강조 필터 가중치 (일반적으로 0.97 사용)
 } ST_T20_PreproEmphasisConfig_t;
 
-// 1. IIR 단일 필터 설정 (LPF, HPF 공용)
+
+// 1. FIR 필터 설정 (신규)
+typedef struct {
+    bool     enabled;
+    float    cutoff_hz;
+    uint16_t num_taps;   // FIR 차수 (예: 64, 128)
+} ST_T20_FilterFIRConfig_t;
+
+// 2. IIR 단일 필터 설정 (LPF, HPF 공용)
 typedef struct {
     bool  enabled;
     float cutoff_hz;
     float q_factor;
 } ST_T20_FilterIIRConfig_t;
 
-// 2. Median Filter (충격성 튀는 노이즈 제거)
+
+// 3. Median Filter (충격성 튀는 노이즈 제거)
 typedef struct {
     bool    enabled;
     uint8_t window_size; // 3, 5, 7 등 (홀수 권장)
 } ST_T20_FilterMedianConfig_t;
 
-// 3. Adaptive Notch Filter (특정 주파수 성분 추적 제거)
+// 4. Adaptive Notch Filter (특정 주파수 성분 추적 제거)
 typedef struct {
     bool  enabled;
     float target_freq_hz; // 제거 대상 주파수 (예: 60Hz 전원 노이즈)
@@ -328,17 +337,20 @@ typedef struct {
     uint16_t           noise_learn_frames;          // 고정형 모드 시 노이즈 프로필 구성을 위해 취득할 프레임 수
 } ST_T20_PreproNoiseConfig_t;
 
-// 4. 전처리 통합 설정 구조체 (신호처리 순서대로 재배치)
+// 전처리 통합 설정 구조체 (신호처리 순서대로 재배치)
 typedef struct {
     bool                        remove_dc;
     ST_T20_FilterMedianConfig_t median;      // [1] 스파이크 제거
-    ST_T20_FilterIIRConfig_t    iir_hpf;     // [2] 저주파 차단
-    ST_T20_FilterIIRConfig_t    iir_lpf;     // [3] 고주파 차단
+    ST_T20_FilterFIRConfig_t    fir_hpf;     // [2-1] FIR 기반 고역 통과 (신규)
+    ST_T20_FilterFIRConfig_t    fir_lpf;     // [2-2] FIR 기반 저역 통과 (신규)
+    ST_T20_FilterIIRConfig_t    iir_hpf;     // [3-1] IIR 저주파 차단
+    ST_T20_FilterIIRConfig_t    iir_lpf;     // [3-2] IIR 고주파 차단
     ST_T20_FilterNotchConfig_t  notch;       // [4] 특정 주파수 제거
     ST_T20_PreproEmphasisConfig_t preemphasis; // [5] 고역 강조
     ST_T20_PreproNoiseConfig_t    noise;       // [6] 스펙트럼 감산
     EM_T20_WindowType_t         window_type; // [7] FFT 윈도우
 } ST_T20_PreprocessConfig_t;
+
 
 // --- [2.6] 네트워크, 통신, 저장 하위 구조체 ---
 typedef struct {
@@ -437,6 +449,15 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
     // Median Filter 기본값
     cfg.preprocess.median.enabled         = false;
     cfg.preprocess.median.window_size     = 3;
+    
+    // FIR 필터 기본값 세팅 (기본 비활성)
+    cfg.preprocess.fir_hpf.enabled        = false;
+    cfg.preprocess.fir_hpf.cutoff_hz      = 15.0f;
+    cfg.preprocess.fir_hpf.num_taps       = 64;
+
+    cfg.preprocess.fir_lpf.enabled        = false;
+    cfg.preprocess.fir_lpf.cutoff_hz      = 750.0f;
+    cfg.preprocess.fir_lpf.num_taps       = 64;
 
     // IIR HPF (15Hz 이하 제거)
     cfg.preprocess.iir_hpf.enabled        = true;
@@ -528,4 +549,6 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     return cfg;
 }
+
+
 

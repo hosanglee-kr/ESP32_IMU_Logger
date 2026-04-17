@@ -116,14 +116,18 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
         float hz = T20::C10_DSP::MEL_FREQ_CONST * (powf(10.0f, (min_mel + i * mel_step) / T20::C10_DSP::MEL_SCALE_CONST) - 1.0f);
         bin_points[i] = (uint16_t)roundf(N * hz / fs);
     }
-
+    
     memset(_mel_bank_flat, 0, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float));
     for (int m = 0; m < T20::C10_DSP::MEL_FILTERS; m++) {
         uint16_t left = bin_points[m], center = bin_points[m + 1], right = bin_points[m + 2];
+        
+        // [성능 최적화] dspm_mult_f32 행렬 가속기를 사용하기 위해 전치(Transpose)된 형태로 메모리 적재
+        // Power(1 x bins) * Mel(bins x 26) = Result(1 x 26) 을 위해 Column-major 방식으로 플랫화
         for (int k = left; k < center && k < bins; k++)
-            _mel_bank_flat[m * bins + k] = (float)(k - left) / (float)(center - left + 1e-12f);
+            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(k - left) / (float)(center - left + 1e-12f);
         for (int k = center; k < right && k < bins; k++)
-            _mel_bank_flat[m * bins + k] = (float)(right - k) / (float)(right - center + 1e-12f);
+            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(right - k) / (float)(right - center + 1e-12f);
+
     }
 
     // [5] 🚨 DCT-II Matrix API 가속용 조밀 평탄화 (Tightly Packed)
@@ -262,6 +266,8 @@ void CL_T20_DspPipeline::_applyPreEmphasis(float* p_data, uint8_t axis_idx) {
     }
 }
 
+
+
 void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
     if (window_size < 3) return;
     
@@ -270,6 +276,33 @@ void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
     if (window_size % 2 == 0) window_size--; 
     
     uint16_t N = _current_fft_size;
+
+    // ====================================================================
+    // [성능 최적화] 3-Tap Fast Path: Branchless SIMD-friendly 연산
+    // ====================================================================
+    if (window_size == 3) {
+        float prev2 = p_data[0];
+        float prev1 = p_data[1];
+
+        for (int i = 1; i < N - 1; i++) {
+            float a = prev2;           
+            float b = prev1;           
+            float c = p_data[i + 1];   
+
+            // 분기 예측 실패(Branch Misprediction)에 의한 CPU 지연을 원천 차단하기 위해
+            // 1:1 하드웨어 매핑이 가능한 fmaxf, fminf 조합으로 중간값 도출
+            float median = fmaxf(fminf(a, b), fminf(fmaxf(a, b), c));
+
+            prev2 = prev1;
+            prev1 = c;
+            p_data[i] = median; // In-place 업데이트
+        }
+        return;
+    }
+
+    // ====================================================================
+    // [가변 윈도우] 5-Tap / 7-Tap 처리: 고속 삽입 정렬(Insertion Sort)
+    // ====================================================================
     int half = window_size / 2;
     
     // 1600Hz, 최대 7-tap 정렬이므로 스택 메모리(SRAM) 사용 (속도 극대화)
@@ -289,7 +322,7 @@ void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
         // 3. 정렬을 위해 임시 버퍼에 복사
         memcpy(temp_buf, history, window_size * sizeof(float));
         
-        // 4. 고속 삽입 정렬 (Insertion Sort - 7개 이하 요소 정렬 시 퀵소트보다 빠름)
+        // 4. 고속 삽입 정렬 (7개 이하 요소 정렬 시 퀵소트보다 빠름)
         for (int j = 1; j < window_size; j++) {
             float key = temp_buf[j];
             int k = j - 1;
@@ -304,6 +337,7 @@ void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
         p_data[i] = temp_buf[half];
     }
 }
+
 
 
 
@@ -394,13 +428,23 @@ void CL_T20_DspPipeline::_applySpectralSubtraction(uint8_t axis_idx) {
 
 void CL_T20_DspPipeline::_applyMelFilterbank(float* p_log_mel_out) {
     uint16_t bins = (_current_fft_size / 2) + 1;
+    
+    // [성능 최적화] 개별 dotprod 루프를 삭제하고 1 x 26 행렬 곱셈 연산으로 통합 가속
+    // Matrix 가속기의 Load/Store 에러를 방지하기 위해 16-byte 정렬 필수 적용
+    alignas(16) float mel_energy[T20::C10_DSP::MEL_FILTERS] = {0};
+
+    // 연산 규격: [1 x bins] * [bins x 26] = [1 x 26]
+    // p_in(_power): 1행 bins열
+    // _mel_bank_flat: bins행 26열 (begin()에서 Column-major로 전치 패킹되어 있어야 함)
+    // mel_energy: 1행 26열 출력
+    dspm_mult_f32(_power, _mel_bank_flat, mel_energy, 1, bins, T20::C10_DSP::MEL_FILTERS);
+
+    // 변환된 에너지를 Log Scale 로 변환 (NaN 방지를 위해 하한값 1e-12f 보장)
     for (int m = 0; m < T20::C10_DSP::MEL_FILTERS; m++) {
-        float sum = 0.0f;
-        // [수정] _mel_bank[m] -> _mel_bank_flat + (m * bins)
-        dsps_dotprod_f32(_power, _mel_bank_flat + (m * bins), &sum, bins);
-        p_log_mel_out[m] = logf(fmaxf(sum, 1e-12f));
+        p_log_mel_out[m] = logf(fmaxf(mel_energy[m], 1e-12f));
     }
 }
+
 
 void CL_T20_DspPipeline::_computeDCT2(const float* p_in, float* p_out) {
     // [v220.020] Matrix Multiplication 가속
@@ -478,5 +522,9 @@ float CL_T20_DspPipeline::getBandEnergy(float start_hz, float end_hz) {
     }
     return energy;
 }
+
+
+
+
 
 

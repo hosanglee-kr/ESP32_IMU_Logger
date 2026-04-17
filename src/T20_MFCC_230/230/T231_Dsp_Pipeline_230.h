@@ -107,7 +107,13 @@ class CL_T20_DspPipeline {
     alignas(16) float _log_mel[T20::C10_DSP::MEL_FILTERS];
     alignas(16) float _mfcc_history[T20::C10_DSP::AXIS_COUNT_MAX][T20::C10_DSP::MFCC_HISTORY_LEN][T20::C10_DSP::MFCC_COEFFS_MAX];
 
-    // 필터 계수 및 상태 변수 (분리 및 정렬 완료)
+    // 향후 구현될 FIR 엔진을 위한 계수 및 상태(Delay line) 16바이트 정렬 버퍼
+    alignas(16) float _fir_hpf_coeffs[128]; // 최대 128 Tap 지원
+    alignas(16) float _fir_lpf_coeffs[128];
+    float _fir_hpf_state[T20::C10_DSP::AXIS_COUNT_MAX][128];
+    float _fir_lpf_state[T20::C10_DSP::AXIS_COUNT_MAX][128];
+
+    // IIR 필터 계수 및 상태 변수 (분리 및 정렬 완료)
     alignas(16) float _hpf_coeffs[5];
     alignas(16) float _lpf_coeffs[5];
     alignas(16) float _notch_coeffs[5];
@@ -127,5 +133,4 @@ class CL_T20_DspPipeline {
 
 
 };
-
 

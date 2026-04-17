@@ -37,6 +37,19 @@ bool CL_T20_ConfigJson::parseFromJson(const JsonDocument& doc, ST_T20_Config_t& 
             out_cfg.preprocess.median.enabled     = med["enabled"] | out_cfg.preprocess.median.enabled;
             out_cfg.preprocess.median.window_size = med["window_size"] | out_cfg.preprocess.median.window_size;
         }
+        
+        JsonObjectConst f_hpf = d["fir_hpf"];
+        if (f_hpf) {
+            out_cfg.preprocess.fir_hpf.enabled   = f_hpf["enabled"] | out_cfg.preprocess.fir_hpf.enabled;
+            out_cfg.preprocess.fir_hpf.cutoff_hz = f_hpf["cutoff_hz"] | out_cfg.preprocess.fir_hpf.cutoff_hz;
+            out_cfg.preprocess.fir_hpf.num_taps  = f_hpf["num_taps"] | out_cfg.preprocess.fir_hpf.num_taps;
+        }
+        JsonObjectConst f_lpf = d["fir_lpf"];
+        if (f_lpf) {
+            out_cfg.preprocess.fir_lpf.enabled   = f_lpf["enabled"] | out_cfg.preprocess.fir_lpf.enabled;
+            out_cfg.preprocess.fir_lpf.cutoff_hz = f_lpf["cutoff_hz"] | out_cfg.preprocess.fir_lpf.cutoff_hz;
+            out_cfg.preprocess.fir_lpf.num_taps  = f_lpf["num_taps"] | out_cfg.preprocess.fir_lpf.num_taps;
+        }
 
         JsonObjectConst hpf = d["iir_hpf"];
         if (hpf) {
@@ -199,6 +212,17 @@ void CL_T20_ConfigJson::buildJson(const ST_T20_Config_t& cfg, JsonDocument& out_
     med["enabled"]     = cfg.preprocess.median.enabled;
     med["window_size"] = cfg.preprocess.median.window_size;
 
+    JsonObject f_hpf = d["fir_hpf"].to<JsonObject>();
+    f_hpf["enabled"]     = cfg.preprocess.fir_hpf.enabled;
+    f_hpf["cutoff_hz"]   = cfg.preprocess.fir_hpf.cutoff_hz;
+    f_hpf["num_taps"]    = cfg.preprocess.fir_hpf.num_taps;
+
+    JsonObject f_lpf = d["fir_lpf"].to<JsonObject>();
+    f_lpf["enabled"]     = cfg.preprocess.fir_lpf.enabled;
+    f_lpf["cutoff_hz"]   = cfg.preprocess.fir_lpf.cutoff_hz;
+    f_lpf["num_taps"]    = cfg.preprocess.fir_lpf.num_taps;
+
+    
     JsonObject hpf = d["iir_hpf"].to<JsonObject>();
     hpf["enabled"]     = cfg.preprocess.iir_hpf.enabled;
     hpf["cutoff_hz"]   = cfg.preprocess.iir_hpf.cutoff_hz;
