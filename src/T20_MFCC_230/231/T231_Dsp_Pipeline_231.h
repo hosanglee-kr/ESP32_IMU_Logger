@@ -14,6 +14,7 @@
  * 1. ESP-DSP의 Blackman Window 가속 함수를 활용한 Windowed-Sinc FIR 계수 자체 생성.
  * 2. 스펙트럼 반전(Spectral Inversion)을 통한 초정밀 Linear Phase HPF 생성.
  * 3. 16바이트 정렬된 Internal SRAM 플랫 버퍼를 사용하여 연산 지연 원천 차단.
+ * 4. https://docs.espressif.com/projects/esp-dsp/en/latest/esp32/esp-dsp-apis.html#support 
  * ========================================================================== */
 
 
@@ -112,9 +113,9 @@ class CL_T20_DspPipeline {
     fir_f32_t _fir_lpf_inst[T20::C10_DSP::AXIS_COUNT_MAX];
 
     // IIR 및 Notch
-    alignas(16) float _hpf_coeffs[5];
-    alignas(16) float _lpf_coeffs[5];
-    alignas(16) float _notch_coeffs[5];
+    alignas(16) float _hpf_coeffs[8];
+    alignas(16) float _lpf_coeffs[8];
+    alignas(16) float _notch_coeffs[8];
 
     float _hpf_state[T20::C10_DSP::AXIS_COUNT_MAX][2];
     float _lpf_state[T20::C10_DSP::AXIS_COUNT_MAX][2];

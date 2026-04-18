@@ -26,6 +26,9 @@
  * 5. [메모리 누수(OOM) 롤백]
  * - 'begin()'에서 여러 버퍼를 할당할 때 중간에 하나라도 실패하면, 'return false' 직전에 
  * 반드시 '_freeBuffers()'를 호출하여 이미 할당된 메모리를 토해내야(Roll-back) 영구 누수를 막을 수 있습니다.
+ 
+ * 4. 참조해 : https://docs.espressif.com/projects/esp-dsp/en/latest/esp32/esp-dsp-apis.html#support 
+
  * ========================================================================== 
  */
 
@@ -120,6 +123,12 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
         mfcc_dim = T20::C10_DSP::MFCC_COEFFS_MAX;
     }
     _cfg.feature.mfcc_coeffs = mfcc_dim; // 내부 설정값도 강제 교정하여 후속 파이프라인 보호
+    
+     // SIMD 가속기의 Row/Column 초과 침범(Over-read) 패닉을 막기 위한 2D 패딩 상수 계산
+    const uint16_t bins_padded  = (bins + 3) & ~3;
+    const uint16_t mel_padded   = (T20::C10_DSP::MEL_FILTERS + 3) & ~3;
+    const uint16_t mfcc_padded  = (mfcc_dim + 3) & ~3;
+
 
     // [1] 동적 버퍼 재할당
     if (_current_fft_size != N) {
@@ -129,34 +138,38 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
 
         _work_frame      = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
         _window          = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
-        _power           = (float*)heap_caps_aligned_alloc(16, bins * sizeof(float), MALLOC_CAP_INTERNAL);
+        
+        // [수정됨] 패딩된 차원으로 정확히 할당
+        _power           = (float*)heap_caps_aligned_alloc(16, bins_padded * sizeof(float), MALLOC_CAP_INTERNAL);
         _fft_io_buf      = (float*)heap_caps_aligned_alloc(16, N * 2 * sizeof(float), MALLOC_CAP_INTERNAL);
-        _noise_spectrum  = (float*)heap_caps_aligned_alloc(16, 3 * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        _mel_bank_flat   = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        _dct_matrix_flat = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * T20::C10_DSP::MFCC_COEFFS_MAX * sizeof(float), MALLOC_CAP_INTERNAL);
+        _noise_spectrum  = (float*)heap_caps_aligned_alloc(16, 3 * bins_padded * sizeof(float), MALLOC_CAP_INTERNAL);
+        _mel_bank_flat   = (float*)heap_caps_aligned_alloc(16, bins_padded * mel_padded * sizeof(float), MALLOC_CAP_INTERNAL);
+        _dct_matrix_flat = (float*)heap_caps_aligned_alloc(16, mel_padded * mfcc_padded * sizeof(float), MALLOC_CAP_INTERNAL);
 
         if (!_work_frame || !_window || !_power || !_fft_io_buf || !_mel_bank_flat || !_noise_spectrum || !_dct_matrix_flat) {
             Serial.println(F("[DSP] Critical: Internal SRAM OOM!"));
-            _freeBuffers(); // [추가됨] 일부만 성공한 할당 메모리를 모두 토해내어 영구 누수 방지
+            _freeBuffers();
             return false;
         }
+        
+        // 메모리 쓰레기값에 의한 오염 방지
+        memset(_mel_bank_flat, 0, bins_padded * mel_padded * sizeof(float));
+        memset(_dct_matrix_flat, 0, mel_padded * mfcc_padded * sizeof(float));
+        
         if (dsps_fft2r_init_fc32(NULL, N) != ESP_OK) return false;
     }
 
     _generateWindow(_window, N, _cfg.preprocess.window_type);
 
-    // FIR 계수 생성
-    // [2] : FIR 필터 계수 직접 생성 (Windowed-Sinc 알고리즘 연동)
-    // HPF는 Spectral Inversion을 위해 무조건 홀수 탭(Odd Taps)이어야 완벽한 Linear Phase를 보장함
-    if (_cfg.preprocess.fir_lpf.enabled) {
-        uint16_t taps = _cfg.preprocess.fir_lpf.num_taps;
-        
+    // [2] FIR 필터 계수 생성 (중복되었던 HPF 초기화 블록 1개 삭제 처리됨)
+    if (_cfg.preprocess.fir_hpf.enabled) {
+        uint16_t taps = _cfg.preprocess.fir_hpf.num_taps;
         if (taps < 3) taps = 3;      // Taps 하한선 방어
         if (taps % 2 == 0) taps--;   // 짝수일 경우 홀수로 1 감소 보정
         if (taps > 127) taps = 127;  // 버퍼 선언 크기(128) 오버플로우 한계 방어
 
-        _cfg.preprocess.fir_lpf.num_taps = taps; // 교정된 값 런타임 설정에 반영
-
+        _cfg.preprocess.fir_hpf.num_taps = taps; 
+        
         // 내부 구현된 Windowed-Sinc 기반 알고리즘 호출
         _generateFirHpfWindowedSinc(_fir_hpf_coeffs, taps, _cfg.preprocess.fir_hpf.cutoff_hz);
         
@@ -167,8 +180,10 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
     
     if (_cfg.preprocess.fir_lpf.enabled) {
         uint16_t taps = _cfg.preprocess.fir_lpf.num_taps;
+        if (taps < 3) taps = 3;
         if (taps % 2 == 0) taps--;
         if (taps > 127) taps = 127;
+        _cfg.preprocess.fir_lpf.num_taps = taps;
 
         _generateFirLpfWindowedSinc(_fir_lpf_coeffs, taps, _cfg.preprocess.fir_lpf.cutoff_hz);
         
@@ -180,9 +195,7 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
     // IIR 및 Notch 계수 생성
     if (_cfg.preprocess.iir_hpf.enabled) dsps_biquad_gen_hpf_f32(_hpf_coeffs, _cfg.preprocess.iir_hpf.cutoff_hz / fs, _cfg.preprocess.iir_hpf.q_factor);
     if (_cfg.preprocess.iir_lpf.enabled) dsps_biquad_gen_lpf_f32(_lpf_coeffs, _cfg.preprocess.iir_lpf.cutoff_hz / fs, _cfg.preprocess.iir_lpf.q_factor);
-    if (_cfg.preprocess.notch.enabled) {
-        dsps_biquad_gen_notch_f32(_notch_coeffs, _cfg.preprocess.notch.target_freq_hz / fs, _cfg.preprocess.notch.gain, _cfg.preprocess.notch.q_factor);
-    }
+    if (_cfg.preprocess.notch.enabled) dsps_biquad_gen_notch_f32(_notch_coeffs, _cfg.preprocess.notch.target_freq_hz / fs, _cfg.preprocess.notch.gain, _cfg.preprocess.notch.q_factor);
 
     // [3] Mel-Filterbank 평탄화 생성
     float min_mel = 0.0f;
@@ -195,25 +208,26 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
         bin_points[i] = (uint16_t)roundf(N * hz / fs);
     }
     
-    memset(_mel_bank_flat, 0, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float));
     for (int m = 0; m < T20::C10_DSP::MEL_FILTERS; m++) {
         uint16_t left = bin_points[m], center = bin_points[m + 1], right = bin_points[m + 2];
         for (int k = left; k < center && k < bins; k++)
-            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(k - left) / (float)(center - left + 1e-12f);
+            _mel_bank_flat[k * mel_padded + m] = (float)(k - left) / (float)(center - left + 1e-12f); // 패딩된 열 크기 적용
         for (int k = center; k < right && k < bins; k++)
-            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(right - k) / (float)(right - center + 1e-12f);
+            _mel_bank_flat[k * mel_padded + m] = (float)(right - k) / (float)(right - center + 1e-12f);
     }
 
     // [4] DCT-II Matrix 생성
     for (int k = 0; k < T20::C10_DSP::MEL_FILTERS; k++) {
         for (int n = 0; n < mfcc_dim; n++) {
-            _dct_matrix_flat[k * mfcc_dim + n] = cosf((M_PI / (float)T20::C10_DSP::MEL_FILTERS) * (k + 0.5f) * n);
+            _dct_matrix_flat[k * mfcc_padded + n] = cosf((M_PI / (float)T20::C10_DSP::MEL_FILTERS) * (k + 0.5f) * n); // 패딩된 열 크기 적용
         }
     }
+    
 
     // 부팅 및 Watchdog 리셋 등 최초 진입 시, 확실한 초기화를 위해 노이즈 기록까지 삭제
     resetNoiseStats();
-    memset(_noise_spectrum, 0, 3 * bins * sizeof(float));
+    
+    memset(_noise_spectrum, 0, 3 * bins_padded * sizeof(float));
 
     // [5] 🚨 모든 계수가 세팅되었으므로 최종 필터 상태(Instance) 초기화 일괄 실행
     resetFilterStates();
@@ -254,24 +268,45 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
 
     // [1] 비선형 스파이크 필터 (위상 왜곡 방지를 위해 맨 처음 실행)
     if (_cfg.preprocess.median.enabled) _applyMedianFilter(_work_frame, _cfg.preprocess.median.window_size);
-
+    
     // [2] 선형 전처리 (DC 편향 제거를 통한 수치적 안정성 확보 및 NaN 방어)
     _removeDC(_work_frame);
 
+    // ESP-DSP SIMD 가속기의 In-place 연산 덮어쓰기 오염(UB)을 막기 위해 
+    // 유휴 상태인 _fft_io_buf를 임시 스크래치 버퍼로 활용한 핑퐁(Ping-Pong) 처리
+    float* p_in = _work_frame;
+    float* p_out = _fft_io_buf; 
+
     // [3-1] 선형 위상을 보장하는 고차원 FIR 필터 (IIR 보다 선행)
     if (_cfg.preprocess.fir_hpf.enabled) {
-        dsps_fir_f32(&_fir_hpf_inst[axis_idx], _work_frame, _work_frame, _current_fft_size);
+        dsps_fir_f32(&_fir_hpf_inst[axis_idx], p_in, p_out, _current_fft_size);
+        float* temp = p_in; p_in = p_out; p_out = temp; // 버퍼 스왑
     }
     if (_cfg.preprocess.fir_lpf.enabled) {
-        dsps_fir_f32(&_fir_lpf_inst[axis_idx], _work_frame, _work_frame, _current_fft_size);
+        dsps_fir_f32(&_fir_lpf_inst[axis_idx], p_in, p_out, _current_fft_size);
+        float* temp = p_in; p_in = p_out; p_out = temp;
     }
 
     // [3-2] 저연산량 IIR Filter (Cascade 방식)
-    if (_cfg.preprocess.iir_hpf.enabled) dsps_biquad_f32(_work_frame, _work_frame, _current_fft_size, _hpf_coeffs, _hpf_state[axis_idx]);
-    if (_cfg.preprocess.iir_lpf.enabled) dsps_biquad_f32(_work_frame, _work_frame, _current_fft_size, _lpf_coeffs, _lpf_state[axis_idx]);
+    if (_cfg.preprocess.iir_hpf.enabled) {
+        dsps_biquad_f32(p_in, p_out, _current_fft_size, _hpf_coeffs, _hpf_state[axis_idx]);
+        float* temp = p_in; p_in = p_out; p_out = temp;
+    }
+    if (_cfg.preprocess.iir_lpf.enabled) {
+        dsps_biquad_f32(p_in, p_out, _current_fft_size, _lpf_coeffs, _lpf_state[axis_idx]);
+        float* temp = p_in; p_in = p_out; p_out = temp;
+    }
 
     // [4] 특정 주파수 톤 제거 (Notch)
-    if (_cfg.preprocess.notch.enabled) dsps_biquad_f32(_work_frame, _work_frame, _current_fft_size, _notch_coeffs, _notch_state[axis_idx]);
+    if (_cfg.preprocess.notch.enabled) {
+        dsps_biquad_f32(p_in, p_out, _current_fft_size, _notch_coeffs, _notch_state[axis_idx]);
+        float* temp = p_in; p_in = p_out; p_out = temp;
+    }
+
+    // 핑퐁 연산 결과가 _fft_io_buf에 남아있다면 다시 _work_frame으로 원복
+    if (p_in != _work_frame) {
+        memcpy(_work_frame, p_in, _current_fft_size * sizeof(float));
+    }
 
     // [5] 필터링이 끝난 깨끗한 파형에서 순수 진동 에너지(RMS) 도출
     _calcRMS(_work_frame, axis_idx);
@@ -392,29 +427,33 @@ void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
         return;
     }
 
+
     // ====================================================================
     // [가변 윈도우] 5-Tap / 7-Tap 처리: 고속 삽입 정렬(Insertion Sort)
     // ====================================================================
     int half = window_size / 2;
-    
-    // 1600Hz, 최대 7-tap 정렬이므로 스택 메모리(SRAM) 사용 (속도 극대화)
     float temp_buf[7];
-    float history[7];
     
-    // 이력 버퍼를 초기 데이터로 채움
-    for(int i = 0; i < window_size; i++) history[i] = p_data[0]; 
+    // In-place 덮어쓰기로 인한 파형 재귀 변질(IIR 현상)을 막기 위한 원본 캐시 링버퍼
+    float orig_history[3]; // half의 최대값은 3 (7-Tap 기준)
+    for (int i = 0; i < half; i++) orig_history[i] = p_data[i]; 
 
     for (int i = 0; i < N; i++) {
-        // 1. Sliding Window 갱신 (가장 오래된 데이터 밀어내기)
-        for(int j = 0; j < window_size - 1; j++) history[j] = history[j + 1];
+        // 물리적 경계를 벗어나지 않는 정확한 로컬 윈도우 스냅샷 추출
+        for (int j = 0; j < window_size; j++) {
+            int idx = i + j - half;
+            
+            // 덮어써진 값이 아닌, 캐시된 안전한 '원본 과거 데이터' 참조
+            if (idx < 0) temp_buf[j] = p_data[0];
+            else if (idx < i) temp_buf[j] = orig_history[idx % half]; 
+            else if (idx >= N) temp_buf[j] = p_data[N - 1];
+            else temp_buf[j] = p_data[idx];
+        }
         
-        // 2. 미래 데이터 로드 (배열 끝에 도달하면 마지막 값 복사)
-        history[window_size - 1] = (i + half < N) ? p_data[i + half] : p_data[N - 1];
+        // 덮어쓰기 직전, 현재 위치의 원본 데이터를 미래를 위해 캐시에 백업
+        if (i < N) orig_history[i % half] = p_data[i];
         
-        // 3. 정렬을 위해 임시 버퍼에 복사
-        memcpy(temp_buf, history, window_size * sizeof(float));
-        
-        // 4. 고속 삽입 정렬 (7개 이하 요소 정렬 시 퀵소트보다 빠름)
+        // 고속 삽입 정렬
         for (int j = 1; j < window_size; j++) {
             float key = temp_buf[j];
             int k = j - 1;
@@ -425,9 +464,10 @@ void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
             temp_buf[k + 1] = key;
         }
         
-        // 5. 원본 배열에 중간값 업데이트 (In-place)
+        // 원본 배열에 중간값 업데이트 (In-place)
         p_data[i] = temp_buf[half];
     }
+    
 }
 
 void CL_T20_DspPipeline::_applyAdaptiveNotch(float* p_data, uint8_t axis_idx) {
@@ -469,7 +509,6 @@ void CL_T20_DspPipeline::_computePowerSpectrum(const float* p_time) {
 }
 
 
-
 void CL_T20_DspPipeline::_learnNoiseSpectrum(uint8_t axis_idx) {
     if (_cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) return;
 
@@ -478,8 +517,10 @@ void CL_T20_DspPipeline::_learnNoiseSpectrum(uint8_t axis_idx) {
     if (!is_learning) return;
 
     uint16_t bins = (_current_fft_size / 2) + 1;
+    uint16_t bins_padded = (bins + 3) & ~3; // 패딩된 간격 준수
+    
     // 해당 축의 노이즈 버퍼 시작 위치 포인터 계산
-    float* target_noise = _noise_spectrum + (axis_idx * bins);
+    float* target_noise = _noise_spectrum + (axis_idx * bins_padded);
 
     if (_cfg.preprocess.noise.mode == EN_T20_NOISE_ADAPTIVE) {
         float alpha = _noise_learning_active ? 0.2f : _cfg.preprocess.noise.adaptive_alpha;
@@ -496,16 +537,16 @@ void CL_T20_DspPipeline::_learnNoiseSpectrum(uint8_t axis_idx) {
     if (_noise_learned_frames[axis_idx] < 0xFFFF) _noise_learned_frames[axis_idx]++;
 }
 
-
 void CL_T20_DspPipeline::_applySpectralSubtraction(uint8_t axis_idx) {
     if (_cfg.preprocess.noise.mode == EN_T20_NOISE_OFF) return;
     if (_cfg.preprocess.noise.mode == EN_T20_NOISE_FIXED && _noise_learned_frames[axis_idx] < _cfg.preprocess.noise.noise_learn_frames) return;
 
     uint16_t bins = (_current_fft_size / 2) + 1;
+    uint16_t bins_padded = (bins + 3) & ~3; // 패딩된 간격 준수
     float strength = _cfg.preprocess.noise.spectral_subtract_strength;
 
     // 해당 축의 노이즈 버퍼 시작 위치
-    float* target_noise = _noise_spectrum + (axis_idx * bins);
+    float* target_noise = _noise_spectrum + (axis_idx * bins_padded);
 
     for (int i = 0; i < bins; i++) {
         _power[i] = fmaxf(_power[i] - (strength * target_noise[i]), 1e-12f);
@@ -514,17 +555,14 @@ void CL_T20_DspPipeline::_applySpectralSubtraction(uint8_t axis_idx) {
 
 void CL_T20_DspPipeline::_applyMelFilterbank(float* p_log_mel_out) {
     uint16_t bins = (_current_fft_size / 2) + 1;
+    uint16_t bins_padded = (bins + 3) & ~3;
+    uint16_t mel_padded  = (T20::C10_DSP::MEL_FILTERS + 3) & ~3;
     
-    // [성능 최적화] 개별 dotprod 루프를 삭제하고 1 x 26 행렬 곱셈 연산으로 통합 가속
-    // Matrix 가속기의 Load/Store 에러를 방지하기 위해 16-byte 정렬 필수 적용
-    
-    // [수정됨] MEL_FILTERS(26) 대신 안전하게 16의 배수인 32(8*4) 크기로 할당하여 SIMD 스택 오버런 방어
-    alignas(16) float mel_energy[32] = {0};
+    alignas(16) float mel_energy[32] = {0}; // 최대 28칸 사용
 
-    // 연산 규격: [1 x bins] * [bins x 26] = [1 x 26]
-    dspm_mult_f32(_power, _mel_bank_flat, mel_energy, 1, bins, T20::C10_DSP::MEL_FILTERS);
+    // 패딩된 차원 크기를 가속기에 명시하여 스택 초과 침범 원천 차단
+    dspm_mult_f32(_power, _mel_bank_flat, mel_energy, 1, bins_padded, mel_padded);
 
-    // 변환된 에너지를 Log Scale 로 변환 (NaN 방지를 위해 하한값 1e-12f 보장)
     for (int m = 0; m < T20::C10_DSP::MEL_FILTERS; m++) {
         p_log_mel_out[m] = logf(fmaxf(mel_energy[m], 1e-12f));
     }
@@ -532,17 +570,18 @@ void CL_T20_DspPipeline::_applyMelFilterbank(float* p_log_mel_out) {
 
 
 void CL_T20_DspPipeline::_computeDCT2(const float* p_in, float* p_out) {
-    // [v220.020] Matrix Multiplication 가속
-    // p_in(Log-Mel): 1 x MEL_FILTERS
-    // _dct_matrix_flat: MEL_FILTERS x mfcc_coeffs (begin에서 조밀하게 패킹됨)
-    // p_out(MFCC): 1 x mfcc_coeffs
+    // begin()에서 패딩하여 할당한 간격과 동일하게 행렬 차원수 재설정
+    uint16_t mel_padded  = (T20::C10_DSP::MEL_FILTERS + 3) & ~3;
+    uint16_t mfcc_padded = (_cfg.feature.mfcc_coeffs + 3) & ~3;
 
-    const int m = 1;
-    const int n = T20::C10_DSP::MEL_FILTERS;
-    const int k = _cfg.feature.mfcc_coeffs;
-
-    // SIMD 고속 연산기 작동
-    dspm_mult_f32(p_in, _dct_matrix_flat, p_out, m, n, k);
+    // SIMD 가속기 스택 초과 침범(Over-read) 방어를 위한 패딩 출력 버퍼
+    alignas(16) float padded_out[32] = {0}; 
+    
+    // 패딩된 정확한 차원을 적용하여 행렬 곱셈 (데이터 꼬임 및 쓰레기값 침범 원천 차단)
+    dspm_mult_f32(p_in, _dct_matrix_flat, padded_out, 1, mel_padded, mfcc_padded);
+    
+    // 최종 결과물은 패딩을 제외한 순수 MFCC 차원만큼만 추출하여 실제 버퍼에 반환
+    memcpy(p_out, padded_out, _cfg.feature.mfcc_coeffs * sizeof(float));
 }
 
 
@@ -554,7 +593,11 @@ void CL_T20_DspPipeline::_pushHistory(const float* p_mfcc, uint8_t axis_idx) {
         memcpy(hist[_history_count[axis_idx]++], p_mfcc, sizeof(float) * dim);
     } else {
         // Sliding Window: 한 칸씩 밀고 마지막에 새 데이터 삽입
-        memmove(hist[0], hist[1], sizeof(float) * dim * (T20::C10_DSP::MFCC_HISTORY_LEN - 1));
+        // 2D 배열의 물리적 행(Row) 간격과 논리적 차원(dim) 불일치로 인한
+        // 대규모 메모리 꼬임(Silent Data Corruption)을 막기 위해 행 단위 개별 복사 수행
+        for (int i = 0; i < T20::C10_DSP::MFCC_HISTORY_LEN - 1; i++) {
+            memcpy(hist[i], hist[i + 1], sizeof(float) * dim);
+        }
         memcpy(hist[T20::C10_DSP::MFCC_HISTORY_LEN - 1], p_mfcc, sizeof(float) * dim);
     }
 }
@@ -691,4 +734,50 @@ void CL_T20_DspPipeline::_generateFirHpfWindowedSinc(float* coeffs, uint16_t num
     // 중간 탭(센터)에 1.0(Dirac Delta) 더하기
     coeffs[center] += 1.0f;
 }
+
+
+
+- 현재까지 확인된 문제들
+### 🚨 2. [최종 집대성] T20 MFCC 시스템 아키텍처 극한 스트레스 보완 리스트 (총 30건)
+구현 시 한 번에 반영하실 수 있도록, 시스템 계층별로 명확하게 분류했습니다.
+#### **A. 메모리 파괴 및 하드웨어(SIMD) 패닉 영역 (Memory & HW Stability)**
+ 1. **[재할당 조건 우회 패닉]** fft_size가 같더라도 mfcc_coeffs가 커지면 더 큰 메모리가 필요한데, 기존 로직은 재할당을 건너뛰어(Bypass) 힙 메모리를 덮어씀 (Core Panic).
+ 2. **[행렬 차원 꼬임]** _computeDCT2에서 SIMD 패딩(16바이트)된 차원을 무시하고 원본 차원을 넘겨주어 데이터가 대각선으로 파괴됨.
+ 3. **[스택 침범 Over-read]** Biquad IIR 계수 배열(_hpf_coeffs[5])을 SIMD가 읽을 때 32바이트를 읽어 스택 오버런 유발. 크기를 8로 늘려야 함.
+ 4. **[미정의 동작 UB]** ESP-DSP 문서 권고사항 위반. FIR/IIR 입출력을 _work_frame 하나로 통일하여 읽기/쓰기 충돌이 발생함 (핑퐁 버퍼 분리 필요).
+ 5. **[패딩 쓰레기값 증식]** SIMD 정렬을 위해 남겨둔 빈칸에 쓰레기값이 남아 행렬 곱셈 시 NaN으로 증식함 (초기화 memset 철저).
+ 6. **[하드웨어 수명 단축]** 파일 로테이션 시마다 NVS Flash에 시퀀스를 기록하여 수개월 내 물리적 보드 파괴 (메모리 서브 시퀀스로 대체).
+ 7. **[상태 버퍼 정렬 누락]** FIR/IIR의 상태 버퍼(_hpf_state 등)에 alignas(16)이 누락되어 장기 구동 시 패닉 유발.
+ 8. **[수신부 자료형 파괴]** 큐를 1바이트(인덱스)로 최적화했으나, 레코더 태스크는 여전히 1.2KB로 받고 있어 1,199바이트의 쓰레기값이 파일에 영구 기록됨.
+ 9. **[JSON 오버랩 파괴]** doc["key"] | dest 형태는 C++ 미정의 동작을 유발하여 시스템 설정 문자열(SSID 등)을 손상시킴 (임시 포인터 추출 후 복사로 변경).
+ 10. **[OOM 페이로드 공격]** 웹 서버에서 Content-Length 검증 없이 malloc하여 악의적인 패킷에 시스템이 즉사함.
+#### **B. 디지털 신호 처리(DSP) 수학적/논리적 붕괴 (DSP Math & Logic)**
+ 11. **[🆕 신규 치명 결함: 오버랩 위상 파괴]** Hop Size에 의해 프레임이 겹치는 환경에서, 과거의 지연 상태(State)를 가진 IIR/FIR 필터를 독립된 프레임마다 적용하면 겹치는 구간의 파형 위상이 완전히 박살남 (필터 초기화 타임라인 재정립 필요).
+ 12. **[🆕 신규 치명 결함: FFT 길이 위반]** dsps_fft2r_init_fc32는 반드시 2의 제곱수(Power of 2) 길이만 지원하나 방어 로직이 없음.
+ 13. **[파열음 발생]** Pre-emphasis 처리 시 이전 프레임의 마지막 샘플을 무리하게 이월하여 경계면마다 틱(Click/Pop) 노이즈 발생 (In-place 독립 연산으로 변경).
+ 14. **[재귀적 왜곡]** 5/7 Tap Median 필터가 원본이 아닌 방금 덮어쓴 자신의 결과를 참조하여 IIR 필터로 변질됨 (원본 백업 링버퍼 필요).
+ 15. **[메모리 꼬임]** MFCC History를 1D 배열처럼 memmove하여 2D 배열의 행/열 차원이 붕괴됨 (행 단위 개별 memcpy로 변경).
+ 16. **[컴파일러 함정]** -ffast-math 옵션 적용 시 isnan()이 무시되어 센서 오류가 시스템 발산으로 이어짐 (IEEE-754 비트 마스킹 적용).
+ 17. **[에너지 왜곡]** ESP-DSP FFT 결과물은 N배 커진 상태로 나오는데, 1/N 스케일링이 누락되어 RMS 및 Trigger 임계값이 모조리 어긋남.
+ 18. **[0 곱셈 증발]** FIR Taps가 0 또는 2가 될 경우 필터 계수가 0.0f가 되어 모든 파형이 증발함 (최소 한계치 3 방어).
+ 19. **[Nyquist 폭주]** Cutoff 주파수가 샘플링 레이트 절반(800Hz)을 초과하면 필터가 폭주함 (상한선 클램핑).
+ 20. **[0 나누기 발산]** Windowed-Sinc의 분모가 0이 되는 지점을 정밀하게 찾지 못해 NaN 발생 (Epsilon 1e-6f 비교 적용).
+ 21. **[적응형 노이즈 잠금]** 초기 프레임이 지나면 학습 모드가 강제로 false가 되어 영원히 소음 변화에 적응하지 못함.
+ 22. **[타임라인 역전]** 노이즈 게이트(파형 0 처리) 이전에 RMS를 계산하여 논리적 모순 발생.
+ 23. **[중복 초기화 오타]** begin() 함수에 FIR HPF 블록이 LPF의 변수를 참조하여 복붙(Copy-Paste)되어 필터 엔진이 꼬임.
+#### **C. RTOS 동기화, 상태 머신 및 데이터 유실 (RTOS & Data Loss)**
+ 24. **[스레드 마비]** 하드웨어 인터럽트가 참조하는 핸들(g_isr_sensor_task)에 volatile이 빠져있어 캐싱 문제로 인터럽트 먹통 발생.
+ 25. **[RTOS 커널 누수]** 소멸자에서 vQueueDelete, vSemaphoreDelete가 누락되어 껐다 켤 때마다 FreeRTOS 힙 메모리 영구 증발.
+ 26. **[좀비 태스크]** stop() 시 태스크가 자진 종료되기 전 50ms만 대기하고 핸들을 지워버려 Race Condition 발생.
+ 27. **[침묵의 큐 유실]** SD카드 기록 지연으로 큐가 꽉 차면 대기 시간 0으로 인해 데이터가 아무 경고 없이 허공에 버려짐 (5ms 완충 대기 추가).
+ 28. **[트리거 초기 유실]** 스마트 트리거 발생 시퀀스 초반의 4프레임이 준비 안 됐다는 이유로 증발함 (사고 당시 중요 데이터 유실).
+ 29. **[로테이션 고아]** 기껏 만든 checkRotation() 함수를 메인 루프 어디에서도 호출하지 않아 파일이 4GB까지 무한대 커짐.
+ 30. **[OOM 핸들 방치]** DSP 태스크가 OOM으로 자진 종료할 때 본인의 핸들을 지우지 않아 시스템 종료 시 1초 타임아웃 지연 발생.
+
+
+- 참조해 https://docs.espressif.com/projects/esp-dsp/en/latest/esp32/esp-dsp-apis.html#support
+
+- 언제까지 할거니? 좀 한번에 꼼꼼하게 봐줄래
+- 현재까지 확인된 문제 아외에 추가로 코드를 정합성, 안정성, 신뢰성 관점에서 극한의 스트레스 상황을 가정하여 다시 한번 꼼꼼하게 교차 검증 해줘
+- 기존에 확인된거나 추가 확인된 이슈/개선 필요 사항들만 축소/누락없이 잘 정리해줘(구현은 한번에 하게))
 
