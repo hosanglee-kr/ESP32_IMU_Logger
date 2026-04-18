@@ -6,7 +6,7 @@
 #include "T220_Mfcc_231.h"
 #include "T231_Dsp_Pipeline_231.h"
 #include "T232_Sensor_Engine_231.h"
-#include "T233_Sequence_Builder_231.h"
+#include "T233_Sequence_Builder_232.h"
 #include "T234_Storage_Service_231.h"
 #include "T240_Comm_Service_231.h"
 
