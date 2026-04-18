@@ -1,7 +1,68 @@
-/* ============================================================================
+/*
+============================================================================
  * File: T231_Dsp_Pipeline_231.cpp
  * Summary: MFCC & DSP Pipeline Engine Implementation (SIMD Optimized)
- * ========================================================================== */
+ * * * [AI 메모: 제공 기능 요약]
+ * 1. 초고속 SIMD & Matrix 기반 신호 처리: ESP-DSP 라이브러리(dspm, dsps)와 16바이트 정렬 메모리를 활용한 
+ * FFT, Mel-Filterbank, DCT-II (MFCC) 행렬 연산 가속.
+ * 2. 다단계 디지털 필터링 파이프라인: Median(스파이크 제거) -> DC 편향 제거 -> FIR(Windowed-Sinc) 
+ * -> IIR(Biquad) -> Adaptive Notch 순서의 선형 위상/주파수 보정.
+ * 3. 스마트 진동/음향 특징 추출: 실시간 RMS 에너지 도출, 스펙트럼 감산(Noise Subtraction) 기반 노이즈 제거, 
+ * Static/Delta/Delta-Delta를 포함한 39차원 특징량 추출.
+ * * * [AI 메모: 구현 및 유지보수 주의사항 - 필독]
+ * 1. [메모리 정렬(Alignment) 절대 엄수]
+ * - 하드웨어 행렬 가속기(dspm)는 16바이트 정렬이 어긋나면 즉시 Core Panic을 발생시킵니다.
+ * - 내부의 모든 버퍼(동적/정적 불문)는 반드시 'alignas(16)' 또는 'heap_caps_aligned_alloc(16, ...)'을 유지해야 합니다.
+ * - SIMD 초과 읽기(Over-read)를 방어하기 위해 행렬 가속기에 들어가는 모든 버퍼의 크기는 16의 배수(예: 32)로 선언하십시오.
+ * 2. [컴파일러 최적화 함정 방어 (-ffast-math)]
+ * - DSP 연산 속도를 높이기 위해 컴파일러 최적화가 적용될 경우 'isnan()', 'isinf()' 함수가 무시됩니다.
+ * - 따라서 NaN 방어는 반드시 IEEE-754 규격의 비트 마스킹 방식으로 직접 처리해야 합니다.
+ * 3. [시계열 불연속성 주의]
+ * - Hop Size 기반의 오버랩(Overlap) 프레임 환경에서는 고역 강조(Pre-emphasis) 처리 시 이전 프레임의 
+ * 마지막 샘플을 전역 변수로 이월(Carry-over)해 오면 심각한 파열음(Transient)이 발생하므로 프레임 내 독립 연산을 수행해야 합니다.
+ * 4. [수학적 안정성]
+ * - 부동소수점 0.0f 검사 시 미세 오차로 인한 무한대 분할(Divide by zero)을 막기 위해, 
+ * 반드시 'fabsf(x) < 1e-6f' 와 같은 엡실론(Epsilon) 비교를 유지해야 합니다.
+ * 5. [메모리 누수(OOM) 롤백]
+ * - 'begin()'에서 여러 버퍼를 할당할 때 중간에 하나라도 실패하면, 'return false' 직전에 
+ * 반드시 '_freeBuffers()'를 호출하여 이미 할당된 메모리를 토해내야(Roll-back) 영구 누수를 막을 수 있습니다.
+ * ========================================================================== 
+ */
+
+
+
+/*
+============================================================================
+ * File: T231_Dsp_Pipeline_231.cpp
+ * Summary: MFCC & DSP Pipeline Engine Implementation (SIMD Optimized)
+ * * * [AI 메모: 제공 기능 요약]
+ * 1. 초고속 SIMD & Matrix 기반 신호 처리: ESP-DSP 라이브러리(dspm, dsps)와 16바이트 정렬 메모리를 활용한 
+ * FFT, Mel-Filterbank, DCT-II (MFCC) 행렬 연산 가속.
+ * 2. 다단계 디지털 필터링 파이프라인: Median(스파이크 제거) -> DC 편향 제거 -> FIR(Windowed-Sinc) 
+ * -> IIR(Biquad) -> Adaptive Notch 순서의 선형 위상/주파수 보정.
+ * 3. 스마트 진동/음향 특징 추출: 실시간 RMS 에너지 도출, 스펙트럼 감산(Noise Subtraction) 기반 노이즈 제거, 
+ * Static/Delta/Delta-Delta를 포함한 39차원 특징량 추출.
+ * * * [AI 메모: 구현 및 유지보수 주의사항 - 필독]
+ * 1. [메모리 정렬(Alignment) 절대 엄수]
+ * - 하드웨어 행렬 가속기(dspm)는 16바이트 정렬이 어긋나면 즉시 Core Panic을 발생시킵니다.
+ * - 내부의 모든 버퍼(동적/정적 불문)는 반드시 'alignas(16)' 또는 'heap_caps_aligned_alloc(16, ...)'을 유지해야 합니다.
+ * - 특히 'mel_energy'와 같은 임시 스택 배열도 루프 언롤링 오버런을 막기 위해 16의 배수 크기(예: 32)로 넉넉히 잡아야 합니다.
+ * 2. [필터 파이프라인 순서 고정]
+ * - 위상 왜곡을 막기 위해 [비선형(Median)] -> [DC 제거] -> [선형 위상(FIR)] -> [IIR] -> [Notch]의 순서를 
+ * 임의로 변경해서는 안 됩니다.
+ * 3. [수학적 안정성 및 예외(NaN/Inf) 방어]
+ * - 센서 단선/충격으로 인한 NaN 유입은 '_removeDC'에서 0.0f로 클램핑하여 발산을 막습니다.
+ * - 부동소수점 0.0f 검사 시 미세 오차로 인한 무한대 분할(Divide by zero)을 막기 위해, 
+ * 반드시 'fabsf(x) < 1e-6f' 와 같은 엡실론(Epsilon) 비교를 유지해야 합니다.
+ * 4. [메모리 누수(OOM) 롤백]
+ * - 'begin()'에서 여러 버퍼를 할당할 때, 중간에 하나라도 실패하면 'return false' 직전에 
+ * 반드시 '_freeBuffers()'를 호출하여 이미 할당된 메모리를 토해내야(Roll-back) 영구 누수를 막을 수 있습니다.
+ * 5. [FIR 필터 Taps 제한]
+ * - FIR 필터의 'num_taps'는 내부 스택 크기 및 버퍼 제한상 절대 127을 초과할 수 없습니다. 
+ * - 짝수 입력 시 선형 위상을 위해 내부적으로 홀수로 자동 보정됩니다.
+ * ========================================================================== 
+ */
+
 
 #include "T231_Dsp_Pipeline_231.h"
 
@@ -51,7 +112,14 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
     const uint16_t N = (uint16_t)_cfg.feature.fft_size;
     const uint16_t bins = (N / 2) + 1;
     const float fs = T20::C10_DSP::SAMPLE_RATE_HZ;
-    const uint16_t mfcc_dim = _cfg.feature.mfcc_coeffs;
+    
+    // MFCC 차원 최대/최소 한계 클램핑 (0값 입력에 의한 하드웨어 가속기 패닉 원천 차단)
+    uint16_t mfcc_dim = _cfg.feature.mfcc_coeffs;
+    if (mfcc_dim < 1) mfcc_dim = 1;  // 최소 1차원 보장
+    if (mfcc_dim > T20::C10_DSP::MFCC_COEFFS_MAX) {
+        mfcc_dim = T20::C10_DSP::MFCC_COEFFS_MAX;
+    }
+    _cfg.feature.mfcc_coeffs = mfcc_dim; // 내부 설정값도 강제 교정하여 후속 파이프라인 보호
 
     // [1] 동적 버퍼 재할당
     if (_current_fft_size != N) {
@@ -80,10 +148,14 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
     // FIR 계수 생성
     // [2] : FIR 필터 계수 직접 생성 (Windowed-Sinc 알고리즘 연동)
     // HPF는 Spectral Inversion을 위해 무조건 홀수 탭(Odd Taps)이어야 완벽한 Linear Phase를 보장함
-    if (_cfg.preprocess.fir_hpf.enabled) {
-        uint16_t taps = _cfg.preprocess.fir_hpf.num_taps;
+    if (_cfg.preprocess.fir_lpf.enabled) {
+        uint16_t taps = _cfg.preprocess.fir_lpf.num_taps;
+        
+        if (taps < 3) taps = 3;      // Taps 하한선 방어
         if (taps % 2 == 0) taps--;   // 짝수일 경우 홀수로 1 감소 보정
         if (taps > 127) taps = 127;  // 버퍼 선언 크기(128) 오버플로우 한계 방어
+
+        _cfg.preprocess.fir_lpf.num_taps = taps; // 교정된 값 런타임 설정에 반영
 
         // 내부 구현된 Windowed-Sinc 기반 알고리즘 호출
         _generateFirHpfWindowedSinc(_fir_hpf_coeffs, taps, _cfg.preprocess.fir_hpf.cutoff_hz);
@@ -151,106 +223,6 @@ bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
 }
 
 
-/* ============================================================================
- * [v220.020] DSP 엔진 초기화 및 프리컴퓨팅 로직
- * 1. 하드웨어 가속: Matrix API 및 SIMD 사용을 위한 Internal SRAM 정렬 할당.
- * 2. 필터 뱅크: HPF, LPF 독립 계수 생성 및 상태 초기화.
- * 3. 가변 윈도우: 5종 윈도우 함수(Hann, Hamming, Blackman, Flat-top, Rect) 지원.
- * 4. 행렬 최적화: DCT 계수를 1차원 평탄화하여 dspm_mult_f32 가속 준비.
- * ========================================================================== */
-/*
-bool CL_T20_DspPipeline::begin(const ST_T20_Config_t& cfg) {
-    _cfg = cfg;
-
-    const uint16_t N = (uint16_t)_cfg.feature.fft_size;
-    const uint16_t bins = (N / 2) + 1;
-    const float fs = T20::C10_DSP::SAMPLE_RATE_HZ;
-    const uint16_t mfcc_dim = _cfg.feature.mfcc_coeffs;
-
-    // [1] 동적 버퍼 재할당 로직 (기존과 동일하여 생략. _freeBuffers() 및 할당 코드는 원본 유지)
-    if (_current_fft_size != N) {
-        Serial.printf("[DSP] Re-allocating internal buffers for FFT Size: %d\n", N);
-        _freeBuffers();
-        _current_fft_size = N;
-
-        _work_frame      = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
-        _window          = (float*)heap_caps_aligned_alloc(16, N * sizeof(float), MALLOC_CAP_INTERNAL);
-        _power           = (float*)heap_caps_aligned_alloc(16, bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        _fft_io_buf      = (float*)heap_caps_aligned_alloc(16, N * 2 * sizeof(float), MALLOC_CAP_INTERNAL);
-        _noise_spectrum  = (float*)heap_caps_aligned_alloc(16, 3 * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        _mel_bank_flat   = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float), MALLOC_CAP_INTERNAL);
-        _dct_matrix_flat = (float*)heap_caps_aligned_alloc(16, T20::C10_DSP::MEL_FILTERS * T20::C10_DSP::MFCC_COEFFS_MAX * sizeof(float), MALLOC_CAP_INTERNAL);
-
-        if (!_work_frame || !_window || !_power || !_fft_io_buf || !_mel_bank_flat || !_noise_spectrum || !_dct_matrix_flat) {
-            Serial.println(F("[DSP] Critical: Internal SRAM OOM!"));
-            return false;
-        }
-        if (dsps_fft2r_init_fc32(NULL, N) != ESP_OK) return false;
-    }
-
-    _generateWindow(_window, N, _cfg.preprocess.window_type);
-    
-    // [2] 필터 상태 전체 초기화 (FSM 전이용 공용 함수 사용)
-    resetFilterStates();
-
-    // [3] 필터 계수 독립 생성 (FIR 추가)
-    if (_cfg.preprocess.fir_hpf.enabled) {
-        dsps_fir_gen_hpf_f32(_fir_hpf_coeffs, _cfg.preprocess.fir_hpf.num_taps, _cfg.preprocess.fir_hpf.cutoff_hz / fs);
-        // 축 개수만큼 FIR 인스턴스 초기화 (esp-dsp 규격)
-        for(uint8_t a=0; a < (uint8_t)_cfg.feature.axis_count; a++) {
-            dsps_fir_init_f32(&_fir_hpf_inst[a], _fir_hpf_coeffs, _fir_hpf_state[a], _cfg.preprocess.fir_hpf.num_taps);
-        }
-    }
-    if (_cfg.preprocess.fir_lpf.enabled) {
-        dsps_fir_gen_lpf_f32(_fir_lpf_coeffs, _cfg.preprocess.fir_lpf.num_taps, _cfg.preprocess.fir_lpf.cutoff_hz / fs);
-        for(uint8_t a=0; a < (uint8_t)_cfg.feature.axis_count; a++) {
-            dsps_fir_init_f32(&_fir_lpf_inst[a], _fir_lpf_coeffs, _fir_lpf_state[a], _cfg.preprocess.fir_lpf.num_taps);
-        }
-    }
-
-    if (_cfg.preprocess.iir_hpf.enabled) dsps_biquad_gen_hpf_f32(_hpf_coeffs, _cfg.preprocess.iir_hpf.cutoff_hz / fs, _cfg.preprocess.iir_hpf.q_factor);
-    if (_cfg.preprocess.iir_lpf.enabled) dsps_biquad_gen_lpf_f32(_lpf_coeffs, _cfg.preprocess.iir_lpf.cutoff_hz / fs, _cfg.preprocess.iir_lpf.q_factor);
-
-    if (_cfg.preprocess.notch.enabled) {
-        dsps_biquad_gen_notch_f32(_notch_coeffs, _cfg.preprocess.notch.target_freq_hz / fs, _cfg.preprocess.notch.gain, _cfg.preprocess.notch.q_factor);
-    }
-    
-    // [4] Mel-Filterbank 평탄화 생성
-    float min_mel = 0.0f;
-    float max_mel = T20::C10_DSP::MEL_SCALE_CONST * log10f(1.0f + ((fs / 2.0f) / T20::C10_DSP::MEL_FREQ_CONST));
-    float mel_step = (max_mel - min_mel) / (float)(T20::C10_DSP::MEL_FILTERS + 1);
-
-    uint16_t bin_points[T20::C10_DSP::MEL_FILTERS + 2];
-    for (int i = 0; i < T20::C10_DSP::MEL_FILTERS + 2; i++) {
-        float hz = T20::C10_DSP::MEL_FREQ_CONST * (powf(10.0f, (min_mel + i * mel_step) / T20::C10_DSP::MEL_SCALE_CONST) - 1.0f);
-        bin_points[i] = (uint16_t)roundf(N * hz / fs);
-    }
-    
-    memset(_mel_bank_flat, 0, T20::C10_DSP::MEL_FILTERS * bins * sizeof(float));
-    for (int m = 0; m < T20::C10_DSP::MEL_FILTERS; m++) {
-        uint16_t left = bin_points[m], center = bin_points[m + 1], right = bin_points[m + 2];
-        
-        // [성능 최적화] dspm_mult_f32 행렬 가속기를 사용하기 위해 전치(Transpose)된 형태로 메모리 적재
-        // Power(1 x bins) * Mel(bins x 26) = Result(1 x 26) 을 위해 Column-major 방식으로 플랫화
-        for (int k = left; k < center && k < bins; k++)
-            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(k - left) / (float)(center - left + 1e-12f);
-        for (int k = center; k < right && k < bins; k++)
-            _mel_bank_flat[k * T20::C10_DSP::MEL_FILTERS + m] = (float)(right - k) / (float)(right - center + 1e-12f);
-
-    }
-
-    // [5] 🚨 DCT-II Matrix API 가속용 조밀 평탄화 (Tightly Packed)
-    // dspm_mult_f32 호환을 위해 설정된 mfcc_dim(열 크기)에 딱 맞춰 연속 메모리로 배치
-    for (int k = 0; k < T20::C10_DSP::MEL_FILTERS; k++) {
-        for (int n = 0; n < mfcc_dim; n++) {
-            _dct_matrix_flat[k * mfcc_dim + n] = cosf((M_PI / (float)T20::C10_DSP::MEL_FILTERS) * (k + 0.5f) * n);
-        }
-    }
-
-    Serial.printf("[DSP] Engine v220.020 Started (FFT:%d, Win:%d, MFCC:%d)\n", N, (int)_cfg.preprocess.window_type, mfcc_dim);
-    return true;
-}
-*/
 
 // 가변 윈도우 생성 헬퍼 함수
 void CL_T20_DspPipeline::_generateWindow(float* p_out, int n, EM_T20_WindowType_t type) {
@@ -314,13 +286,17 @@ bool CL_T20_DspPipeline::processFrame(const float* p_time_in, ST_T20_FeatureVect
     dsps_mul_f32(_work_frame, _window, _work_frame, _current_fft_size, 1, 1, 1);
     _computePowerSpectrum(_work_frame);
 
-    // [9] 노이즈 감산 및 MFCC 조립 (기존과 동일하여 생략. 아래 함수들은 원본 유지)
+    // [9] 노이즈 감산 및 MFCC 조립 
     _learnNoiseSpectrum(axis_idx);
     _applySpectralSubtraction(axis_idx);
-    _applyMelFilterbank(_log_mel);
+    
+    // 26크기의 _log_mel을 SIMD에 직접 밀어넣어 발생하는 Over-read 스택 오염 방어
+    alignas(16) float safe_log_mel[32] = {0}; 
+    _applyMelFilterbank(safe_log_mel);
+
 
     alignas(16) float current_mfcc[T20::C10_DSP::MFCC_COEFFS_MAX];
-    _computeDCT2(_log_mel, current_mfcc);
+    _computeDCT2(safe_log_mel, current_mfcc);
 
     p_vec_out->rms[axis_idx] = _current_rms[axis_idx];
     _pushHistory(current_mfcc, axis_idx);
@@ -340,7 +316,10 @@ void CL_T20_DspPipeline::_removeDC(float* p_data) {
 
     for (int i = 0; i < N; i++) {
         // [안정성 보장] 센서 노이즈로 인한 NaN 또는 Inf 값 유입 시 0.0f로 초기화 (필터 발산 원천 차단)
-        if (isnan(p_data[i]) || isinf(p_data[i])) {
+        // -ffast-math 최적화로 인해 isnan()이 강제 삭제되는 현상을 막기 위해 비트 패턴 직접 검사
+        uint32_t bits;
+        memcpy(&bits, &p_data[i], sizeof(uint32_t));
+        if ((bits & 0x7F800000) == 0x7F800000) { // 지수부가 모두 1이면 NaN 또는 Inf
             p_data[i] = 0.0f;
         }
         sum += p_data[i];
@@ -372,13 +351,13 @@ void CL_T20_DspPipeline::_calcRMS(const float* p_data, uint8_t axis_idx) {
 void CL_T20_DspPipeline::_applyPreEmphasis(float* p_data, uint8_t axis_idx) {
     if (!_cfg.preprocess.preemphasis.enable) return;
     float alpha = _cfg.preprocess.preemphasis.alpha;
-    for (int i = 0; i < _current_fft_size; i++) {
-        float cur = p_data[i];
-        p_data[i] = cur - (alpha * _prev_sample[axis_idx]);
-        _prev_sample[axis_idx] = cur;
+    // 오버랩 환경에서 이전 프레임의 상태 변수를 이월하여 생기는 파열음(Transient Pop) 원천 차단.
+    // 추가 버퍼 할당 없이 역순으로 순회하며 In-place 연산 수행.
+    for (int i = _current_fft_size - 1; i > 0; i--) {
+        p_data[i] = p_data[i] - (alpha * p_data[i - 1]);
     }
+    p_data[0] = p_data[0] * (1.0f - alpha); // 첫 번째 샘플은 0으로 가정하고 감쇠만 적용
 }
-
 
 
 void CL_T20_DspPipeline::_applyMedianFilter(float* p_data, int window_size) {
@@ -533,18 +512,16 @@ void CL_T20_DspPipeline::_applySpectralSubtraction(uint8_t axis_idx) {
     }
 }
 
-
 void CL_T20_DspPipeline::_applyMelFilterbank(float* p_log_mel_out) {
     uint16_t bins = (_current_fft_size / 2) + 1;
     
     // [성능 최적화] 개별 dotprod 루프를 삭제하고 1 x 26 행렬 곱셈 연산으로 통합 가속
     // Matrix 가속기의 Load/Store 에러를 방지하기 위해 16-byte 정렬 필수 적용
-    alignas(16) float mel_energy[T20::C10_DSP::MEL_FILTERS] = {0};
+    
+    // [수정됨] MEL_FILTERS(26) 대신 안전하게 16의 배수인 32(8*4) 크기로 할당하여 SIMD 스택 오버런 방어
+    alignas(16) float mel_energy[32] = {0};
 
     // 연산 규격: [1 x bins] * [bins x 26] = [1 x 26]
-    // p_in(_power): 1행 bins열
-    // _mel_bank_flat: bins행 26열 (begin()에서 Column-major로 전치 패킹되어 있어야 함)
-    // mel_energy: 1행 26열 출력
     dspm_mult_f32(_power, _mel_bank_flat, mel_energy, 1, bins, T20::C10_DSP::MEL_FILTERS);
 
     // 변환된 에너지를 Log Scale 로 변환 (NaN 방지를 위해 하한값 1e-12f 보장)
@@ -662,7 +639,6 @@ float CL_T20_DspPipeline::getBandEnergy(float start_hz, float end_hz) {
 }
 
 
-
 /* ============================================================================
  * Windowed-Sinc 기반 FIR 필터 계수 생성기 (ESP-DSP Window 가속 결합)
  * ========================================================================== */
@@ -670,9 +646,10 @@ void CL_T20_DspPipeline::_generateFirLpfWindowedSinc(float* coeffs, uint16_t num
     float fs = T20::C10_DSP::SAMPLE_RATE_HZ;
     float normalized_cutoff = cutoff_hz / fs;
     
-    // ESP-DSP 내장 윈도우 함수 가속기 활용을 위한 임시 버퍼 (Blackman 윈도우는 FIR에 최적)
-    float* win = (float*)heap_caps_malloc(num_taps * sizeof(float), MALLOC_CAP_INTERNAL);
-    if (!win) return;
+    // [최적화 및 무결성 확보] 
+    // num_taps는 이미 127 이하로 클램핑되어 있으므로, 힙 메모리 할당(malloc) 실패로 인한
+    // OOM 패닉 및 쓰레기값 참조 리스크를 없애기 위해 128 크기의 정적 스택 배열을 사용.
+    alignas(16) float win[128] = {0};
 
     // ESP-DSP 함수로 블랙만 윈도우 배열 일괄 생성
     dsps_wind_blackman_f32(win, num_taps);
@@ -683,7 +660,8 @@ void CL_T20_DspPipeline::_generateFirLpfWindowedSinc(float* coeffs, uint16_t num
     // Windowed-Sinc 알고리즘 연산
     for (int i = 0; i < num_taps; i++) {
         float x = (float)i - (M / 2.0f);
-        if (x == 0.0f) {
+        // 부동소수점 정밀도 한계로 인한 == 0.0f 실패(NaN 발생) 원천 차단
+        if (fabsf(x) < 1e-6f) {
             coeffs[i] = 2.0f * normalized_cutoff; // Sinc 중심점 (x->0 일때 극한값)
         } else {
             coeffs[i] = sinf(2.0f * (float)M_PI * normalized_cutoff * x) / ((float)M_PI * x);
@@ -697,7 +675,7 @@ void CL_T20_DspPipeline::_generateFirLpfWindowedSinc(float* coeffs, uint16_t num
         coeffs[i] /= sum;
     }
     
-    heap_caps_free(win);
+    // 스택 메모리를 사용하므로 heap_caps_free(win) 구문은 완전히 삭제됨
 }
 
 void CL_T20_DspPipeline::_generateFirHpfWindowedSinc(float* coeffs, uint16_t num_taps, float cutoff_hz) {

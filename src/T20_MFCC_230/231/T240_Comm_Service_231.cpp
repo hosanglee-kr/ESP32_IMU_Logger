@@ -225,7 +225,7 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
             request->send(404, "application/json", "{}");
         }
     });
-
+    
     _server.on("/api/t20/runtime_config", HTTP_POST,
         [](AsyncWebServerRequest *request) {
             request->send(400, "application/json", "{\"ok\":false,\"msg\":\"no_body\"}");
@@ -234,6 +234,12 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
 
             if (index == 0) {
+                // 악의적이거나 비정상적인 대용량 Content-Length로 인한 OOM 패닉 원천 방어
+                if (total > T20::C10_Web::LARGE_JSON_BUF_SIZE) {
+                    request->send(413, "application/json", "{\"ok\":false,\"msg\":\"payload_too_large\"}");
+                    return;
+                }
+                
                 request->_tempObject = malloc(total + 1);
                 request->onDisconnect([request]() {
                     if (request->_tempObject) {
@@ -242,10 +248,12 @@ void CL_T20_CommService::initHandlers(void* p_master_impl) {
                     }
                 });
             }
-
+            
             uint8_t* buffer = (uint8_t*)request->_tempObject;
             if (!buffer) {
-                request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom\"}");
+                if (!request->client()->disconnected()) {
+                    request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom_or_rejected\"}");
+                }
                 return;
             }
 

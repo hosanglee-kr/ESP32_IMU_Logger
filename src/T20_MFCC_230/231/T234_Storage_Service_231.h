@@ -109,6 +109,10 @@ class CL_T20_StorageService {
     uint16_t                _pre_capacity = 0;
     uint16_t                _pre_head = 0;
     uint16_t                _pre_count = 0;
+    
+    uint32_t _boot_file_seq = 0;
+    uint16_t _rotation_sub_seq = 0;
+
 
 };
 

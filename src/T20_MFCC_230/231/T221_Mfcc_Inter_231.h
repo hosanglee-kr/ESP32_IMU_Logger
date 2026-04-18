@@ -36,6 +36,14 @@ struct CL_T20_Mfcc::ST_Impl {
 
     uint8_t   active_fill_buffer  = 0;
     uint16_t  active_sample_index = 0;
+    
+    // 1.2KB Feature 전송 복사 낭비를 막고 Race Condition을 방어하기 위한 정적 메모리 풀
+    // 큐 사이즈(8)보다 여유있게 10칸으로 할당하여 오버랩 덮어쓰기 원천 차단
+    alignas(16) ST_T20_FeatureVector_t feature_pool[10];
+    uint8_t active_feature_slot = 0;
+
+    
+    
 
     // --- 이벤트 감시 자원 ---
     uint32_t        last_trigger_ms     = 0;
@@ -47,3 +55,5 @@ struct CL_T20_Mfcc::ST_Impl {
 
     ST_Impl() : sensor(SPI), comm() {}
 };
+
+

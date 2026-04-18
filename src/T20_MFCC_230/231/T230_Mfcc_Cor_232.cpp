@@ -1,30 +1,51 @@
 /* ============================================================================
  * File: T230_Mfcc_Cor_232.cpp
- * Summary: Main Task Logic, FSM Orchestration & Trigger Evaluator
- * ========================================================================== 
+ * Summary: T20 MFCC 시스템 메인 제어 및 FSM 오케스트레이션
+ * Version: v232.0 (Integrated Memory Pool & SIMD Alignment)
  * * [AI 메모: 제공 기능 요약]
- * 1. FSM 기반의 상태 전이 및 모듈 생명주기(Lifecycle) 동기화 적용.
- * 2. 수동 연속 레코딩(Manual) 및 스마트 트리거(Auto) 의도 자동 판별 기능.
- * 3. [최적화] TinyML 텐서 출력 프레임 정렬(Alignment) 버그 수정.
- * 4. [최적화] 태스크 Graceful Exit 적용을 통한 힙 메모리 누수(Leak) 원천 차단.
- * 5. [최적화] 프레임 드롭 시 연속성 보장을 위한 memmove 오버랩 보존 로직 적용.
- * 6. [정합성] 웹소켓 페이로드 크기 오계산 수정 (가변 MFCC 계수 대응).
- * 7. [실시간성] 고속 연산 시 시스템 타스크 기아(Starvation) 방지를 위한 taskYIELD 최적화.
- * 8. [메모리 무결성] Task 종료 시 큐 잔여 데이터를 모두 기록하는 Drain(털어내기) 로직 추가.
- * 9. [메모리 무결성] VLA 제거를 통한 FreeRTOS 스택 오버플로우 원천 차단.
- * 10.[정합성] Tick Wrap-around 방어 및 낡은 데이터(Stale Frame) 초기화 로직 적용.
-
+ * 1. FSM 기반 전역 상태 관리: INIT -> READY -> MONITORING -> RECORDING -> ERROR 상태 전이 제어.
+ * 2. 3단계 RTOS 파이프라인: 센서 수집(Core 0), DSP/FSM(Core 1), 레코딩(Core 1) 태스크 분산 처리.
+ * 3. 스마트 트리거 엔진: RMS 기반 충격 감지 및 다중 밴드(Freq) 에너지 분석을 통한 자동 녹화.
+ * 4. 특징량 추출 및 최적화: 1.2KB급 MFCC 특징량을 10-Slot 메모리 풀을 통해 Zero-Copy로 전송.
+ * 5. 시스템 안정성 및 전력: S/W Watchdog 모니터링, Any-Motion 기반 Deep Sleep/Wakeup 제어.
+ * 6. 데이터 연동: 실시간 웹소켓 바이너리 스트리밍 및 SD/LittleFS 이중 스토리지 지원.
+ * * [AI 메모: 구현 및 유지보수 주의사항 - 필독]
+ * 1. [메모리 정렬(Alignment)]
+ * - ST_Impl 및 feature_pool은 SIMD 가속 연산을 위해 반드시 16바이트 정렬되어야 합니다.
+ * - 할당 시 반드시 'heap_caps_aligned_alloc(16, ...)'을 사용해야 하며 일반 malloc 사용 시 패닉이 발생합니다.
+ * * 2. [동시성 및 스레드 안전성]
+ * - 웹서버 콜백이나 ISR에서 ST_Impl의 멤버를 직접 수정하는 것은 금지됩니다.
+ * - 모든 상태 변경 명령은 반드시 'g_t20->postCommand()'를 통해 cmd_queue로 하달해야 합니다.
+ * - 'g_isr_sensor_task'는 ISR과 루프 양쪽에서 참조하므로 반드시 'volatile' 키워드를 유지하십시오.
+ * * 3. [메모리 풀 및 Race Condition 방어]
+ * - 'feature_pool' 크기(10)는 'recorder_queue' 길이(8)보다 커야 합니다.
+ * - 이 비대칭 설계는 큐가 가득 찬 정체 상황에서도 생산자(DSP)가 소비자(Recorder)가 사용 중인
+ * 메모리 영역을 덮어쓰지 못하게 하는 물리적 방어선입니다. (Pool Index 전달 방식 엄수)
+ * * 4. [태스크 생명주기(Lifecycle)]
+ * - 태스크 종료 시 'vTaskDelete' 직전에 반드시 본인의 핸들을 'nullptr'로 초기화해야 합니다.
+ * - 그렇지 않으면 'stop()' 함수 호출 시 종료 대기 루프에서 1초간 타임아웃 락(Lock)이 발생합니다.
+ * * 5. [데이터 유실 및 정합성]
+ * - 가동 시작(CMD_START) 시점에 반드시 'xQueueReset'을 호출하여 큐에 남은 낡은 데이터를 비워야 합니다.
+ * - SD 카드 기록 시 3축 Raw 데이터는 낱개 쓰기가 아닌 대형 버퍼에 조립 후 '일괄 기록'하여 I/O 병목을 막아야 합니다.
+ * * 6. [하드웨어 수명 보호]
+ * - NVS(Flash) 쓰기 횟수 제한으로 인해, 파일 시퀀스 번호 업데이트는 부팅 시 1회만 수행합니다.
+ * - 실행 중 발생하는 파일 로테이션은 메모리상의 서브 시퀀스 번호를 사용하십시오.
+ * * 7. [수학적 안정성]
+ * - FIR 필터 등 부동소수점 비교 시 '== 0.0f' 대신 'fabsf(x) < 1e-6f'와 같은 엡실론 비교를 사용하십시오.
  * ========================================================================== */
+
+
 
 #include "T220_Mfcc_231.h"
 #include "T221_Mfcc_Inter_231.h"
 #include "T210_Def_231.h"
 
-#include <sys/time.h> // gettimeofday 사용ㅁ
+#include <sys/time.h> // gettimeofday 사용
 
 
 CL_T20_Mfcc* g_t20 = nullptr;
-static TaskHandle_t g_isr_sensor_task = nullptr;
+// 컴파일러의 레지스터 캐싱 방지 (인터럽트 먹통 방지)
+static volatile TaskHandle_t g_isr_sensor_task = nullptr;
 
 static void IRAM_ATTR T20_bmi_isr_handler() {
     BaseType_t woken = pdFALSE;
@@ -173,17 +194,18 @@ void T20_processTask(void* p_arg) {
 
     // [정합성] 웹소켓 페이로드 길이 동적 계산: (Wave + Spec + MFCC) * axis_cnt
     const size_t ws_payload_len = (N * axis_cnt) + (bins * axis_cnt) + mfcc_dim_raw;
-
-    ST_T20_FeatureVector_t* p_feature = (ST_T20_FeatureVector_t*)heap_caps_aligned_alloc(16, sizeof(ST_T20_FeatureVector_t), MALLOC_CAP_INTERNAL);
+    
     float* seq_buffer = (float*)heap_caps_aligned_alloc(16, T20::C10_Sys::SEQUENCE_FRAMES_MAX * mfcc_dim_raw * sizeof(float), MALLOC_CAP_INTERNAL);
     float* ws_payload = (float*)heap_caps_aligned_alloc(16, ws_payload_len * sizeof(float), MALLOC_CAP_INTERNAL);
 
-    // [연산성능/메모리 무결성] 메모리 할당 실패 시 성공한 자원만 깔끔하게 정리 후 종료
-    if (!p_feature || !seq_buffer || !ws_payload) {
+    if (!seq_buffer || !ws_payload) {
         Serial.println(F("[Critical] DSP Task OOM! Cleaning up..."));
-        if (p_feature) heap_caps_free(p_feature);
         if (seq_buffer) heap_caps_free(seq_buffer);
         if (ws_payload) heap_caps_free(ws_payload);
+        
+        // OOM으로 인한 예외 종료 시에도 핸들을 비워주어 stop() 함수의 불필요한 지연 방지
+        if (p->process_task == xTaskGetCurrentTaskHandle()) p->process_task = nullptr; 
+        
         vTaskDelete(nullptr); return;
     }
 
@@ -200,8 +222,10 @@ void T20_processTask(void* p_arg) {
                     if (p->current_state == EN_T20_STATE_READY) {
                         
                         // [정합성 보완] 가동 시작 전, 큐에 남아있는 낡은 대기 상태의 데이터를 완전히 비워냅니다.
-                        uint8_t dummy; 
-                        while (xQueueReceive(p->frame_queue, &dummy, 0) == pdTRUE) {}
+                        // 즉각적이고 깔끔하게 잔여 데이터 클리어
+                        xQueueReset(p->frame_queue);
+                        xQueueReset(p->recorder_queue);
+                        p->active_feature_slot = 0;
                         
                         p->current_state = EN_T20_STATE_MONITORING;
                         p->dsp.resetFilterStates(); 
@@ -261,6 +285,10 @@ void T20_processTask(void* p_arg) {
         uint8_t read_idx;
         // 종료 중(Drain)일 때는 대기(Delay)하지 않고 큐에서 즉시 가져옴
         if (xQueueReceive(p->frame_queue, &read_idx, p->running ? pdMS_TO_TICKS(10) : 0) == pdTRUE) {
+            
+            // 매번 할당하는 대신, 현재 기록할 슬롯 인덱스를 가져와 풀에서 꺼내 씀
+            uint8_t current_slot = p->active_feature_slot;
+            ST_T20_FeatureVector_t* p_feature = &p->feature_pool[current_slot];
             
             // [데이터 무결성] SIMD 패딩(Padding) 영역에 존재하는 힙 쓰레기값이 SD카드에 기록되는 현상 원천 차단
             memset(p_feature, 0, sizeof(ST_T20_FeatureVector_t));
@@ -349,7 +377,16 @@ void T20_processTask(void* p_arg) {
                     p->comm.broadcastBinary(ws_payload, ws_payload_len);
                 }
 
-                xQueueSend(p->recorder_queue, p_feature, 0);
+                // I/O 지연을 5ms까지는 견디도록 완충하고, 그래도 실패하면 로깅
+                // 구조체 전체 복사 대신 슬롯 인덱스만 큐로 전송
+                if (xQueueSend(p->recorder_queue, &current_slot, pdMS_TO_TICKS(5)) == pdTRUE) {
+                    // 전송 성공 시에만 슬롯을 전진시킴. 
+                    // 실패(Drop) 시 다음 루프에서 이 슬롯을 다시 덮어쓰므로 낭비가 없음.
+                    p->active_feature_slot = (current_slot + 1) % 10;
+                } else {
+                    p->storage.setLastError("Err: Frame Dropped (Queue Full)");
+                    // 필요 시 여기에 시리얼 경고 출력이나 LED 토글 로직을 추가할 수 있음
+                }
             }
         }
         
@@ -363,7 +400,7 @@ void T20_processTask(void* p_arg) {
     }
 
     // [메모리 무결성] 태스크 종료 시 완전한 동적 메모리 반환 보장
-    heap_caps_free(p_feature);
+    // [삭제] heap_caps_free(p_feature);
     heap_caps_free(seq_buffer);
     heap_caps_free(ws_payload);
 
@@ -371,17 +408,22 @@ void T20_processTask(void* p_arg) {
     vTaskDelete(nullptr);
 }
 
-/* ============================================================================
+
+ /* ============================================================================
  * [Task 3] Core 1: 스토리지 기록 전담 태스크
  * ========================================================================== */
  void T20_recorderTask(void* p_arg) {
     auto* p = (CL_T20_Mfcc::ST_Impl*)p_arg;
-    ST_T20_FeatureVector_t msg;
+    uint8_t slot_idx; // 1.2KB 구조체 대신 1바이트 인덱스로 받음
 
     // 프로세스 태스크가 종료된 후에도 레코더 큐가 비워질 때까지 가동
     while (p->running || uxQueueMessagesWaiting(p->recorder_queue) > 0) {
-        if (xQueueReceive(p->recorder_queue, &msg, p->running ? pdMS_TO_TICKS(200) : 0) == pdTRUE) {
-            p->storage.pushVector(&msg);
+        // 큐에서 인덱스만 꺼냄
+        if (xQueueReceive(p->recorder_queue, &slot_idx, p->running ? pdMS_TO_TICKS(200) : 0) == pdTRUE) {
+            
+            // 전달받은 인덱스를 활용해 메모리 풀의 원본 주소를 스토리지 엔진으로 직행시킴
+            p->storage.pushVector(&p->feature_pool[slot_idx]);
+            p->storage.checkRotation();
         } else {
             if (p->running) p->storage.checkIdleFlush();
             else break;
@@ -397,8 +439,10 @@ void T20_processTask(void* p_arg) {
 // ============================================================================
 // [Main Class] Method Implementation
 // ============================================================================
+
 CL_T20_Mfcc::CL_T20_Mfcc() {
-    _impl = (ST_Impl*)heap_caps_malloc(sizeof(ST_Impl), MALLOC_CAP_SPIRAM);
+    // 내부 raw_buffer의 alignas(16)가 실제 메모리에서도 완벽히 보장되도록 aligned_alloc 사용
+    _impl = (ST_Impl*)heap_caps_aligned_alloc(16, sizeof(ST_Impl), MALLOC_CAP_SPIRAM);
     if (_impl != nullptr) new (_impl) ST_Impl();
     g_t20 = this;
 }
@@ -406,8 +450,14 @@ CL_T20_Mfcc::CL_T20_Mfcc() {
 CL_T20_Mfcc::~CL_T20_Mfcc() {
     stop();
     if (_impl) {
+        // FreeRTOS 커널 오브젝트(Queue, Mutex) 영구 메모리 누수 차단
+        if (_impl->frame_queue) vQueueDelete(_impl->frame_queue);
+        if (_impl->recorder_queue) vQueueDelete(_impl->recorder_queue);
+        if (_impl->cmd_queue) vQueueDelete(_impl->cmd_queue);
+        if (_impl->mutex) vSemaphoreDelete(_impl->mutex);
+
         _impl->~ST_Impl();
-        heap_caps_free(_impl);
+        heap_caps_free(_impl); // aligned_alloc으로 할당된 메모리도 heap_caps_free로 정상 반환됨
         _impl = nullptr;
     }
 }
@@ -416,11 +466,21 @@ CL_T20_Mfcc::~CL_T20_Mfcc() {
 bool CL_T20_Mfcc::begin(const ST_T20_Config_t* p_cfg) {
     if (p_cfg) _impl->cfg = *p_cfg;
     else _impl->cfg = T20_makeDefaultConfig();
-
-    _impl->frame_queue = xQueueCreate(T20::C10_Sys::QUEUE_LEN, sizeof(uint8_t));
-    _impl->recorder_queue = xQueueCreate(32, sizeof(ST_T20_FeatureVector_t));
-    _impl->cmd_queue = xQueueCreate(10, sizeof(EM_T20_Command_t));
-    _impl->mutex = xSemaphoreCreateMutex();
+    
+    // 메모리 단편화 방지: 큐가 없을 때만 생성 (Initialize Once)
+    if (_impl->frame_queue == nullptr) {
+        _impl->frame_queue = xQueueCreate(T20::C10_Sys::QUEUE_LEN, sizeof(uint8_t));
+    }
+    if (_impl->recorder_queue == nullptr) {
+        // [수정됨] 1.2KB 구조체 값 복사 대신, feature_pool의 인덱스(1바이트)만 전달
+        _impl->recorder_queue = xQueueCreate(8, sizeof(uint8_t));
+    }
+    if (_impl->cmd_queue == nullptr) {
+        _impl->cmd_queue = xQueueCreate(10, sizeof(EM_T20_Command_t));
+    }
+    if (_impl->mutex == nullptr) {
+        _impl->mutex = xSemaphoreCreateMutex();
+    }
 
     if (!_impl->sensor.begin(_impl->cfg.sensor)) return false;
     if (!_impl->dsp.begin(_impl->cfg)) return false;
@@ -550,6 +610,4 @@ void CL_T20_Mfcc::printStatus(Stream& out) const {
     out.printf("Storage: %s (Records: %lu)\n", _impl->storage.isOpen() ? "Active" : "Idle", _impl->storage.getRecordCount());
     out.println("-------------------------");
 }
-
-
 

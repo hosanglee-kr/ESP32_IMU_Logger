@@ -60,6 +60,15 @@ CL_T20_StorageService::~CL_T20_StorageService() {
 
 bool CL_T20_StorageService::begin(const ST_T20_SdmmcProfile_t& profile) {
     _loadIndexJson();
+    
+    // 시스템 부팅 시 딱 한 번만 NVS를 업데이트하여 플래시 수명 파괴를 원천 차단
+    Preferences prefs;
+    prefs.begin(T20::C10_NVS::NAMESPACE, false);
+    
+    _boot_file_seq = prefs.getUInt(T20::C10_NVS::KEY_FILE_SEQ, 1);
+    prefs.putUInt(T20::C10_NVS::KEY_FILE_SEQ, _boot_file_seq + 1);
+    
+    prefs.end();
 
     if (profile.clk_pin != 0xFFU) { // PIN_NOT_SET
         SD_MMC.setPins(profile.clk_pin, profile.cmd_pin, profile.d0_pin,
@@ -88,6 +97,7 @@ void CL_T20_StorageService::setConfig(const ST_T20_Config_t& cfg) {
 // ============================================================================
 // 1. 세션 오픈: 파일 생성 및 프리트리거 버퍼 점검
 // ============================================================================
+
 bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg, const char* prefix) {
 
     if (_session_open) return false;
@@ -95,23 +105,21 @@ bool CL_T20_StorageService::openSession(const ST_T20_Config_t& cfg, const char* 
     
     // 설정 갱신 및 버퍼 재확인 (이미 setConfig로 할당되어 있다면 무시됨)
     setConfig(cfg);
-
-    // NVS에서 파일 시퀀스 번호 관리
-    Preferences prefs;
-    prefs.begin(T20::C10_NVS::NAMESPACE, false);
-    uint32_t file_seq = prefs.getUInt(T20::C10_NVS::KEY_FILE_SEQ, 1);
-    prefs.putUInt(T20::C10_NVS::KEY_FILE_SEQ, file_seq + 1);
-    prefs.end();
+    
+    // 매번 NVS를 읽고 쓰는 기존 코드 삭제
+    _rotation_sub_seq++; // 세션이 열릴 때마다 서브 시퀀스만 증가
 
     // 파일명 생성 (타임스탬프 기반)
     struct tm timeinfo;
     char time_buffer[64];
     if (getLocalTime(&timeinfo, 10)) {
-        snprintf(time_buffer, sizeof(time_buffer), "%04lu_%04d%02d%02d_%02d%02d%02d",
-                 (unsigned long)file_seq, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+        // 파일명에 서브 시퀀스 번호 포함
+        snprintf(time_buffer, sizeof(time_buffer), "%04lu_%03u_%04d%02d%02d_%02d%02d%02d",
+                 (unsigned long)_boot_file_seq, _rotation_sub_seq,
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     } else {
-        snprintf(time_buffer, sizeof(time_buffer), "%04lu_notime", (unsigned long)file_seq);
+        snprintf(time_buffer, sizeof(time_buffer), "%04lu_%03u_notime", (unsigned long)_boot_file_seq, _rotation_sub_seq);
     }
 
      // 접두어(Prefix) 적용: rec_trg_0001_...bin 또는 rec_man_0002_...bin 형태
@@ -451,9 +459,13 @@ bool CL_T20_StorageService::_pushToDma(const ST_T20_FeatureVector_t* p_vec) {
     const uint16_t dim_per_axis = _current_cfg.feature.mfcc_coeffs * 3; 
     const uint16_t feature_bytes = (dim_per_axis * axes * sizeof(float));
     
+    // [수정됨] 누락되었던 status_flags, rms, band_energy 크기를 반영하여 총 프레임 사이즈 재계산
     const uint16_t total_frame_size = sizeof(p_vec->timestamp_ms) + 
                                       sizeof(p_vec->frame_id) + 
                                       sizeof(p_vec->active_axes) + 
+                                      sizeof(p_vec->status_flags) + 
+                                      sizeof(p_vec->rms) +
+                                      sizeof(p_vec->band_energy) +
                                       feature_bytes;
 
     uint8_t slot = _dma_active_slot;
@@ -466,11 +478,14 @@ bool CL_T20_StorageService::_pushToDma(const ST_T20_FeatureVector_t* p_vec) {
 
     uint8_t* ptr = &_dma_slots[slot][_dma_slot_used[slot]];
     
-    memcpy(ptr, &p_vec->timestamp_ms, sizeof(uint64_t)); ptr += 8;
-    memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += 4;
-    memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += 1;
+    // [수정됨] 분석 필수 데이터 누락 없이 모두 복사
+    memcpy(ptr, &p_vec->timestamp_ms, sizeof(uint64_t)); ptr += sizeof(uint64_t);
+    memcpy(ptr, &p_vec->frame_id, sizeof(uint32_t));     ptr += sizeof(uint32_t);
+    memcpy(ptr, &p_vec->active_axes, sizeof(uint8_t));   ptr += sizeof(uint8_t);
+    memcpy(ptr, &p_vec->status_flags, sizeof(uint8_t));  ptr += sizeof(uint8_t);
+    memcpy(ptr, &p_vec->rms, sizeof(p_vec->rms));        ptr += sizeof(p_vec->rms);
+    memcpy(ptr, &p_vec->band_energy, sizeof(p_vec->band_energy)); ptr += sizeof(p_vec->band_energy);
     
-    // 2D 배열에서 실제 사용 중인 유효 차원 데이터만 추출하여 직렬화 (패딩 버림)
     for (uint8_t a = 0; a < axes; a++) {
         memcpy(ptr, &p_vec->features[a][0], dim_per_axis * sizeof(float));
         ptr += (dim_per_axis * sizeof(float));
@@ -485,3 +500,4 @@ bool CL_T20_StorageService::_pushToDma(const ST_T20_FeatureVector_t* p_vec) {
     if (_batch_count >= _watermark_high) flush();
     return true;
 }
+
