@@ -61,9 +61,6 @@ class CL_T20_StorageService {
 	void _appendIndexItem(); 
 	bool _writeIndexFile();
 	bool _loadIndexJson();
-	// bool _saveIndexJson();
-	
-	bool _loadIndexJson();
 	
 	// DMA 슬롯 저장 전용 내부 함수 및 pretrigger 버퍼 관리
     bool _pushToDma(const ST_T20_FeatureVector_t* p_vec);
