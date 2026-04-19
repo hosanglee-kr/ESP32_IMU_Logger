@@ -2,6 +2,9 @@
  * File: T200_Main_231.h
  * Summary: Application Entry Point Wrapper
  * ========================================================================== */
+// 231  (min_spiffs.csv : 4MB - App(1.9MB) x 2개 + SPIFFS(약 190KB)
+//   RAM:   [==        ]  16.4% (used    53,752 bytes from   327,680 bytes)
+//   Flash: [=======   ]  65.5% (used 1,287,793 bytes from 1,966,080 bytes)
 
 // 219 v003 (min_spiffs.csv : 4MB - App(1.9MB) x 2개 + SPIFFS(약 190KB)
 //   RAM:   [==        ]  16.4% (used    53,744 bytes from   327,680 bytes)

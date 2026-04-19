@@ -150,7 +150,7 @@ namespace T20 {
         inline constexpr char const* FILE_CFG_JSON    = "/sys/runtime_cfg_231_012.json"; // 런타임 환경 설정 파일 저장 경로
         inline constexpr char const* FILE_REC_IDX     = "/sys/recorder_index.json";      // 로테이션 파일 관리용 인덱스 맵
         inline constexpr char const* FILE_BMI_CALIB   = "/sys/bmi_calib.json";           // 센서 캘리브레이션 오프셋 백업 파일
-        inline constexpr char const* WEB_INDEX        = "index_231_011.html";            // 웹서버 기본 접속 화면 파일명
+        inline constexpr char const* WEB_INDEX        = "index_231_012.html";            // 웹서버 기본 접속 화면 파일명
         inline constexpr char const* SD_DIR_BIN       = "/t20_data/bin";                 // 바이너리 데이터 파일 저장 경로
         inline constexpr char const* SD_PREFIX_BIN    = "/t20_data/bin/rec_";            // 데이터 파일명 생성용 접두어
         inline constexpr char const* DIR_FALLBACK     = "/fallback";                     // SD카드 오류 시 LittleFS 내장 메모리 기록 우회 경로
