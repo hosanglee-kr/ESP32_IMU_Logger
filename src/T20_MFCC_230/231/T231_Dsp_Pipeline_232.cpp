@@ -561,17 +561,27 @@ void CL_T20_DspPipeline::resetFilterStates() {
     memset(_mfcc_history, 0, sizeof(_mfcc_history));
 }
 
+
 float CL_T20_DspPipeline::getBandEnergy(float start_hz, float end_hz) {
     if (!_power) return 0.0f;
 
     const uint16_t N = _current_fft_size;
     const float fs = T20::C10_DSP::SAMPLE_RATE_HZ;
     const float bin_res = fs / N;
+    
+    // [수학적/메모리 방어] 음수 주파수가 uint16_t로 캐스팅될 때 발생하는 언더플로우(65535) 및 
+    // _power 배열 경계 초과 참조(Out-of-bounds Read)를 막기 위한 클램핑
+    if (start_hz < 0.0f) start_hz = 0.0f;
+    if (end_hz < start_hz) end_hz = start_hz;
+
 
     uint16_t start_bin = (uint16_t)(start_hz / bin_res);
     uint16_t end_bin = (uint16_t)(end_hz / bin_res);
-
-    if (end_bin >= (N / 2)) end_bin = (N / 2);
+    
+    // 하한선뿐만 아니라 상한선 검사도 start_bin/end_bin 양쪽에 적용
+    uint16_t max_bin = (N / 2);
+    if (end_bin > max_bin) end_bin = max_bin;
+    if (start_bin > max_bin) start_bin = max_bin;
 
     float energy = 0.0f;
     for (uint16_t i = start_bin; i <= end_bin; i++) {

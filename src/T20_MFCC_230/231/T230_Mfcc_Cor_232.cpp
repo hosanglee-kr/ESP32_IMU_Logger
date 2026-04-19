@@ -1,39 +1,34 @@
-/* ============================================================================
- * File: T230_Mfcc_Cor_232.cpp
- * Summary: T20 MFCC 시스템 메인 제어 및 FSM 오케스트레이션
- * Version: v232.0 (Integrated Memory Pool & SIMD Alignment)
- * * [AI 메모: 제공 기능 요약]
- * 1. FSM 기반 전역 상태 관리: INIT -> READY -> MONITORING -> RECORDING -> ERROR 상태 전이 제어.
- * 2. 3단계 RTOS 파이프라인: 센서 수집(Core 0), DSP/FSM(Core 1), 레코딩(Core 1) 태스크 분산 처리.
- * 3. 스마트 트리거 엔진: RMS 기반 충격 감지 및 다중 밴드(Freq) 에너지 분석을 통한 자동 녹화.
- * 4. 특징량 추출 및 최적화: 1.2KB급 MFCC 특징량을 10-Slot 메모리 풀을 통해 Zero-Copy로 전송.
- * 5. 시스템 안정성 및 전력: S/W Watchdog 모니터링, Any-Motion 기반 Deep Sleep/Wakeup 제어.
- * 6. 데이터 연동: 실시간 웹소켓 바이너리 스트리밍 및 SD/LittleFS 이중 스토리지 지원.
- * * [AI 메모: 구현 및 유지보수 주의사항 - 필독]
- * 1. [메모리 정렬(Alignment)]
- * - ST_Impl 및 feature_pool은 SIMD 가속 연산을 위해 반드시 16바이트 정렬되어야 합니다.
- * - 할당 시 반드시 'heap_caps_aligned_alloc(16, ...)'을 사용해야 하며 일반 malloc 사용 시 패닉이 발생합니다.
- * * 2. [동시성 및 스레드 안전성]
- * - 웹서버 콜백이나 ISR에서 ST_Impl의 멤버를 직접 수정하는 것은 금지됩니다.
- * - 모든 상태 변경 명령은 반드시 'g_t20->postCommand()'를 통해 cmd_queue로 하달해야 합니다.
- * - 'g_isr_sensor_task'는 ISR과 루프 양쪽에서 참조하므로 반드시 'volatile' 키워드를 유지하십시오.
- * * 3. [메모리 풀 및 Race Condition 방어]
- * - 'feature_pool' 크기(10)는 'recorder_queue' 길이(8)보다 커야 합니다.
- * - 이 비대칭 설계는 큐가 가득 찬 정체 상황에서도 생산자(DSP)가 소비자(Recorder)가 사용 중인
- * 메모리 영역을 덮어쓰지 못하게 하는 물리적 방어선입니다. (Pool Index 전달 방식 엄수)
- * * 4. [태스크 생명주기(Lifecycle)]
- * - 태스크 종료 시 'vTaskDelete' 직전에 반드시 본인의 핸들을 'nullptr'로 초기화해야 합니다.
- * - 그렇지 않으면 'stop()' 함수 호출 시 종료 대기 루프에서 1초간 타임아웃 락(Lock)이 발생합니다.
- * * 5. [데이터 유실 및 정합성]
- * - 가동 시작(CMD_START) 시점에 반드시 'xQueueReset'을 호출하여 큐에 남은 낡은 데이터를 비워야 합니다.
- * - SD 카드 기록 시 3축 Raw 데이터는 낱개 쓰기가 아닌 대형 버퍼에 조립 후 '일괄 기록'하여 I/O 병목을 막아야 합니다.
- * * 6. [하드웨어 수명 보호]
- * - NVS(Flash) 쓰기 횟수 제한으로 인해, 파일 시퀀스 번호 업데이트는 부팅 시 1회만 수행합니다.
- * - 실행 중 발생하는 파일 로테이션은 메모리상의 서브 시퀀스 번호를 사용하십시오.
- * * 7. [수학적 안정성]
- * - FIR 필터 등 부동소수점 비교 시 '== 0.0f' 대신 'fabsf(x) < 1e-6f'와 같은 엡실론 비교를 사용하십시오.
- * ========================================================================== */
 
+/*
+============================================================================
+ * File: T230_Mfcc_Cor_232.cpp
+ * Summary: T20 MFCC 시스템 메인 제어, FSM 오케스트레이션 및 Task 동기화
+ * * * * [AI 메모: 제공 기능 요약]
+ * 1. FSM 기반 전역 상태 관리: INIT -> READY -> MONITORING -> RECORDING -> ERROR 상태 전이 제어.
+ * 2. 3단계 RTOS 파이프라인: 센서 수집(Core 0), DSP/FSM(Core 1), 레코딩(Core 1) 태스크 분산 병렬 처리.
+ * 3. 스마트 트리거 엔진: RMS 기반 충격 감지 및 다중 밴드(Freq) 에너지 분석을 통한 자동 로깅.
+ * 4. 특징량 추출 및 최적화: 1.2KB급 MFCC 특징량을 10-Slot 메모리 풀을 통해 Zero-Copy로 전송.
+ * 5. 데이터 연동: 실시간 웹소켓 바이너리 스트리밍 및 SD/LittleFS 이중 스토리지 지원.
+ * * * * [AI 셀프 회고 및 구현 원칙 - 실수 방지 유형화 목록] * * *
+ * * [유형 1: RTOS 태스크 생명주기 및 Race Condition]
+ * - 실수: 메인 태스크(processTask)가 종료될 때 스토리지 세션을 닫아버려, 레코더 태스크가 플러시(Flush) 중이던 가장 중요한 '마지막 사고 데이터'를 증발시킴.
+ * - 원칙: 파일 세션 종료(closeSession) 권한은 반드시 소비자(recorderTask)가 큐를 100% 비운(Drain) 직후에 행사하여 데이터 유실을 원천 차단할 것.
+ * - 실수: 태스크 소멸(vTaskDelete) 시 본인의 핸들을 지우지 않아 stop() 함수에서 1초간 데드락(Timeout) 발생.
+ * - 원칙: OOM이나 정상 종료 시 반드시 자기 핸들을 'nullptr'로 초기화할 것.
+ * * [유형 2: 데이터 유실 및 네트워크 페이로드 파괴]
+ * - 실수: 'all_ready'(MFCC 히스토리 4프레임 충족) 조건문 안에 레코더 큐 전송 로직을 가두어, 충격이 발생한 찰나의 초기 3프레임 파형 데이터를 날려버림 (Silent Trigger Drop).
+ * - 원칙: Raw 파형과 진동 에너지는 MFCC 조립 여부와 상관없이 매 프레임 유효하므로, 무조건 큐 전송 로직을 밖으로 빼내어 사고 당시 데이터를 100% 보존할 것.
+ * - 실수: 웹소켓 바이너리 전송 시 바이트 크기가 아닌 '요소 개수'를 넘겨 페이로드가 네트워크 단에서 75% 절단됨.
+ * - 원칙: 네트워크 스트리밍 API 호출 시 길이는 반드시 '요소 개수 * sizeof(float)'를 곱해 정확한 바이트(Byte) 규격을 맞출 것.
+ * * [유형 3: 메모리 풀 및 스택 파괴 방어]
+ * - 실수: 1.2KB 구조체를 큐에 직접 복사하여 SRAM 고갈 및 덮어쓰기(Race Condition) 유발.
+ * - 원칙: 대용량 데이터는 정적 메모리 풀(feature_pool[10])에 담고, 큐(길이 8)에는 1바이트 인덱스(slot_idx)만 넘기는 Zero-Copy 방식을 엄수할 것.
+ * - 실수: VLA(가변 길이 배열) 사용으로 FreeRTOS 스택 오버플로우 패닉 유발.
+ * - 원칙: 텐서 조립용 임시 버퍼(flat_features)는 무조건 컴파일 타임 상수(MAX_FEATURE_DIM)로 정적 할당할 것.
+ * - 실수: 가동 시작(CMD_START) 시 큐에 남은 낡은 대기 상태의 쓰레기값을 수동으로 꺼내려다 정합성 붕괴.
+ * - 원칙: FSM 시작 시 반드시 OS API인 'xQueueReset'을 호출하여 큐를 즉각적이고 깔끔하게 클리어할 것.
+ * ========================================================================== 
+ */
 
 
 #include "T220_Mfcc_231.h"
@@ -320,7 +315,7 @@ void T20_processTask(void* p_arg) {
                 memcpy(ws_payload + (a * N), p->raw_buffer[a][read_idx], N * sizeof(float));
                 memcpy(ws_payload + (axis_cnt * N) + (a * bins), p->dsp.getPowerSpectrum(), bins * sizeof(float));
             }
-
+            
             if (p->current_state != EN_T20_STATE_NOISE_LEARNING) {
                 if (trig_ctx.active_source != EN_T20_TRIG_SRC_MANUAL) {
                     _evaluateTriggers(&trig_ctx, p_feature, p->cfg, max_band_energy);
@@ -347,16 +342,19 @@ void T20_processTask(void* p_arg) {
                     }
                 }
             }
+
+            // Band Energy는 MFCC 히스토리와 무관하게 매 프레임 유효하므로 밖으로 빼냄
+            for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
+                p_feature->band_energy[b] = max_band_energy[b];
+            }
             
             if (all_ready) {
-                for (int b = 0; b < T20::C10_DSP::TRIGGER_BANDS_MAX; b++) {
-                    p_feature->band_energy[b] = max_band_energy[b];
-                }
+                // 내부에 중복되어 있던 band_energy 복사 루프 삭제 완료
 
                 // [메모리 무결성] VLA(가변 길이 배열) 사용으로 인한 FreeRTOS 스택 오버플로우 패닉 방지를 위해,
                 // 항상 상수 크기(MAX_FEATURE_DIM)로 스택을 정적 할당하고 사용하는 만큼만 복사합니다.
                 float flat_features[T20::C10_DSP::MAX_FEATURE_DIM];
-                memset(flat_features, 0, sizeof(flat_features)); // 가비지 값 초기화
+                memset(flat_features, 0, sizeof(flat_features)); 
 
                 for(uint8_t a = 0; a < axis_cnt; a++) {
                     memcpy(flat_features + (a * mfcc_coeffs * 3), &p_feature->features[a][0], mfcc_coeffs * 3 * sizeof(float));
@@ -364,29 +362,31 @@ void T20_processTask(void* p_arg) {
                 
                 p->seq_builder.pushVector(flat_features);
                 seq_push_cnt++;
-
+                
                 if (p->cfg.output.output_sequence) {
                     if (p->seq_builder.isReady() && (seq_push_cnt % p->cfg.output.sequence_frames == 0)) {
-                        p->seq_builder.getSequenceFlat(seq_buffer);
-                        p->comm.broadcastBinary(seq_buffer, p->cfg.output.sequence_frames * mfcc_dim_raw);
+                        // T233 시퀀스 빌더 보안 업데이트에 맞춘 API 호출 교정 (max_out_size 인자 추가)
+                        size_t seq_bytes = p->cfg.output.sequence_frames * mfcc_dim_raw * sizeof(float);
+                        p->seq_builder.getSequenceFlat(seq_buffer, seq_bytes);
+                        
+                        p->comm.broadcastBinary(seq_buffer, seq_bytes);
                     }
                 } else {
                     // [정합성] 웹소켓으로 패딩 없는 순수 MFCC 전송
                     float* mfcc_ptr = ws_payload + (axis_cnt * N) + (axis_cnt * bins);
                     memcpy(mfcc_ptr, flat_features, mfcc_dim_raw * sizeof(float));
-                    p->comm.broadcastBinary(ws_payload, ws_payload_len);
+                    
+                    // Payload 절단 방지: 요소 개수 * sizeof(float) 로 정확한 바이트 전송
+                    p->comm.broadcastBinary(ws_payload, ws_payload_len * sizeof(float));
                 }
-
-                // I/O 지연을 5ms까지는 견디도록 완충하고, 그래도 실패하면 로깅
-                // 구조체 전체 복사 대신 슬롯 인덱스만 큐로 전송
-                if (xQueueSend(p->recorder_queue, &current_slot, pdMS_TO_TICKS(5)) == pdTRUE) {
-                    // 전송 성공 시에만 슬롯을 전진시킴. 
-                    // 실패(Drop) 시 다음 루프에서 이 슬롯을 다시 덮어쓰므로 낭비가 없음.
-                    p->active_feature_slot = (current_slot + 1) % 10;
-                } else {
-                    p->storage.setLastError("Err: Frame Dropped (Queue Full)");
-                    // 필요 시 여기에 시리얼 경고 출력이나 LED 토글 로직을 추가할 수 있음
-                }
+            }
+            
+            // 레코더 큐 전송을 all_ready 블록 밖으로 꺼냄.
+            // 사고 발생(Trigger) 시, MFCC가 조립되지 않은 초기 프레임이더라도 파형과 에너지는 무조건 보존!
+            if (xQueueSend(p->recorder_queue, &current_slot, pdMS_TO_TICKS(5)) == pdTRUE) {
+                p->active_feature_slot = (current_slot + 1) % 10;
+            } else {
+                p->storage.setLastError("Err: Frame Dropped (Queue Full)");
             }
         }
         
@@ -394,10 +394,7 @@ void T20_processTask(void* p_arg) {
         if (p->running) taskYIELD();
     }
 
-    // [스레드 안전성] 큐에 남은 데이터를 모두 털어낸(Drain) 후, 태스크가 스스로 안전하게 스토리지 세션을 닫음
-    if (p->storage.isOpen()) {
-        p->storage.closeSession("task_terminated");
-    }
+    // 이 위치에 있던 p->storage.closeSession()은 Race Condition 방지를 위해 삭제됨
 
     // [메모리 무결성] 태스크 종료 시 완전한 동적 메모리 반환 보장
     // [삭제] heap_caps_free(p_feature);
@@ -407,6 +404,7 @@ void T20_processTask(void* p_arg) {
     if (p->process_task == xTaskGetCurrentTaskHandle()) p->process_task = nullptr;
     vTaskDelete(nullptr);
 }
+
 
 
  /* ============================================================================
@@ -428,6 +426,11 @@ void T20_processTask(void* p_arg) {
             if (p->running) p->storage.checkIdleFlush();
             else break;
         }
+    }
+    
+    // 큐가 100% 비워진(Drain) 이 시점에 파일 세션을 닫아 마지막 데이터 유실 원천 차단
+    if (p->storage.isOpen()) {
+        p->storage.closeSession("task_terminated");
     }
     
     if (p->recorder_task == xTaskGetCurrentTaskHandle()) p->recorder_task = nullptr;
