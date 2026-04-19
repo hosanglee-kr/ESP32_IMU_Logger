@@ -16,7 +16,7 @@
 namespace T20 {
     // --- [1.1] 시스템 기본 제어 상수 ---
     namespace C10_Sys {
-        inline constexpr char const* VERSION_STR         = "T20_Mfcc_v230";     // 시스템 펌웨어 식별 버전
+        inline constexpr char const* VERSION_STR         = "T20_Mfcc_v231";     // 시스템 펌웨어 식별 버전
         inline constexpr uint16_t    QUEUE_LEN           = 8U;                  // RTOS Task 간 메시지 통신 큐 최대 길이
         inline constexpr uint16_t    CFG_PROFILE_COUNT   = 4U;                  // SDMMC 장치 연결 설정 프로필 보존 개수
         inline constexpr uint16_t    RAW_FRAME_BUFFERS   = 4U;                  // DMA 및 센서 수집용 핑퐁 링버퍼(슬롯) 개수
@@ -150,7 +150,7 @@ namespace T20 {
         inline constexpr char const* FILE_CFG_JSON    = "/sys/runtime_cfg_231_012.json"; // 런타임 환경 설정 파일 저장 경로
         inline constexpr char const* FILE_REC_IDX     = "/sys/recorder_index.json";      // 로테이션 파일 관리용 인덱스 맵
         inline constexpr char const* FILE_BMI_CALIB   = "/sys/bmi_calib.json";           // 센서 캘리브레이션 오프셋 백업 파일
-        inline constexpr char const* WEB_INDEX        = "index_230_011.html";            // 웹서버 기본 접속 화면 파일명
+        inline constexpr char const* WEB_INDEX        = "index_231_011.html";            // 웹서버 기본 접속 화면 파일명
         inline constexpr char const* SD_DIR_BIN       = "/t20_data/bin";                 // 바이너리 데이터 파일 저장 경로
         inline constexpr char const* SD_PREFIX_BIN    = "/t20_data/bin/rec_";            // 데이터 파일명 생성용 접두어
         inline constexpr char const* DIR_FALLBACK     = "/fallback";                     // SD카드 오류 시 LittleFS 내장 메모리 기록 우회 경로

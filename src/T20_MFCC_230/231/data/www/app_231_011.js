@@ -572,6 +572,72 @@ async function fetchDiagnostics() {
     }
 }
 
+// ==========================================
+// Config 백업 및 복원 로직
+// ==========================================
+async function downloadConfig() {
+    try {
+        const res = await fetch(`${T20_CONST.API_BASE}/runtime_config`);
+        if (!res.ok) throw new Error("Failed to fetch config");
+        const cfg = await res.json();
+        
+        // JSON 데이터를 Blob 형태로 변환하여 브라우저 다운로드 유도
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cfg, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "t20_config_backup.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        
+        showToast("Config downloaded successfully!");
+    } catch (e) {
+        showToast("Config download failed", true);
+    }
+}
+
+function uploadConfig(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const jsonStr = e.target.result;
+            
+            // 1. JSON 포맷 유효성 검사 (형식이 깨진 파일 업로드 방어)
+            JSON.parse(jsonStr); 
+            
+            if (!confirm("선택한 설정 파일로 덮어쓰고 기기를 재부팅하시겠습니까?")) {
+                event.target.value = ""; // 취소 시 input 초기화
+                return;
+            }
+            
+            showToast("Uploading config...");
+            
+            // 2. 이미 구축된 POST API로 데이터 전송 (백엔드에서 자동 저장 및 재부팅 처리)
+            const res = await fetch(`${T20_CONST.API_BASE}/runtime_config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: jsonStr
+            });
+            
+            if (res.ok) {
+                showToast("Config restored! Rebooting...");
+                setTimeout(() => location.reload(), T20_CONST.UI.REBOOT_RELOAD_MS);
+            } else {
+                showToast("Upload failed by device", true);
+            }
+        } catch (err) {
+            showToast("Invalid JSON file format", true);
+        }
+        event.target.value = ""; // 업로드 완료 후 input 초기화 (동일 파일 재업로드 가능하게 함)
+    };
+    
+    reader.readAsText(file);
+}
+
+
 window.onload = () => {
     initUI();
     initCharts();

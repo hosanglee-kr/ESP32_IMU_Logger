@@ -166,7 +166,6 @@
                 <div class="action-bar"><button type="button" onclick="saveSettings()" class="btn primary">SAVE OUTPUT CONFIG</button></div>
             </form>
         </section>
-
         <section id="tab-sysadmin" class="tab-content">
             <form id="form-sysadmin">
                 <div class="grid">
@@ -179,6 +178,15 @@
                         </div>
                     </div>
 
+                    <div class="card">
+                        <h3 class="section-title">Config Backup & Restore</h3>
+                        <p style="font-size: 0.85em; color: #aaa; margin-bottom: 15px;">현재 기기의 설정을 PC로 다운로드하거나, 저장된 config.json 파일을 업로드하여 복원합니다.</p>
+                        <div class="btn-group" style="flex-direction: row; gap: 10px;">
+                            <button type="button" onclick="downloadConfig()" class="btn primary" style="flex:1;">DOWNLOAD CONFIG</button>
+                            <input type="file" id="config-file" accept=".json" style="display:none;" onchange="uploadConfig(event)">
+                            <button type="button" onclick="document.getElementById('config-file').click()" class="btn warning" style="flex:1;">UPLOAD CONFIG</button>
+                        </div>
+                    </div>
                     <div class="card">
                         <h3 class="section-title">Wi-Fi Connection Mode</h3>
                         <div class="form-group">
