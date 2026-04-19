@@ -619,7 +619,7 @@ void CL_T20_Mfcc::run() {
 
     if (!_impl->running) return;
 
-    _impl->comm.runMqtt();
+    _impl->comm.runNetwork();
 
     static bool last_btn_state = HIGH; 
     bool current_btn_state = digitalRead(_impl->cfg.system.button_pin);

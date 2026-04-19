@@ -2,44 +2,41 @@
 /* 
 ============================================================================
  * File: T234_Storage_Service_232.cpp
- * Summary: Storage Engine Implementation with Pre-Trigger Buffering
- * * [AI 메모: 제공 기능 요약]
+ * Summary: Storage Engine Implementation with Pre-Trigger Buffering & Fail-Safe
+ * * * * [AI 메모: 제공 기능 요약] * * *
  * 1. Zero-Copy DMA: 내부 SRAM 핑퐁 버퍼 3개를 순환하며 SD카드 기록 오버헤드를 극소화.
- * 2. 가변 차원 직렬화: 1축/3축 모드 및 MFCC 계수 크기에 따라 패딩을 제외한 순수 데이터만 추출(Packing)하여 파일 크기 최적화.
- * 3. Pre-Trigger Buffering: 세션이 닫혀 있을 때 PSRAM 링버퍼에 과거 N초간의 데이터를 
- * 상시 유지하다가 트리거 발생 시 일괄 기록(Flush)하여 사고 전 징후를 완벽히 캡처.
- * 4. 자동 파일 분할(Rotation): 설정된 용량(MB) 또는 시간(Min)에 도달하면 끊김 없이 
- * 새 파일로 분할하고 오래된 인덱스는 삭제.
+ * 2. 가변 차원 직렬화: 1/3축 모드 및 MFCC 크기에 맞춰 패딩을 제외한 순수 데이터만 Packing하여 파일 크기 최적화.
+ * 3. Pre-Trigger Buffering: 유휴 상태일 때 PSRAM 링버퍼에 과거 데이터를 상시 유지, 트리거 시 일괄 플러시하여 사고 징후 완벽 캡처.
+ * 4. 자동 파일 분할(Rotation): 설정 용량(MB)/시간(Min) 도달 시 끊김 없이 새 파일로 분할하고 오래된 파일 삭제.
  *
- * [AI 메모: 구현 및 유지보수 주의사항]
+ * * * * [AI 메모: 구현 및 유지보수 주의사항] * * *
  * 1. 프리-트리거 링버퍼(_pre_buf)는 크기가 크므로 반드시 MALLOC_CAP_SPIRAM(PSRAM)으로 할당해야 합니다.
  * 2. pushVector 함수는 레코딩 상태(_session_open)와 무관하게 상시 호출되어야 링버퍼가 정상 작동합니다.
- * 3. DMA 슬롯 커밋(_commitSlot) 도중 I/O 블로킹이 길어지면 FIFO 오버플로우가 날 수 있으므로 
- * idle_flush_ms 타임아웃 튜닝이 중요합니다.
+ * 3. DMA 슬롯 커밋(_commitSlot) 도중 I/O 블로킹이 길어지면 FIFO 오버플로우가 발생할 수 있으므로 idle_flush_ms 튜닝이 중요합니다.
+ *
  * * * * [AI 셀프 회고 및 구현 원칙 - Phase 3: 무결점 스토리지 및 데이터 보존] * * *
- * * [방어 1: 파일 로테이션 붕괴 및 SD 시한폭탄 차단]
- * - 실수: 인덱스(JSON) 저장 시 배열 '추가(Append)'와 '저장(Write)'을 한 함수에 섞어 써서 로테이션이 돌 때마다 가장 최신 세션이 중복 증식하고 과거 기록이 유실됨.
- * - 원칙: 배열에 세션을 추가하는 _appendIndexItem()과 물리적 파일로 굽는 _writeIndexFile()을 완벽히 분리할 것.
- * - 실수: Raw 파형 파일 경로가 인덱스에 누락되어 로테이션 시 삭제되지 않고 무한 증식함.
- * - 원칙: ST_IndexItem에 raw_path를 명시적으로 추가하여 쌍(Pair)으로 관리 및 삭제할 것.
- * * [방어 2: 정전 시 설정 파일 영구 파괴(0 Byte) 방어]
- * - 실수: LittleFS에 "w" 모드로 여는 순간 파일 크기가 0이 되므로, 기록 중 정전 시 기기가 벽돌(Brick)이 됨.
- * - 원칙: JSON 저장 시 반드시 ".tmp" 확장자로 먼저 기록하고 성공 시 rename() 하는 원자적 쓰기(Atomic Write)를 적용할 것.
- * * [방어 3: SD 카드 강제 탈거(Hot-plug) 무한 패닉 방어]
- * - 실수: 기록 중 SD 카드가 뽑히면 write() 실패를 무시하고 무한 재시도하여 Task Watchdog 패닉 유발.
- * - 원칙: I/O 에러 발생 시 _io_error 플래그를 세우고 파일 핸들을 즉각 닫아 무의미한 I/O 시도를 원천 차단할 것.
- * * [방어 4: 0 나누기 수학적 패닉(OOM) 방어]
- * - 실수: 프리트리거 할당 시 hop_size 0 유입 시 FPS가 무한대가 되어 수십 MB PSRAM 할당 시도로 즉사.
- * - 원칙: 나눗셈 연산 전 분모가 될 변수(hop_size 등)는 반드시 1 이상으로 클램핑(Clamping) 할 것.
- * * [방어 5: 다중 스레드 동시 접근에 의한 상태 파괴 (Race Condition) 방어]
+ * * [방어 1: 다중 스레드 동시 접근에 의한 상태 파괴 (Race Condition) 방어]
  * - 실수: processTask와 recorderTask가 동일한 Storage 객체에 동시 접근하여 파일 시스템 파괴 및 Use-After-Free 패닉 유발.
  * - 원칙: StorageService 내부에 Recursive Mutex를 도입하여 모든 Public API를 스레드 세이프(Thread-safe)하게 격리할 것.
- * * [방어 6: Raw 파형 기록 시 DMA 캐시 충돌 패닉 (Cache Disabled)]
+ * * [방어 2: 파일 로테이션 붕괴 및 SD 시한폭탄 차단]
+ * - 실수: 인덱스(JSON) 저장 시 배열 '추가(Append)'와 '저장(Write)'을 섞어 써서 최신 세션이 중복 증식하고, Raw 파형 파일 경로가 누락되어 SD 용량이 100% 고갈됨.
+ * - 원칙: 배열 추가(_appendIndexItem)와 파일 저장(_writeIndexFile) 로직을 완벽히 분리하고, ST_IndexItem에 raw_path를 명시하여 파일 쌍(Pair)을 동시 삭제할 것.
+ * * [방어 3: 정전 시 설정 파일 영구 파괴(0 Byte) 방어]
+ * - 실수: LittleFS에 "w" 모드로 여는 순간 파일 크기가 0이 되므로, 기록 중 정전 시 기기가 벽돌(Brick)이 됨.
+ * - 원칙: JSON 저장 시 반드시 ".tmp" 확장자로 먼저 기록하고 성공 시 rename() 하는 원자적 쓰기(Atomic Write)를 적용할 것.
+ * * [방어 4: SD 카드 강제 탈거(Hot-plug) 무한 패닉 방어]
+ * - 실수: 기록 중 SD 카드가 뽑히면 write() 실패를 무시하고 무한 재시도하여 Task Watchdog 패닉 유발.
+ * - 원칙: I/O 에러 발생 시 _io_error 플래그를 세우고 파일 핸들을 즉각 닫아 무의미한 I/O 시도를 원천 차단할 것.
+ * * [방어 5: Raw 파형 기록 시 DMA 캐시 충돌 패닉 (Cache Disabled)]
  * - 실수: PSRAM에 위치한 raw_buffer를 SD_MMC.write()로 직결하여 하드웨어 캐시 미스 패닉 유발.
  * - 원칙: pushRaw() 내부에도 MALLOC_CAP_INTERNAL 바운스 버퍼를 동적 할당하여 안전한 내부 SRAM 영역을 경유해 기록할 것.
-
+ * * [방어 6: 0 나누기 수학적 패닉(OOM) 방어]
+ * - 실수: 프리트리거 할당 시 hop_size 0 유입 시 FPS가 무한대가 되어 수십 MB PSRAM 할당 시도로 즉사.
+ * - 원칙: 나눗셈 연산 전 분모가 될 변수(hop_size 등)는 반드시 1 이상으로 클램핑(Clamping) 할 것.
  * ========================================================================== 
  */
+
+
 
 #include "T234_Storage_Service_232.h"
 #include "T219_Config_Json_231.h" // JSON 직렬화 엔진 포함

@@ -443,4 +443,3 @@ bool CL_T20_CommService::publishMqtt(const char* sub_topic, const JsonDocument& 
 - 현재까지 확인된 문제 아외에 추가로 코드를 정합성, 안정성, 신뢰성 관점에서 극한의 스트레스 상황을 가정하여 다시 한번 꼼꼼하게 교차 검증 해줘
 - 기존에 확인된거나 추가 확인된 이슈/개선 필요 사항들만 축소/누락없이 잘 정리해줘(구현은 한번에 하게)
 
-*/
