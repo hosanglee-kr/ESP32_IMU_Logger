@@ -252,7 +252,8 @@ typedef enum {
     EN_T20_CMD_START,
     EN_T20_CMD_STOP,
     EN_T20_CMD_LEARN_NOISE,
-    EN_T20_CMD_CALIBRATE
+    EN_T20_CMD_CALIBRATE,
+    EN_T20_CMD_REBOOT  // 안전한 비동기 재부팅 명령
 } EM_T20_Command_t;
 
 // 4. 레코딩 트리거 발생 소스 (어떤 이유로 기록이 켜졌는지)
@@ -582,4 +583,3 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     return cfg;
 }
-

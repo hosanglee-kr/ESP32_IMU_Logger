@@ -7,7 +7,7 @@
 #include "T231_Dsp_Pipeline_231.h"
 #include "T232_Sensor_Engine_231.h"
 #include "T233_Sequence_Builder_232.h"
-#include "T234_Storage_Service_231.h"
+#include "T234_Storage_Service_232.h"
 #include "T240_Comm_Service_231.h"
 
 struct CL_T20_Mfcc::ST_Impl {
