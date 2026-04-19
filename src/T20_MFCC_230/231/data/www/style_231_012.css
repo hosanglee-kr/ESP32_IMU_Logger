@@ -138,13 +138,14 @@ canvas[id^="chart-waterfall-"] {
     background-color: #000;
 }
 
-/* Forms & Inputs (System Admin 정렬 완벽 보정 적용) */
-.form-group { 
-    margin-bottom: 10px; 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
+/* Forms & Inputs (System Admin 포함 화면 밖으로 뚫고 나가는 모바일 버그 완벽 교정) */
+.form-group {
+    display: flex;
+    flex-wrap: nowrap; /* 기본적으로 한 줄 유지 */
+    align-items: center;
+    justify-content: space-between;
     gap: 10px;
+    margin-bottom: 12px;
 }
 .form-group.highlight {
     background: rgba(76, 175, 80, 0.08);
@@ -153,9 +154,16 @@ canvas[id^="chart-waterfall-"] {
     border-left: 3px solid var(--accent);
 }
 
-/* 라벨은 공간을 유연하게 차지하게 함 */
-.form-group label { font-size: 0.85em; color: #ccc; flex: 1; text-align: left; }
+/* 라벨은 최소한의 너비를 보장하되 필요하면 줄바꿈 허용 */
+.form-group label {
+    flex: 1;
+    font-size: 0.85em;
+    color: #ccc;
+    white-space: normal; 
+    min-width: 100px;
+}
 
+/* 인풋 요소는 남은 영역을 차지하되, 부모 밖으로 넘치지 않게 min-width: 0 적용 */
 input, select { 
     background: var(--input-bg); 
     color: white; 
@@ -168,22 +176,21 @@ input, select {
 }
 input:focus, select:focus { border-color: var(--accent); }
 
-/* 일반 폼의 Input과 Select를 우측 정렬 180px로 강제 고정 */
-.form-group > input:not([type="file"]), 
-.form-group > select, 
+.form-group > input:not([type="file"]),
+.form-group > select,
 .form-group > .range-inputs {
-    flex: 0 0 180px; 
-    width: 180px;
+    flex: 2; /* 입력 공간을 더 여유롭게 배분 */
+    width: 100%;
+    min-width: 0; /* 중요: 모바일 화면 밖으로 뚫고 나가는 것 방지 */
+    max-width: 220px; /* 데스크탑에서 너무 길어지지 않게 상한선 설정 */
 }
 
-/* 다중 대역(Bands) 주파수 범위 입력창 커스텀 정렬 */
 .range-inputs { display: flex; gap: 5px; align-items: center; justify-content: space-between;}
 .range-inputs input { width: 100%; min-width: 0; padding: 6px 5px; text-align: center;}
 .range-inputs span { color: #888; }
 
-/* OTA 파일 입력란 정렬 예외 처리 (파일 경로가 길 수 있으므로 넓게 허용) */
-.ota-row { flex-direction: row; justify-content: flex-start; gap: 15px; }
-.ota-input { flex: 1; width: 100%; max-width: none; padding: 6px; }
+.ota-row { flex-wrap: wrap; }
+.ota-input { flex: 1 1 100%; width: 100%; max-width: none; padding: 6px; }
 
 .config-box {
     background: rgba(0,0,0,0.2);

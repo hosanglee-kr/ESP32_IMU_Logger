@@ -67,24 +67,24 @@ function toggleWifiFields() {
     document.getElementById("section_sta_config").style.display = (mode === "1") ? "none" : "block";
 }
 
-// [정렬 보정] 공유기 설정 행이 .form-group 제약을 벗어나 깔끔하게 정렬되도록 CSS Grid/Flex 반영
+// [정렬 보정] 공유기 설정 HTML 렌더링 시, 좁은 폭에서도 깨지지 않도록 flex-wrap: wrap 적용
 function renderRouterHTML(idx) {
     return `
     <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
         <label style="color:#aaa; font-size:0.85em; display:block; margin-bottom:6px;">Router ${idx + 1}</label>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-            <input type="text" name="multi_ssid_${idx}" placeholder="SSID" style="flex:2; width:auto;">
-            <input type="password" name="multi_pass_${idx}" placeholder="Password" style="flex:2; width:auto;">
-            <select name="multi_static_${idx}" onchange="document.getElementById('rip_${idx}').style.display = this.value === 'true' ? 'grid' : 'none'" style="flex:1; width:auto;">
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+            <input type="text" name="multi_ssid_${idx}" placeholder="SSID" style="flex: 1 1 40%; min-width: 120px;">
+            <input type="password" name="multi_pass_${idx}" placeholder="Password" style="flex: 1 1 40%; min-width: 120px;">
+            <select name="multi_static_${idx}" onchange="document.getElementById('rip_${idx}').style.display = this.value === 'true' ? 'grid' : 'none'" style="flex: 1 1 100%;">
                 <option value="false">DHCP</option><option value="true">Static</option>
             </select>
         </div>
-        <div id="rip_${idx}" style="display:none; grid-template-columns: 1fr 1fr; gap:8px;">
+        <div id="rip_${idx}" style="display:none; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:8px;">
              <input type="text" name="multi_ip_${idx}" placeholder="IP" style="width:100%;">
              <input type="text" name="multi_gw_${idx}" placeholder="Gateway" style="width:100%;">
              <input type="text" name="multi_sn_${idx}" placeholder="Subnet" style="width:100%;">
              <input type="text" name="multi_dns1_${idx}" placeholder="DNS 1" style="width:100%;">
-             <input type="text" name="multi_dns2_${idx}" placeholder="DNS 2" style="width:100%; grid-column: span 2;">
+             <input type="text" name="multi_dns2_${idx}" placeholder="DNS 2" style="width:100%;">
         </div>
     </div>`;
 }
@@ -382,7 +382,7 @@ async function uploadOTA() {
     xhr.send(formData);
 }
 
-// [신규 기능] Config 백업 및 복원 로직
+// [기능 유지] Config 백업 및 복원 로직
 async function downloadConfig() {
     try {
         const res = await fetch(`${T20_CONST.API_BASE}/runtime_config`);
@@ -440,7 +440,6 @@ function uploadConfig(event) {
     
     reader.readAsText(file);
 }
-
 
 // ==========================================
 // 5. 설정 데이터 동기화 
