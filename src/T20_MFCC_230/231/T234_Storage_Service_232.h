@@ -8,6 +8,8 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD_MMC.h>
+#include <freertos/FreeRTOS.h> 
+#include <freertos/semphr.h>   
 
 #include "T210_Def_231.h"
 
@@ -79,6 +81,9 @@ class CL_T20_StorageService {
 	char					  _active_path[128];
 	char                      _active_raw_path[128]; // Raw 로테이션 누락 방지용 트래킹 변수
 	char					  _last_error[128];
+    char                      _current_prefix[16]; // 방어 7: 출처 변질 차단을 위한 현재 세션 접두어 트래킹
+
+
 
 	ST_T20_Config_t			  _current_cfg;		  // 현재 세션의 설정값
 	uint32_t				  _session_start_ms;  // 세션 시작 시간 (시간 로테이션용)
@@ -111,6 +116,8 @@ class CL_T20_StorageService {
 	uint16_t _index_count;
 	uint16_t _rotate_keep_max;
 	
+	SemaphoreHandle_t _lock; // 다중 스레드 동시 접근 방어를 위한 재귀적 잠금 장치
+	
 	// pretrigger 링버퍼 변수
     ST_T20_FeatureVector_t* _pre_buf = nullptr;
     uint16_t                _pre_capacity = 0;
@@ -123,3 +130,5 @@ class CL_T20_StorageService {
 
 };
 
+
+    
