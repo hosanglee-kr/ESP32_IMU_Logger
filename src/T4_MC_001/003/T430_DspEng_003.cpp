@@ -44,6 +44,16 @@ bool T430_DspEngine::init() {
     v_notchCoeffs[2] = 1.0f / v_a0;
     v_notchCoeffs[3] = (-2.0f * cosf(v_omega)) / v_a0;
     v_notchCoeffs[4] = (1.0f - v_alpha) / v_a0;
+	
+	// Notch 필터 2 (120Hz) 계수 계산 추가
+    float v_omega2 = 2.0f * (float)M_PI * SmeaConfig::Dsp::NOTCH_FREQ_2_HZ / SmeaConfig::SAMPLING_RATE;
+    float v_alpha2 = sinf(v_omega2 / SmeaConfig::Dsp::NOTCH_Q_FACTOR) / 2.0f;
+    float v_a0_2 = 1.0f + v_alpha2;
+    v_notch2Coeffs[0] = 1.0f / v_a0_2;
+    v_notch2Coeffs[1] = (-2.0f * cosf(v_omega2)) / v_a0_2;
+    v_notch2Coeffs[2] = 1.0f / v_a0_2;
+    v_notch2Coeffs[3] = (-2.0f * cosf(v_omega2)) / v_a0_2;
+    v_notch2Coeffs[4] = (1.0f - v_alpha2) / v_a0_2;
 
     // HPF 초기화 로직
     generateFirLpfWindowedSinc(v_firLpfCoeffs, SmeaConfig::Dsp::FIR_TAPS, SmeaConfig::Dsp::FIR_LPF_CUTOFF);
@@ -57,6 +67,8 @@ bool T430_DspEngine::init() {
 void T430_DspEngine::resetFilterStates() {
     memset(v_wNotchL, 0, sizeof(v_wNotchL));
     memset(v_wNotchR, 0, sizeof(v_wNotchR));
+    memset(v_wNotch2L, 0, sizeof(v_wNotch2L));
+    memset(v_wNotch2R, 0, sizeof(v_wNotch2R));
     memset(v_firStateLpfL, 0, sizeof(v_firStateLpfL)); // [수정] 변수명 매핑
     memset(v_firStateLpfR, 0, sizeof(v_firStateLpfR)); // [수정] 변수명 매핑
 
@@ -79,16 +91,22 @@ void T430_DspEngine::process(float* p_micL, float* p_micR, float* p_output, uint
     removeDC(p_micL, p_len);
     removeDC(p_micR, p_len);
 
-    // [Step 3] 핑퐁 교차 버퍼를 활용한 엄격한 파이프라인 (HPF -> LPF -> Notch)
+
+    // [Step 3] 핑퐁 교차 버퍼를 활용한 엄격한 파이프라인 (HPF -> LPF -> Notch 60Hz -> Notch 120Hz)
     // L 채널 연산 파이프라인: p_micL로 시작하여 p_micL로 되돌아옴
     dsps_fir_f32(&v_firInstHpfL, p_micL, v_workBufA, p_len);      // HPF: p_micL -> v_workBufA
     dsps_fir_f32(&v_firInstLpfL, v_workBufA, v_workBufB, p_len);  // LPF: v_workBufA -> v_workBufB
-    dsps_biquad_f32(v_workBufB, p_micL, p_len, v_notchCoeffs, v_wNotchL); // Notch: v_workBufB -> p_micL
+	dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchL); 
+    dsps_biquad_f32(v_workBufA, p_micL, p_len, v_notch2Coeffs, v_wNotch2L); // [패치 2] 120Hz 직렬 연결
+    // dsps_biquad_f32(v_workBufB, p_micL, p_len, v_notchCoeffs, v_wNotchL); // Notch: v_workBufB -> p_micL
 
     // R 채널 연산 파이프라인: p_micR로 시작하여 p_micR로 되돌아옴
     dsps_fir_f32(&v_firInstHpfR, p_micR, v_workBufA, p_len);      
     dsps_fir_f32(&v_firInstLpfR, v_workBufA, v_workBufB, p_len);  
-    dsps_biquad_f32(v_workBufB, p_micR, p_len, v_notchCoeffs, v_wNotchR); 
+    dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchR); 
+    dsps_biquad_f32(v_workBufA, p_micR, p_len, v_notch2Coeffs, v_wNotch2R); // [패치 2] 120Hz 직렬 연결
+    // dsps_biquad_f32(v_workBufB, p_micR, p_len, v_notchCoeffs, v_wNotchR); 
+
 
     // [Step 4] Noise Gate (무음구간 정숙성 확보)
     applyNoiseGate(p_micL, p_len);
@@ -200,3 +218,29 @@ void T430_DspEngine::generateFirHpfWindowedSinc(float* p_coeffs, uint16_t p_taps
     p_coeffs[v_center] += 1.0f;
 }
 
+
+
+
+###
+
+
+
+void T430_DspEngine::process(float* p_micL, float* p_micR, float* p_output, uint32_t p_len) {
+    // ... (Step 1, Step 2 유지) ...
+
+    // [Step 3] 핑퐁 교차 버퍼를 활용한 엄격한 파이프라인 (HPF -> LPF -> Notch 60Hz -> Notch 120Hz)
+    // L 채널
+    dsps_fir_f32(&v_firInstHpfL, p_micL, v_workBufA, p_len);
+    dsps_fir_f32(&v_firInstLpfL, v_workBufA, v_workBufB, p_len);
+    dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchL); 
+    dsps_biquad_f32(v_workBufA, p_micL, p_len, v_notch2Coeffs, v_wNotch2L); // [패치 2] 120Hz 직렬 연결
+
+    // R 채널
+    dsps_fir_f32(&v_firInstHpfR, p_micR, v_workBufA, p_len);      
+    dsps_fir_f32(&v_firInstLpfR, v_workBufA, v_workBufB, p_len);  
+    dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchR); 
+    dsps_biquad_f32(v_workBufA, p_micR, p_len, v_notch2Coeffs, v_wNotch2R); // [패치 2] 120Hz 직렬 연결
+
+    // ... (이하 유지) ...
+}
+###

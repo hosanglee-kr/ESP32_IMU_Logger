@@ -87,6 +87,7 @@ void T450_FsmManager::handleExternalTrigger(bool p_isActive) {
     v_isrTriggerActive = p_isActive;
 }
 
+
 void T450_FsmManager::captureTask(void* p_param) {
     T450_FsmManager* v_this = (T450_FsmManager*)p_param;
     
@@ -117,7 +118,13 @@ void T450_FsmManager::captureTask(void* p_param) {
         } 
         // 2. 외부 인터럽트가 HIGH(켜짐)이고 현재 READY 상태라면 모니터링 가동
         else if (v_currentTrigger && v_this->v_systemState == SystemState::READY) {
-            v_this->setSystemState(SystemState::MONITORING);
+			v_this->setSystemState(SystemState::RECORDING); // MONITORING 거치지 않고 바로 검사 돌입
+			v_this->v_currentTrialNo = 1;
+			v_this->v_recordStartMs = millis();
+			v_this->v_storage.openSession("trg_auto");
+			v_this->v_extractor.setNoiseLearning(true); // 1회차 워밍업 시 노이즈 학습 활성화
+				
+            // v_this->setSystemState(SystemState::MONITORING);
         }
 
         
@@ -173,13 +180,18 @@ void T450_FsmManager::processingTask(void* p_param) {
     T450_FsmManager* v_this = (T450_FsmManager*)p_param;
     uint8_t v_slotIdx;
     alignas(16) float v_beamformedOutput[SmeaConfig::FFT_SIZE];
-    
+
+
     while(1) {
+ 		
         // Ready 큐에 데이터가 들어올 때까지 대기 (최대 100ms)
         if (xQueueReceive(v_this->v_qReadySlotIdx, &v_slotIdx, pdMS_TO_TICKS(100))) {
             SmeaType::FeatureSlot& v_slot = v_this->v_featurePool[v_slotIdx];
             SmeaType::RawDataSlot& v_raw  = v_this->v_rawPool[v_slotIdx];
             
+			// 현재 트라이얼 번호 기입
+            v_slot.trial_no = v_this->v_currentTrialNo; 
+			
             // 1. DSP 정제 (L, R -> 단일 빔포밍 파형 도출)
             v_this->v_dspEngine.process(v_raw.raw_L, v_raw.raw_R, v_beamformedOutput, SmeaConfig::FFT_SIZE);
             
@@ -188,11 +200,17 @@ void T450_FsmManager::processingTask(void* p_param) {
             
             // 3. ML 텐서 조립기(SeqBuilder)에 MFCC 39D 안전 밀어넣기
             v_this->v_seqBuilder.pushVector(v_slot.mfcc);
-            
+
+         
             // 4. 하이브리드(Rule/ML) 판정
             DetectionResult v_result = v_this->runHybridDecision(v_slotIdx);
             
             if (v_result != DetectionResult::PASS) {
+                // 트리거가 들어오면 무조건 RECORDING으로 진입하도록 변경 (captureTask에서 처리됨)
+                v_this->v_communicator.publishResultMqtt(v_slot, v_result);
+            }
+			/*
+			if (v_result != DetectionResult::PASS) {
                 if (v_this->v_systemState == SystemState::MONITORING) {
                     v_this->setSystemState(SystemState::RECORDING);
                     v_this->v_storage.openSession("trg_ng"); 
@@ -204,19 +222,38 @@ void T450_FsmManager::processingTask(void* p_param) {
                     v_this->v_recordStartMs = millis(); 
                 }
             }
+			*/   
             
             // 6. 특징량 로깅 (상태 무관 무조건 호출)
             v_this->v_storage.pushFeatureSlot(&v_slot);
             v_this->v_storage.pushRawPcm(&v_raw);
             
             // 7. 스토리지 로깅 제어
+			//    3회 반복 수집 시나리오: 워밍업(학습) -> 2회차/3회차(교차 검증)
             if (v_this->v_systemState == SystemState::RECORDING) {
+                if (!v_this->v_isManualRecording && (millis() - v_this->v_recordStartMs > (SmeaConfig::VALID_END_SEC * 1000))) {
+                    if (v_this->v_currentTrialNo < 3) {
+                        v_this->v_currentTrialNo++;
+                        v_this->v_recordStartMs = millis(); 
+                        // 1회차는 배경 노이즈 학습 수행, 2회차부터 본 검사 돌입
+                        v_this->v_extractor.setNoiseLearning(v_this->v_currentTrialNo == 1);
+                    } else {
+                        v_this->v_storage.closeSession("trg_end_trials");
+                        v_this->setSystemState(v_this->v_isrTriggerActive ? SystemState::MONITORING : SystemState::READY);
+                        v_this->v_currentTrialNo = 0;
+                    }
+                }
+            }            
+			/*
+			if (v_this->v_systemState == SystemState::RECORDING) {
                 // [보완 2] 수동 녹음(v_isManualRecording) 중일 때는 0.5초 자동 종료 타이머 무시!
                 if (!v_this->v_isManualRecording && (millis() - v_this->v_recordStartMs > (SmeaConfig::VALID_END_SEC * 1000))) {
                     v_this->v_storage.closeSession("trg_end");
                     v_this->setSystemState(v_this->v_isrTriggerActive ? SystemState::MONITORING : SystemState::READY);
                 }
             }
+			*/
+			
             
             // 8. 웹/앱 실시간 차트용 바이너리 브로드캐스트
             v_this->v_communicator.broadcastBinary(v_slot.mfcc, sizeof(v_slot.mfcc));
@@ -226,11 +263,16 @@ void T450_FsmManager::processingTask(void* p_param) {
     }
 }
 
+
 DetectionResult T450_FsmManager::runHybridDecision(uint8_t p_slotIdx) {
     SmeaType::FeatureSlot& v_slot = v_featurePool[p_slotIdx];
     
+	// Priority 0: 하드웨어 단선 / 마이크 에러 감지 (Test NG)
+    if (v_slot.energy < SmeaConfig::TEST_NG_MIN_ENERGY) return DetectionResult::TEST_NG;
+	
     // Priority 1: Rule NG 검문
     if (v_slot.energy > SmeaConfig::RULE_ENRG_THRESHOLD) return DetectionResult::RULE_NG;
+	
     if (v_slot.pooling_stddev_min > SmeaConfig::RULE_STDDEV_THRESHOLD) return DetectionResult::RULE_NG;
     
     // [방어] 임펄스/타격음 오탐지 감별용 단기/장기 에너지 비율(STA/LTA) 검사 복원
@@ -275,6 +317,5 @@ void T450_FsmManager::dispatchCommand(SystemCommand p_cmd) {
             break;
     }
 }
-
 
 

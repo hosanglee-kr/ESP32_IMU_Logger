@@ -34,6 +34,7 @@ namespace SmeaConfig {
     inline constexpr float RULE_ENRG_THRESHOLD = 0.00003f;
     inline constexpr float RULE_STDDEV_THRESHOLD = 0.12f;
     inline constexpr int   MIN_TRIGGER_COUNT = 1;
+    inline constexpr float TEST_NG_MIN_ENERGY = 1e-8f; 		// 하드웨어 단선/마이크 고장 판정 하한선 (Test NG)
 
     // 5. 트리거 구간 설정 (Seconds)
     inline constexpr float NOISE_PROFILE_SEC = 0.15f;
@@ -63,20 +64,35 @@ namespace SmeaConfig {
         inline constexpr uint32_t SD_BOUNCE_BUF_SIZE = 4096;
     }
 
+	
     // 8. DSP 고정 파라미터
     namespace Dsp {
         inline constexpr float NOTCH_FREQ_HZ = 60.0f;
+		inline constexpr float NOTCH_FREQ_2_HZ = 120.0f; // 120Hz 1차 고조파 추가
         inline constexpr float NOTCH_Q_FACTOR = 30.0f;
         inline constexpr float PRE_EMPHASIS_ALPHA = 0.97f;
         inline constexpr float BEAMFORMING_GAIN = 0.5f;
         
         inline constexpr uint16_t FIR_TAPS           = 63;
-        inline constexpr float    FIR_LPF_CUTOFF     = 3800.0f; // 42kHz 빔포밍 후 대역 정제용
+        inline constexpr float    FIR_LPF_CUTOFF     = 20000.0f; // 20kHz 빔포밍 후 대역 정제용
         inline constexpr float    FIR_HPF_CUTOFF     = 100.0f;
         inline constexpr int      MEDIAN_WINDOW      = 5;
         inline constexpr float    NOISE_GATE_THRESH  = 0.001f;
         inline constexpr uint16_t NOISE_LEARN_FRAMES = 100;
         inline constexpr float    SPECTRAL_SUB_GAIN  = 1.2f;
+    }
+	
+	// 주파수 대역별 RMS (Band RMS) 설정 추가
+    namespace Feature {
+		
+		
+        inline constexpr uint8_t BAND_RMS_COUNT = 4;
+        inline constexpr float BAND_RANGES[4][2] = {
+            {10.0f, 150.0f},     // 저주파 (불균형, 정렬 불량)
+            {150.0f, 1000.0f},   // 중저주파 (기계적 풀림)
+            {1000.0f, 5000.0f},  // 중고주파 (기어 맞물림)
+            {5000.0f, 20000.0f}  // 고주파 (베어링 초기 결함)
+        };
     }
     
      // 9. 네트워크 및 웹 서버 규격 (신규 추가)

@@ -29,11 +29,16 @@ private:
     // [SIMD 가속 방어] 16바이트 정렬 계수 및 상태(Delay line) 버퍼
     // FIR 계수는 Taps + 패딩(3)을 통해 128비트 단위 초과 읽기(Over-read) 패닉을 방지함
     alignas(16) float v_notchCoeffs[5];
+	alignas(16) float v_notch2Coeffs[5]; // 120Hz 계수
+	
     alignas(16) float v_firLpfCoeffs[SmeaConfig::Dsp::FIR_TAPS + 3]; 
     
     
     alignas(16) float v_wNotchL[2]; 
     alignas(16) float v_wNotchR[2];
+	alignas(16) float v_wNotch2L[2]; 		// 120Hz 상태 딜레이
+    alignas(16) float v_wNotch2R[2]; 		// 120Hz 상태 딜레이
+	
     alignas(16) float v_firStateLpfL[SmeaConfig::Dsp::FIR_TAPS + 3];
     alignas(16) float v_firStateLpfR[SmeaConfig::Dsp::FIR_TAPS + 3];
 

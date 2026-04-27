@@ -37,8 +37,9 @@ namespace SmeaType {
     // 통합 특징량 슬롯 (Zero-copy 메모리 풀 및 SD 고속 로깅용)
     struct alignas(16) FeatureSlot {
     
-        // [MFCC 39D 텐서 배열]
-        alignas(16) float mfcc[SmeaConfig::MFCC_TOTAL_DIM];
+        alignas(16) float mfcc[SmeaConfig::MFCC_TOTAL_DIM];		// [MFCC 39D 텐서 배열]
+		
+		float band_rms[SmeaConfig::Feature::BAND_RMS_COUNT]; 	// 주파수 대역별 에너지를 보는 Band RMS 추가
         
         // [Cepstrum 타겟 특징]
         float cpsr_max[4];   // N1 ~ N4

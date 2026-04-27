@@ -91,12 +91,14 @@ bool T440_FeatureExtractor::init() {
     return true;
 }
 
+
 void T440_FeatureExtractor::extract(const float* p_cleanSignal, const float* p_rawL, const float* p_rawR, 
                                     uint32_t p_len, SmeaType::FeatureSlot& p_outSlot) {
     if (p_len > SmeaConfig::FFT_SIZE) return;
 
     computeBasicFeatures(p_cleanSignal, p_len, p_outSlot);
     computePowerSpectrum(p_cleanSignal, p_len);
+	computeBandRMS(p_outSlot); 
     computeSpectralCentroid(p_outSlot);
     computeNtopPeaks(p_outSlot);
     computeMfcc39(p_outSlot);
@@ -253,36 +255,46 @@ void T440_FeatureExtractor::computeMfcc39(SmeaType::FeatureSlot& p_slot) {
 
 void T440_FeatureExtractor::applyTemporalDerivatives(SmeaType::FeatureSlot& p_slot) {
     float* p_mfcc39 = p_slot.mfcc;
+	uint16_t v_dim = SmeaConfig::MFCC_COEFFS;
     
     // MFCC & RMS 히스토리 링버퍼 밀어내기
     if (v_historyCount < 5) {
-        memcpy(v_mfccHistory[v_historyCount], p_mfcc39, sizeof(float) * SmeaConfig::MFCC_COEFFS);
+        memcpy(v_mfccHistory[v_historyCount], p_mfcc39, sizeof(float) * v_dim);
         v_rmsHistory[v_historyCount] = p_slot.rms;
         v_historyCount++;
     } else {
-        for (int i = 0; i < 4; i++) {
-            memcpy(v_mfccHistory[i], v_mfccHistory[i + 1], sizeof(float) * SmeaConfig::MFCC_COEFFS);
-            v_rmsHistory[i] = v_rmsHistory[i + 1];
-        }
-        memcpy(v_mfccHistory[4], p_mfcc39, sizeof(float) * SmeaConfig::MFCC_COEFFS);
+        for (int i = 0; i < 4; i++) memcpy(v_mfccHistory[i], v_mfccHistory[i + 1], sizeof(float) * v_dim);
+        memcpy(v_mfccHistory[4], p_mfcc39, sizeof(float) * v_dim);
         v_rmsHistory[4] = p_slot.rms;
     }
 
-    uint16_t v_dim = SmeaConfig::MFCC_COEFFS;
+    // uint16_t v_dim = SmeaConfig::MFCC_COEFFS;
     if (v_historyCount >= 5) {
         // MFCC Delta 연산
+        // [패치 3] N=2 가중합 공식: d[t] = ((c[t+1] - c[t-1]) + 2*(c[t+2] - c[t-2])) / 10.0f
         for (int i = 0; i < v_dim; i++) {
-            p_mfcc39[v_dim + i] = (v_mfccHistory[4][i] - v_mfccHistory[2][i]) / 2.0f;
-            p_mfcc39[v_dim * 2 + i] = v_mfccHistory[4][i] - (2.0f * v_mfccHistory[3][i]) + v_mfccHistory[2][i];
+            float v_delta = ((v_mfccHistory[3][i] - v_mfccHistory[1][i]) + 2.0f * (v_mfccHistory[4][i] - v_mfccHistory[0][i])) / 10.0f;
+            p_mfcc39[v_dim + i] = v_delta;
         }
+
+        // Delta-Delta를 위한 Delta 히스토리 밀어내기
+        for (int i = 0; i < 4; i++) memcpy(v_deltaHistory[i], v_deltaHistory[i + 1], sizeof(float) * v_dim);
+        memcpy(v_deltaHistory[4], p_mfcc39 + v_dim, sizeof(float) * v_dim);
+
+        // [패치 3] N=2 기반 Delta-Delta 연산
+        for (int i = 0; i < v_dim; i++) {
+            float v_deltaDelta = ((v_deltaHistory[3][i] - v_deltaHistory[1][i]) + 2.0f * (v_deltaHistory[4][i] - v_deltaHistory[0][i])) / 10.0f;
+            p_mfcc39[v_dim * 2 + i] = v_deltaDelta;
+        }
+		
         // [보완 3] RMS Delta & Delta-Delta 연산
         p_slot.delta_rms = (v_rmsHistory[4] - v_rmsHistory[2]) / 2.0f;
         p_slot.delta_delta_rms = v_rmsHistory[4] - (2.0f * v_rmsHistory[3]) + v_rmsHistory[2];
         
     } else {
         memset(p_mfcc39 + v_dim, 0, v_dim * 2 * sizeof(float));
-        p_slot.delta_rms = 0.0f;
-        p_slot.delta_delta_rms = 0.0f;
+        // p_slot.delta_rms = 0.0f;
+        // p_slot.delta_delta_rms = 0.0f;
     }
 }
 
@@ -378,3 +390,28 @@ void T440_FeatureExtractor::computeSpatialFeatures(const float* p_L, const float
         p_slot.phase_coherence = 1.0f;
     }
 }
+
+
+// Band RMS 구현부
+void T440_FeatureExtractor::computeBandRMS(SmeaType::FeatureSlot& p_slot) {
+    float v_binRes = (float)SmeaConfig::SAMPLING_RATE / SmeaConfig::FFT_SIZE;
+    uint16_t v_maxBin = (SmeaConfig::FFT_SIZE / 2) + 1;
+
+    for (int b = 0; b < SmeaConfig::Feature::BAND_RMS_COUNT; b++) {
+        float v_startHz = SmeaConfig::Feature::BAND_RANGES[b][0];
+        float v_endHz = SmeaConfig::Feature::BAND_RANGES[b][1];
+        
+        int v_startBin = (int)(v_startHz / v_binRes);
+        int v_endBin = (int)(v_endHz / v_binRes);
+        
+        float v_sumSq = 0.0f;
+        int v_count = 0;
+        
+        for (int i = v_startBin; i <= v_endBin && i < v_maxBin; i++) {
+            v_sumSq += v_powerSpectrum[i]; 
+            v_count++;
+        }
+        p_slot.band_rms[b] = v_count > 0 ? sqrtf(v_sumSq / v_count) : 0.0f;
+    }
+}
+
