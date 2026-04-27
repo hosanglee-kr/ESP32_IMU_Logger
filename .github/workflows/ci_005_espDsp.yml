@@ -41,8 +41,8 @@ jobs:
           config.read('platformio.ini')
           all_envs = [s.split(':', 1)[1] for s in config.sections() if s.startswith('env:')]
           
-          envs = [e for e in all_envs if e in ['esp32-s3-n16r8', 'esp32-s3-zero']]
-          # envs = [e for e in all_envs if e in ['esp32-s3-n16r8']]
+          ; envs = [e for e in all_envs if e in ['esp32-s3-n16r8', 'esp32-s3-zero']]
+          envs = [e for e in all_envs if e in ['esp32-s3-n16r8']]
           if not envs and 'platformio' in config:
               default = config['platformio'].get('default_envs', '')
               if default: envs = [e.strip() for e in default.split(',')]

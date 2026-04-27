@@ -1,10 +1,11 @@
 /* ============================================================================
- * File: T410_Config_004.hpp
+ * File: T410_Config_003.hpp
  * Summary: SMEA-100 Global Configuration & Constants (JSON Dynamic Config Ready)
- * * [AI 메모: 리팩토링 요약]
- * 1. 런타임 변경 불가 하드웨어 및 메모리 규격 -> _CONST 접미사 (정적 상수)
- * 2. 웹/JSON을 통해 변경될 알고리즘 및 네트워크 설정의 초기값 -> _DEF 접미사 (동적 기본값)
- * 3. JSON 구조체 매핑(Serialization)을 용이하게 하기 위한 Namespace 논리적 재분류
+ * * [AI 메모: 리팩토링 및 방어 원칙 적용]
+ * 1. 런타임 변경 불가 메모리/하드웨어 규격 -> _CONST 접미사 (정적 상수)
+ * 2. 웹/JSON을 통해 변경될 동적 설정의 초기값 -> _DEF 접미사 (기본값)
+ * 3. [보완] 밴드 개수 동적 할당 방어: 구조체 크기 고정을 위해 MAX 상수를
+ * 도입하고, 실제 연산 개수는 _DEF 변수로 분리하여 OOM 및 정렬 파괴 방지.
  ========================================================================== */
 #pragma once
 
@@ -30,7 +31,6 @@ namespace SmeaConfig {
         inline constexpr uint32_t MEL_BANDS_CONST       = 26;
         
         inline constexpr uint32_t FEATURE_POOL_SIZE_CONST = 100;
-        inline constexpr uint32_t RAW_BUFFER_MS_CONST     = 500; // 사고 기록용 버퍼 길이
     }
 
     namespace Hardware {
@@ -49,9 +49,7 @@ namespace SmeaConfig {
         inline constexpr uint8_t  PROCESS_PRIORITY_CONST   = 5;
         inline constexpr BaseType_t CORE_CAPTURE_CONST     = 0;
         inline constexpr BaseType_t CORE_PROCESS_CONST     = 1;
-        inline constexpr uint32_t TICK_DELAY_MS_CONST      = 1;
         inline constexpr uint32_t ALIVE_CHECK_MS_CONST     = 5000;
-        inline constexpr uint32_t SD_BOUNCE_BUF_SIZE_CONST = 4096;
     }
 
     namespace StorageLimit {
@@ -67,12 +65,9 @@ namespace SmeaConfig {
     }
     
     namespace FeatureLimit {
-        inline constexpr uint8_t BAND_RMS_COUNT_CONST = 4;
-        inline constexpr uint16_t FIR_TAPS_CONST      = 63; // 딜레이 라인 버퍼 배열 크기용
-    }
-
-    namespace NetworkLimit {
-        inline constexpr uint32_t LARGE_BUF_SIZE_CONST = 8192; // JSON 파싱용 메모리 할당 기준
+        // [패치] 구조체 배열 크기 고정용 최대치 (메모리 정합성 방어)
+        inline constexpr uint8_t  MAX_BAND_RMS_COUNT_CONST = 8; 
+        inline constexpr uint16_t FIR_TAPS_CONST           = 63; 
     }
 
 
@@ -100,11 +95,19 @@ namespace SmeaConfig {
     }
 
     namespace Feature {
-        inline constexpr float BAND_RANGES_DEF[4][2] = {
-            {10.0f, 150.0f},     
-            {150.0f, 1000.0f},   
-            {1000.0f, 5000.0f},  
-            {5000.0f, 20000.0f}  
+        // [패치] 실제 런타임에 추출/순회할 활성 밴드 개수 (JSON으로 변경 가능)
+        inline constexpr uint8_t BAND_RMS_COUNT_DEF = 4; 
+        
+        // [패치] 여유 공간(MAX 8)을 확보해둔 밴드 범위 배열 기본값
+        inline constexpr float BAND_RANGES_DEF[FeatureLimit::MAX_BAND_RMS_COUNT_CONST][2] = {
+            {10.0f, 150.0f},     // 0: 저주파
+            {150.0f, 1000.0f},   // 1: 중저주파
+            {1000.0f, 5000.0f},  // 2: 중고주파
+            {5000.0f, 20000.0f}, // 3: 고주파
+            {0.0f, 0.0f},        // 4: (Reserved)
+            {0.0f, 0.0f},        // 5: (Reserved)
+            {0.0f, 0.0f},        // 6: (Reserved)
+            {0.0f, 0.0f}         // 7: (Reserved)
         };
     }
 
@@ -112,11 +115,12 @@ namespace SmeaConfig {
         inline constexpr float RULE_ENRG_THRESHOLD_DEF   = 0.00003f;
         inline constexpr float RULE_STDDEV_THRESHOLD_DEF = 0.12f;
         inline constexpr float TEST_NG_MIN_ENERGY_DEF    = 1e-8f;
-        inline constexpr int   MIN_TRIGGER_COUNT_DEF     = 1;
         
-        inline constexpr float NOISE_PROFILE_SEC_DEF = 0.15f;
-        inline constexpr float VALID_START_SEC_DEF   = 0.30f;
-        inline constexpr float VALID_END_SEC_DEF     = 0.50f;
+        inline constexpr int   MIN_TRIGGER_COUNT_DEF     = 1; // 누락 복구
+        
+        inline constexpr float NOISE_PROFILE_SEC_DEF     = 0.15f;
+        inline constexpr float VALID_START_SEC_DEF       = 0.30f;
+        inline constexpr float VALID_END_SEC_DEF         = 0.50f;
     }
 
     namespace Storage {
@@ -141,7 +145,7 @@ namespace SmeaConfig {
         inline constexpr char     WS_URI_DEF[]          = "/ws";
         inline constexpr uint32_t WIFI_CONN_TIMEOUT_DEF = 4000;
         inline constexpr uint32_t WIFI_RETRY_MS_DEF     = 10000;
-        inline constexpr uint32_t NTP_TIMEOUT_MS_DEF    = 5000;
+        inline constexpr uint32_t LARGE_BUF_SIZE_DEF    = 8192; 
         
         inline constexpr char     NTP_SERVER_1_DEF[]    = "pool.ntp.org";
         inline constexpr char     NTP_SERVER_2_DEF[]    = "time.nist.gov";
@@ -156,23 +160,23 @@ namespace SmeaConfig {
 }
 
 enum class SystemState : uint8_t {
-    INIT = 0,
-    READY,
-    MONITORING,
-    RECORDING,
+    INIT = 0, 
+    READY, 
+    MONITORING, 
+    RECORDING, 
     ERROR
 };
 
 enum class DetectionResult : uint8_t {
-    PASS = 0,
-    RULE_NG = 1,
-    TEST_NG = 2,
+    PASS = 0, 
+    RULE_NG = 1, 
+    TEST_NG = 2, 
     ML_NG = 3
 };
 
 enum class SystemCommand : uint8_t {
-    CMD_MANUAL_RECORD_START,
-    CMD_MANUAL_RECORD_STOP,
-    CMD_LEARN_NOISE,
+    CMD_MANUAL_RECORD_START, 
+    CMD_MANUAL_RECORD_STOP, 
+    CMD_LEARN_NOISE, 
     CMD_REBOOT
 };
