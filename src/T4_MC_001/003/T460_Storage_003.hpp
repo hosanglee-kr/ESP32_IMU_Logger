@@ -1,0 +1,153 @@
+/* ============================================================================
+ * File: T460_Storage_003.hpp
+ * Summary: 
+ 
+ * [SMEA-100 핵심 구현 원칙 및 AI 셀프 회고 바이블]
+ * 본 주석은 프로젝트 전반에 걸쳐 절대 삭제되어서는 안 되며,
+ * 코드를 수정/확장할 때마다 항상 최신 상태로 유지하고 점검해야 합니다.
+ * ============================================================================
+ *
+ * [1. 시스템 아키텍처 및 하드웨어 구현 원칙]
+ * 1. 매직넘버 철폐: 모든 설정은 SmeaConfig 네임스페이스 상수화.
+ * 2. 16-Byte 정렬(SIMD 최적화): alignas(16) 강제 정렬.
+ *
+ * [2. AI 가 자주 반복하는 실수 및 방어 원칙 (Self-Reflection)]
+ * 1. (실수) 다중 스레드(FSM / Web) 동시 접근 시 상태 파괴 (Race Condition).
+ * -> (방어) 스토리지 클래스 내부에 xSemaphoreCreateRecursiveMutex 적용.
+ * 2. (실수) LittleFS 파일 "w" 쓰기 시 정전 발생 -> 0바이트 파괴 (벽돌화).
+ * -> (방어) 인덱스 파일은 무조건 .tmp로 기록 후 rename()하는 원자적 쓰기(Atomic Write) 적용.
+ * 3. (실수) SD 카드 탈거 시 무한 I/O 재시도로 인한 Task Watchdog 패닉.
+ * -> (방어) I/O 에러 시 v_ioError 플래그를 세워 I/O 시도를 원천 차단.
+ * 4. (실수) PSRAM 데이터(Raw)를 SD 카드로 직결하여 DMA 캐시 충돌 패닉.
+ * -> (방어) Raw 기록 시 MALLOC_CAP_INTERNAL(내부 SRAM) Bounce Buffer 할당 후 경유.
+ *
+ * [3. 기능 축소/누락 점검 및 보완 원칙 (Anti-Reduction)]
+ * 1. T20의 Pre-trigger, Auto Rotation, Raw Pair 삭제 기능을 누락 없이 SMEA-100에 통합.
+ *
+ * [WARNING: 스토리지 엔진 유지보수 시 주의사항]
+ * 1. v_preBuf(프리트리거)는 크기가 크므로 반드시 MALLOC_CAP_SPIRAM 으로 할당.
+ * 2. 파일 로테이션 시 Raw 파일 누수를 막기 위해 IndexItem에 raw_path 동반 삭제 유지.
+ *
+ * [TODO: 스토리지 엔진 추후 고도화 항목]
+ * - 플래시 메모리 마모도 평준화(Wear-leveling) 통계 추적 API 추가.
+ * - ML 모델 엣지 판정 결과(DetectionResult)에 따른 로깅 우선순위(QoS) 분기 구현.
+ * ========================================================================== */
+#pragma once
+
+#include "T410_Config_003.hpp"
+#include "T420_Types_003.hpp"
+#include <FS.h>
+#include <LittleFS.h>
+#include <SD_MMC.h>
+#include <freertos/FreeRTOS.h> 
+#include <freertos/semphr.h>   
+
+class T460_StorageManager {
+public:
+    T460_StorageManager();
+    ~T460_StorageManager();
+
+    bool init();
+
+    /**
+     * @brief 파일 세션 오픈 (트리거 또는 수동)
+     * @param p_prefix "trg" (트리거), "man" (수동) 등 파일 접두어
+     */
+    bool openSession(const char* p_prefix = "trg");
+    
+    /**
+     * @brief 파일 세션 종료 및 인덱스 파일 갱신
+     */
+    void closeSession(const char* p_reason = "end_normal");
+
+    /**
+     * @brief 특징량 슬롯 고속 기록 (Zero-Copy DMA 핑퐁)
+     * 세션이 닫혀 있을 때는 PSRAM 프리트리거 링버퍼에 저장.
+     */
+    bool pushFeatureSlot(const SmeaType::FeatureSlot* p_slot);
+
+    /**
+     * @brief Raw 파형(42kHz) 안전 기록 (내부 SRAM 바운스 버퍼 경유)
+     */
+    bool pushRawPcm(const SmeaType::RawDataSlot* p_rawSlot);
+
+
+    /**
+     * @brief 잔여 버퍼 SD카드 강제 플러시
+     */
+    bool flush();
+    void checkIdleFlush();
+    void checkRotation();
+
+    bool isOpen() const { return v_sessionOpen; }
+    const char* getLastError() const { return v_lastError; }
+
+private:
+    bool commitDmaSlot(uint8_t p_slotIdx);
+    void handleRotation();
+    
+    // 로테이션 인덱스 관리 (A2 방어)
+    void appendIndexItem(); 
+    bool writeIndexFileAtomic();
+    bool loadIndexJson();
+    
+    // 프리트리거 관리
+    bool pushToDma(const SmeaType::FeatureSlot* p_slot);
+    void flushPreBuffer();
+    void allocatePreBuffer();
+
+private:
+    File v_activeFile;     // 특징량(.bin)
+    File v_rawFile;        // 원본 파형(.pcm)
+
+    bool v_sessionOpen;
+    bool v_ioError;        // 핫플러그 방어 플래그
+    
+    uint32_t v_recordCount;
+    char v_activePath[128];
+    char v_activeRawPath[128]; // Raw 쌍(Pair) 삭제 트래킹
+    char v_lastError[128];
+    char v_currentPrefix[16];
+
+    uint32_t v_sessionStartMs;
+    uint32_t v_writtenBytes;
+
+    // --- DMA 버퍼링 (SIMD 정렬) ---
+    alignas(16) uint8_t v_dmaSlots[SmeaConfig::Storage::DMA_SLOT_COUNT][SmeaConfig::Storage::DMA_SLOT_BYTES];
+    uint16_t v_dmaSlotUsed[SmeaConfig::Storage::DMA_SLOT_COUNT];
+    uint8_t  v_dmaActiveSlot;
+
+    uint16_t v_batchCount;
+    uint32_t v_lastPushMs;
+
+    // --- 파일 로테이션 트래킹 구조체 ---
+    struct IndexItem {
+        char path[128];
+        char raw_path[128];
+        uint32_t size_bytes;
+        uint32_t created_ms;
+        uint32_t record_count;
+    } v_indexItems[SmeaConfig::Storage::MAX_ROTATE_LIST];
+
+    uint16_t v_indexCount;
+    
+    SemaphoreHandle_t v_lock; // 스레드 경합 방어 (Recursive Mutex)
+    
+    // Raw 데이터 다이렉트 파일 기록 (Bounce Buffer 처리)
+    bool writeRawDirect(const SmeaType::RawDataSlot* p_rawSlot);
+
+    // --- Pre-trigger 듀얼 링버퍼 ---
+    SmeaType::FeatureSlot* v_preFeatBuf = nullptr;
+    SmeaType::RawDataSlot* v_preRawBuf  = nullptr; // 2.4MB PSRAM 할당 필요
+    
+    float* v_bounceBuf = nullptr; // 8KB Internal SRAM 전용 버퍼 추가
+    
+    uint16_t v_preCapacity = 0;
+    uint16_t v_preHeadFeat = 0, v_preCountFeat = 0;
+    uint16_t v_preHeadRaw  = 0, v_preCountRaw  = 0;
+    
+    uint32_t v_bootFileSeq = 0;
+    uint16_t v_rotationSubSeq = 0;
+};
+
+
