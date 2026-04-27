@@ -77,8 +77,8 @@ namespace SmeaType {
 
     // I2S 데이터 수집용 버퍼 기술자 (필요 시 콜백 등에서 포인터 전달용)
     struct RawDataBlock {
-        float* p_buffer_L;
-        float* p_buffer_R;
+        float*           buffer_L;
+        float*           buffer_R;
         uint32_t         length;
     };
 }
