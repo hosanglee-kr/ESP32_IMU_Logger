@@ -26,7 +26,11 @@ T440_FeatureExtractor::T440_FeatureExtractor() {
     v_dctMatrixFlat = nullptr;
     v_fftSpatialL = nullptr;
     v_fftSpatialR = nullptr;
+
     memset(v_mfccHistory, 0, sizeof(v_mfccHistory));
+    memset(v_deltaHistory, 0, sizeof(v_deltaHistory)); 
+}
+
 }
 
 T440_FeatureExtractor::~T440_FeatureExtractor() {

@@ -45,6 +45,9 @@ private:
     // [보완 2] 멀티스레드(Web API - FSM) 간 변수 경합 방어 (캐싱 금지)
     volatile uint32_t v_recordStartMs = 0; 
     volatile bool v_isManualRecording = false; 
+    
+    uint8_t v_currentTrialNo = 0; // 3회 반복 검증 시나리오 카운터
+
 
 public:
     static T450_FsmManager& getInstance() {

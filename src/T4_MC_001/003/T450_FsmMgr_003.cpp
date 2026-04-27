@@ -206,23 +206,14 @@ void T450_FsmManager::processingTask(void* p_param) {
             DetectionResult v_result = v_this->runHybridDecision(v_slotIdx);
             
             if (v_result != DetectionResult::PASS) {
-                // 트리거가 들어오면 무조건 RECORDING으로 진입하도록 변경 (captureTask에서 처리됨)
-                v_this->v_communicator.publishResultMqtt(v_slot, v_result);
-            }
-			/*
-			if (v_result != DetectionResult::PASS) {
                 if (v_this->v_systemState == SystemState::MONITORING) {
                     v_this->setSystemState(SystemState::RECORDING);
-                    v_this->v_storage.openSession("trg_ng"); 
-                    v_this->v_recordStartMs = millis(); 
-                    v_this->v_communicator.publishResultMqtt(v_slot, v_result);
-                } 
-                // [보완 3] 이미 자동 녹음 중인데 계속 불량이 나면 녹음 시간 연장 (Retrigger)
-                else if (v_this->v_systemState == SystemState::RECORDING && !v_this->v_isManualRecording) {
+                    v_this->v_storage.openSession("trg_ng_detect"); // 모니터링 중 적발
                     v_this->v_recordStartMs = millis(); 
                 }
+                // MQTT 브로드캐스트는 유지
+                v_this->v_communicator.publishResultMqtt(v_slot, v_result);
             }
-			*/   
             
             // 6. 특징량 로깅 (상태 무관 무조건 호출)
             v_this->v_storage.pushFeatureSlot(&v_slot);

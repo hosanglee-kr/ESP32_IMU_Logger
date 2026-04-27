@@ -28,6 +28,9 @@ private:
     float* v_fftSpatialL;
     float* v_fftSpatialR;
     
+    alignas(16) float v_deltaHistory[5][SmeaConfig::MFCC_COEFFS]; // N=2 연산용
+
+    
     // Internal SRAM 할당 (고속 접근용)
     alignas(16) float v_fftWorkBuf[SmeaConfig::FFT_SIZE * 2];
     alignas(16) float v_powerSpectrum[BINS_PADDED];
