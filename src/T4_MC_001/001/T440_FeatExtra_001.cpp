@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "dsps_fft2r.h"
 #include "dsps_wind.h"
+#include "dspm_mult.h"  // [수정] SIMD 행렬 곱셈 가속 API 헤더 추가
 #include <cmath>
 #include <cstring>
 #include <algorithm> 
