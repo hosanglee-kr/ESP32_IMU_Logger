@@ -150,6 +150,7 @@ namespace SmeaConfig {
         inline constexpr char     NTP_SERVER_1_DEF[]    = "pool.ntp.org";
         inline constexpr char     NTP_SERVER_2_DEF[]    = "time.nist.gov";
         inline constexpr char     TZ_INFO_DEF[]         = "KST-9";
+        inline constexpr uint32_t NTP_TIMEOUT_MS_DEF    = 5000;
     }
 
     namespace Mqtt {
