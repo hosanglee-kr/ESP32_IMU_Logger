@@ -17,8 +17,7 @@
 [platformio]
 
 	default_envs 			= esp32-s3-devkitm-1
-	; data_dir        		= ./src/T20_MFCC_230/231/data
-	data_dir        		= ./src/T4_MC_001/001/data
+	data_dir        		= ./src/T20_MFCC_230/231/data
 	build_cache_dir         = ./.pio/build_cache
 
 [env:esp32-s3-devkitm-1]
@@ -72,7 +71,6 @@
 						-<*>                          ; 일단 모든 파일을 제외
 						+<main.cpp>                    ; 루트의 main.cpp만 포함
 						+<T20_MFCC_230/231/>
-						+<T4_MC_001/001/>
 						;+<T20_MFCC_212/214/>
 						; +<T20_MFCC_011/212/>           ; 212 폴더 내의 소스들만 포함
 
