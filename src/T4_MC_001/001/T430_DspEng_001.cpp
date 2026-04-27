@@ -161,8 +161,13 @@ void T430_DspEngine::applyNoiseGate(float* p_data, uint32_t p_len) {
 }
 
 void T430_DspEngine::applyBeamforming(const float* p_L, const float* p_R, float* p_out, uint32_t p_len) {
-    dsps_add_f32(p_L, p_R, p_out, p_len);
-    dsps_mulc_f32(p_out, p_out, SmeaConfig::Dsp::BEAMFORMING_GAIN, p_len);
+    // 1. L과 R 채널 배열을 더하여 p_out에 저장 
+    // 파라미터: (입력1, 입력2, 출력, 처리길이, 입력1_간격, 입력2_간격, 출력_간격)
+    dsps_add_f32(p_L, p_R, p_out, p_len, 1, 1, 1);
+
+    // 2. 합쳐진 p_out 배열에 BEAMFORMING_GAIN(0.5f) 상수를 곱하여 제자리(In-place) 저장
+    // 파라미터: (입력, 출력, 처리길이, 곱할상수, 입력_간격, 출력_간격)
+    dsps_mulc_f32(p_out, p_out, p_len, SmeaConfig::Dsp::BEAMFORMING_GAIN, 1, 1);
 }
 
 void T430_DspEngine::generateFirLpfWindowedSinc(float* p_coeffs, uint16_t p_taps, float p_cutoffHz) {
@@ -194,5 +199,4 @@ void T430_DspEngine::generateFirHpfWindowedSinc(float* p_coeffs, uint16_t p_taps
     }
     p_coeffs[v_center] += 1.0f;
 }
-
 
