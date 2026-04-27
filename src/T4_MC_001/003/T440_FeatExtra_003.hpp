@@ -55,6 +55,7 @@ private:
     void computeBasicFeatures(const float* p_signal, uint32_t p_len, SmeaType::FeatureSlot& p_slot);
     void computePowerSpectrum(const float* p_signal, uint32_t p_len);
     void computeSpectralCentroid(SmeaType::FeatureSlot& p_slot); 
+    void computeBandRMS(SmeaType::FeatureSlot& p_slot);
     
     void computeNtopPeaks(SmeaType::FeatureSlot& p_slot);
     void computeMfcc39(SmeaType::FeatureSlot& p_slot);
