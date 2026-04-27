@@ -217,30 +217,3 @@ void T430_DspEngine::generateFirHpfWindowedSinc(float* p_coeffs, uint16_t p_taps
     }
     p_coeffs[v_center] += 1.0f;
 }
-
-
-
-
-###
-
-
-
-void T430_DspEngine::process(float* p_micL, float* p_micR, float* p_output, uint32_t p_len) {
-    // ... (Step 1, Step 2 유지) ...
-
-    // [Step 3] 핑퐁 교차 버퍼를 활용한 엄격한 파이프라인 (HPF -> LPF -> Notch 60Hz -> Notch 120Hz)
-    // L 채널
-    dsps_fir_f32(&v_firInstHpfL, p_micL, v_workBufA, p_len);
-    dsps_fir_f32(&v_firInstLpfL, v_workBufA, v_workBufB, p_len);
-    dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchL); 
-    dsps_biquad_f32(v_workBufA, p_micL, p_len, v_notch2Coeffs, v_wNotch2L); // [패치 2] 120Hz 직렬 연결
-
-    // R 채널
-    dsps_fir_f32(&v_firInstHpfR, p_micR, v_workBufA, p_len);      
-    dsps_fir_f32(&v_firInstLpfR, v_workBufA, v_workBufB, p_len);  
-    dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchR); 
-    dsps_biquad_f32(v_workBufA, p_micR, p_len, v_notch2Coeffs, v_wNotch2R); // [패치 2] 120Hz 직렬 연결
-
-    // ... (이하 유지) ...
-}
-###
