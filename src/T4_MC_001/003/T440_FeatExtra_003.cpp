@@ -31,8 +31,6 @@ T440_FeatureExtractor::T440_FeatureExtractor() {
     memset(v_deltaHistory, 0, sizeof(v_deltaHistory)); 
 }
 
-}
-
 T440_FeatureExtractor::~T440_FeatureExtractor() {
     if (v_melBankFlat) heap_caps_free(v_melBankFlat);
     if (v_dctMatrixFlat) heap_caps_free(v_dctMatrixFlat);
