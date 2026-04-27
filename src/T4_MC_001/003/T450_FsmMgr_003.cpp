@@ -75,7 +75,7 @@ void T450_FsmManager::setSystemState(SystemState p_nextState) {
     // MONITORING 또는 RECORDING 상태로 진입 시 (수동 녹음 다이렉트 진입 포함)
     else if (p_nextState == SystemState::MONITORING || p_nextState == SystemState::RECORDING) {
         if (v_prevState == SystemState::READY) {
-            // [보완 1] 큐 강제 초기화(Reset/Refill) 코드 완전 삭제. 
+            // 큐 강제 초기화(Reset/Refill) 코드 완전 삭제. 
             // In-flight 중인 슬롯의 데이터 오염(Race Condition)을 막고 자연 순환에 맡김.
             v_micEngine.resume();            
             v_dspEngine.resetFilterStates(); 
@@ -108,7 +108,7 @@ void T450_FsmManager::captureTask(void* p_param) {
         bool v_currentTrigger = v_this->v_isrTriggerActive;
         
         // 1. 외부 인터럽트(핀)가 LOW(꺼짐)로 떨어졌을 때 무조건 READY로 강제 강등 (Fail-safe)
-        // [보완 1] 단, "수동 녹음 중(!v_this->v_isManualRecording)"이 아닐 때만 하드웨어 핀 제어가 개입하도록 수정
+        // 단, "수동 녹음 중(!v_this->v_isManualRecording)"이 아닐 때만 하드웨어 핀 제어가 개입하도록 수정
         if (!v_currentTrigger && v_this->v_systemState != SystemState::READY && !v_this->v_isManualRecording) {
             // 만약 자동 녹음 중이었다면 강제로 세션 종료
             if (v_this->v_systemState == SystemState::RECORDING) {
@@ -164,7 +164,7 @@ void T450_FsmManager::captureTask(void* p_param) {
             // I2S 데이터 유실 시 슬라이딩 윈도우 영구 오염을 막기 위한 자가 치유
             else {
                 // 논리적인 상태(v_systemState)는 모니터링/녹음을 유지하되,
-                // 다음 프레임에서 1024 샘플 전체를 다시 읽어(초기 펌핑) 윈도우를 깨끗하게 복구시킵니다.
+                // 다음 프레임에서 1024 샘플 전체를 다시 읽어(초기 펌핑) 윈도우를 깨끗하게 복구시킴
                 v_lastState = SystemState::READY; 
                 ESP_LOGW(TAG, "I2S Drop Detected! Auto-healing sliding window...");
             }
@@ -237,7 +237,7 @@ void T450_FsmManager::processingTask(void* p_param) {
             }            
 			/*
 			if (v_this->v_systemState == SystemState::RECORDING) {
-                // [보완 2] 수동 녹음(v_isManualRecording) 중일 때는 0.5초 자동 종료 타이머 무시!
+                // 수동 녹음(v_isManualRecording) 중일 때는 0.5초 자동 종료 타이머 무시!
                 if (!v_this->v_isManualRecording && (millis() - v_this->v_recordStartMs > (SmeaConfig::VALID_END_SEC * 1000))) {
                     v_this->v_storage.closeSession("trg_end");
                     v_this->setSystemState(v_this->v_isrTriggerActive ? SystemState::MONITORING : SystemState::READY);
@@ -284,7 +284,7 @@ void T450_FsmManager::dispatchCommand(SystemCommand p_cmd) {
     switch (p_cmd) {
         case SystemCommand::CMD_MANUAL_RECORD_START:
             if (v_systemState == SystemState::MONITORING || v_systemState == SystemState::READY) {
-                v_isManualRecording = true; // [보완 2] 수동 플래그 ON
+                v_isManualRecording = true; // 수동 플래그 ON
                 setSystemState(SystemState::RECORDING);
                 v_storage.openSession("man"); 
                 v_recordStartMs = millis();   
@@ -294,7 +294,7 @@ void T450_FsmManager::dispatchCommand(SystemCommand p_cmd) {
             if (v_systemState == SystemState::RECORDING && v_isManualRecording) {
                 v_isManualRecording = false; 
                 v_storage.closeSession("man_end");
-                // [보완 2] 수동 녹음 종료 시 무조건 MONITORING이 아닌, ISR 핀 상태에 맞춰 지능적 복귀
+                // 수동 녹음 종료 시 무조건 MONITORING이 아닌, ISR 핀 상태에 맞춰 지능적 복귀
                 setSystemState(v_isrTriggerActive ? SystemState::MONITORING : SystemState::READY);
             }
             break;

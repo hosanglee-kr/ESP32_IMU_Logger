@@ -17,12 +17,12 @@ bool T480_MicEngine::init() {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = SmeaConfig::SAMPLING_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, // ICS43434 2채널 모드
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,        // ICS43434 2채널 모드
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 8,
         .dma_buf_len = SmeaConfig::FFT_SIZE,
-        .use_apll = true // 고음질 오디오용 고정밀 오실레이터 활성화
+        .use_apll = true                                     // 고음질 오디오용 고정밀 오실레이터 활성화
     };
 
     i2s_pin_config_t v_pinConfig = {
@@ -78,7 +78,7 @@ void T480_MicEngine::clearBuffer() {
 }
 
 uint32_t T480_MicEngine::readData(float* p_outL, float* p_outR, uint32_t p_reqSamples) {
-    // [정합성 방어] 일시 정지(pause) 상태일 때는 I2S 읽기 대기(Block)를 즉시 회피합니다.
+    // [정합성 방어] 일시 정지(pause) 상태일 때는 I2S 읽기 대기(Block)를 즉시 회피
     if (!v_isInitialized || v_isPaused || !p_outL || !p_outR) return 0;
 
     size_t v_bytesRead = 0;

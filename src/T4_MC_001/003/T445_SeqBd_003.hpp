@@ -36,9 +36,7 @@ public:
 
     bool isReady() const { return v_isFull; }
 
-    /**
-     * @brief 텐서를 1D 플랫 배열로 직렬화 추출 (OOM 힙 파괴 방어 적용)
-     */
+    // 텐서를 1D 플랫 배열로 직렬화 추출 (OOM 힙 파괴 방어 적용)
     void getSequenceFlat(float* p_outBuffer, size_t p_maxOutSize) const;
 };
 

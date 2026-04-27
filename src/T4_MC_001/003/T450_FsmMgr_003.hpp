@@ -12,7 +12,6 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-// [적발 4 보완] Include 파일명 _001 규칙 엄수
 #include "T430_DspEng_003.hpp"
 #include "T440_FeatExtra_003.hpp"
 #include "T480_MicEng_003.hpp"
@@ -42,7 +41,7 @@ private:
 
     volatile bool v_isrTriggerActive = false; 
     
-    // [보완 2] 멀티스레드(Web API - FSM) 간 변수 경합 방어 (캐싱 금지)
+    // 멀티스레드(Web API - FSM) 간 변수 경합 방어 (캐싱 금지)
     volatile uint32_t v_recordStartMs = 0; 
     volatile bool v_isManualRecording = false; 
     

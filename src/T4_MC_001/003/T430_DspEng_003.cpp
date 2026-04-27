@@ -57,8 +57,8 @@ bool T430_DspEngine::init() {
 
     // HPF 초기화 로직
     generateFirLpfWindowedSinc(v_firLpfCoeffs, SmeaConfig::Dsp::FIR_TAPS, SmeaConfig::Dsp::FIR_LPF_CUTOFF);
-    dsps_fir_init_f32(&v_firInstLpfL, v_firLpfCoeffs, v_firStateLpfL, SmeaConfig::Dsp::FIR_TAPS); // [수정] 변수명 매핑
-    dsps_fir_init_f32(&v_firInstLpfR, v_firLpfCoeffs, v_firStateLpfR, SmeaConfig::Dsp::FIR_TAPS); // [수정] 변수명 매핑
+    dsps_fir_init_f32(&v_firInstLpfL, v_firLpfCoeffs, v_firStateLpfL, SmeaConfig::Dsp::FIR_TAPS); 
+    dsps_fir_init_f32(&v_firInstLpfR, v_firLpfCoeffs, v_firStateLpfR, SmeaConfig::Dsp::FIR_TAPS); 
 
     resetFilterStates();
     return true;
@@ -69,8 +69,8 @@ void T430_DspEngine::resetFilterStates() {
     memset(v_wNotchR, 0, sizeof(v_wNotchR));
     memset(v_wNotch2L, 0, sizeof(v_wNotch2L));
     memset(v_wNotch2R, 0, sizeof(v_wNotch2R));
-    memset(v_firStateLpfL, 0, sizeof(v_firStateLpfL)); // [수정] 변수명 매핑
-    memset(v_firStateLpfR, 0, sizeof(v_firStateLpfR)); // [수정] 변수명 매핑
+    memset(v_firStateLpfL, 0, sizeof(v_firStateLpfL));
+    memset(v_firStateLpfR, 0, sizeof(v_firStateLpfR)); 
 
     // HPF 딜레이 라인 소거 로직
     memset(v_firStateHpfL, 0, sizeof(v_firStateHpfL));
@@ -97,14 +97,14 @@ void T430_DspEngine::process(float* p_micL, float* p_micR, float* p_output, uint
     dsps_fir_f32(&v_firInstHpfL, p_micL, v_workBufA, p_len);      // HPF: p_micL -> v_workBufA
     dsps_fir_f32(&v_firInstLpfL, v_workBufA, v_workBufB, p_len);  // LPF: v_workBufA -> v_workBufB
 	dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchL); 
-    dsps_biquad_f32(v_workBufA, p_micL, p_len, v_notch2Coeffs, v_wNotch2L); // [패치 2] 120Hz 직렬 연결
-    // dsps_biquad_f32(v_workBufB, p_micL, p_len, v_notchCoeffs, v_wNotchL); // Notch: v_workBufB -> p_micL
+    dsps_biquad_f32(v_workBufA, p_micL, p_len, v_notch2Coeffs, v_wNotch2L);   // 120Hz 직렬 연결
+    // dsps_biquad_f32(v_workBufB, p_micL, p_len, v_notchCoeffs, v_wNotchL);  // Notch: v_workBufB -> p_micL
 
     // R 채널 연산 파이프라인: p_micR로 시작하여 p_micR로 되돌아옴
     dsps_fir_f32(&v_firInstHpfR, p_micR, v_workBufA, p_len);      
     dsps_fir_f32(&v_firInstLpfR, v_workBufA, v_workBufB, p_len);  
     dsps_biquad_f32(v_workBufB, v_workBufA, p_len, v_notchCoeffs, v_wNotchR); 
-    dsps_biquad_f32(v_workBufA, p_micR, p_len, v_notch2Coeffs, v_wNotch2R); // [패치 2] 120Hz 직렬 연결
+    dsps_biquad_f32(v_workBufA, p_micR, p_len, v_notch2Coeffs, v_wNotch2R); // 120Hz 직렬 연결
     // dsps_biquad_f32(v_workBufB, p_micR, p_len, v_notchCoeffs, v_wNotchR); 
 
 

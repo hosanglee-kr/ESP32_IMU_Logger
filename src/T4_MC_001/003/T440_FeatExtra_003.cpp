@@ -114,7 +114,7 @@ void T440_FeatureExtractor::computeBasicFeatures(const float* p_signal, uint32_t
     float v_staEnergy = 0.0f;
     float v_ltaEnergy = 0.0f;
     
-    // [보완 1] 첨도(Kurtosis) 연산을 위한 평균(Mean) 계산
+    // 첨도(Kurtosis) 연산을 위한 평균(Mean) 계산
     float v_sum = 0.0f;
     for (uint32_t i = 0; i < p_len; i++) v_sum += p_signal[i];
     float v_mean = v_sum / p_len;
@@ -130,7 +130,7 @@ void T440_FeatureExtractor::computeBasicFeatures(const float* p_signal, uint32_t
         if (i < 42) v_staEnergy += v_val * v_val;
         if (i < 420) v_ltaEnergy += v_val * v_val;
 
-        // [보완 1] 분산 및 4차 모멘트 누적
+        // 분산 및 4차 모멘트 누적
         float v_diff = p_signal[i] - v_mean;
         float v_diff2 = v_diff * v_diff;
         v_varianceSum += v_diff2;
@@ -142,7 +142,7 @@ void T440_FeatureExtractor::computeBasicFeatures(const float* p_signal, uint32_t
     p_slot.crest_factor = p_slot.rms > 0 ? (v_peak / p_slot.rms) : 0.0f;
     p_slot.sta_lta_ratio = v_ltaEnergy > 0 ? (v_staEnergy / (v_ltaEnergy / 10.0f)) : 1.0f;
 
-    // [보완 1] Kurtosis 계산 (정규분포=3. 3보다 크면 뾰족한 임펄스 존재)
+    // Kurtosis 계산 (정규분포=3. 3보다 크면 뾰족한 임펄스 존재)
     float v_variance = v_varianceSum / p_len;
     float v_moment4 = v_moment4Sum / p_len;
     p_slot.kurtosis = (v_variance > 1e-12f) ? (v_moment4 / (v_variance * v_variance)) : 0.0f;
@@ -171,7 +171,7 @@ void T440_FeatureExtractor::computePowerSpectrum(const float* p_signal, uint32_t
         v_powerSpectrum[i] = fmaxf((v_re * v_re + v_im * v_im), 1e-12f);
     }
 
-    // [보완] ANC: 백그라운드 노이즈 프로파일링 학습 및 스펙트럼 감산
+    // ANC: 백그라운드 노이즈 프로파일링 학습 및 스펙트럼 감산
     if (v_isNoiseLearning || v_noiseLearnedFrames < SmeaConfig::Dsp::NOISE_LEARN_FRAMES) {
         float v_count = (float)v_noiseLearnedFrames;
         for (uint16_t i = 0; i < v_bins; i++) {
@@ -270,10 +270,9 @@ void T440_FeatureExtractor::applyTemporalDerivatives(SmeaType::FeatureSlot& p_sl
         v_rmsHistory[4] = p_slot.rms;
     }
 
-    // uint16_t v_dim = SmeaConfig::MFCC_COEFFS;
     if (v_historyCount >= 5) {
         // MFCC Delta 연산
-        // [패치 3] N=2 가중합 공식: d[t] = ((c[t+1] - c[t-1]) + 2*(c[t+2] - c[t-2])) / 10.0f
+        // N=2 가중합 공식: d[t] = ((c[t+1] - c[t-1]) + 2*(c[t+2] - c[t-2])) / 10.0f
         for (int i = 0; i < v_dim; i++) {
             float v_delta = ((v_mfccHistory[3][i] - v_mfccHistory[1][i]) + 2.0f * (v_mfccHistory[4][i] - v_mfccHistory[0][i])) / 10.0f;
             p_mfcc39[v_dim + i] = v_delta;
@@ -283,13 +282,13 @@ void T440_FeatureExtractor::applyTemporalDerivatives(SmeaType::FeatureSlot& p_sl
         for (int i = 0; i < 4; i++) memcpy(v_deltaHistory[i], v_deltaHistory[i + 1], sizeof(float) * v_dim);
         memcpy(v_deltaHistory[4], p_mfcc39 + v_dim, sizeof(float) * v_dim);
 
-        // [패치 3] N=2 기반 Delta-Delta 연산
+        // N=2 기반 Delta-Delta 연산
         for (int i = 0; i < v_dim; i++) {
             float v_deltaDelta = ((v_deltaHistory[3][i] - v_deltaHistory[1][i]) + 2.0f * (v_deltaHistory[4][i] - v_deltaHistory[0][i])) / 10.0f;
             p_mfcc39[v_dim * 2 + i] = v_deltaDelta;
         }
 		
-        // [보완 3] RMS Delta & Delta-Delta 연산
+        // RMS Delta & Delta-Delta 연산
         p_slot.delta_rms = (v_rmsHistory[4] - v_rmsHistory[2]) / 2.0f;
         p_slot.delta_delta_rms = v_rmsHistory[4] - (2.0f * v_rmsHistory[3]) + v_rmsHistory[2];
         
@@ -348,7 +347,7 @@ void T440_FeatureExtractor::computeSpatialFeatures(const float* p_L, const float
     if (p_len > SmeaConfig::FFT_SIZE) return;
 
     for (uint32_t i = 0; i < p_len; i++) {
-        // [보완] 위상차 분석 시 양 극단 위상 훼손을 막기 위해 v_window 곱셈을 완전히 제거
+        // 위상차 분석 시 양 극단 위상 훼손을 막기 위해 v_window 곱셈을 완전히 제거
         v_fftSpatialL[i * 2] = p_L[i];
         v_fftSpatialL[i * 2 + 1] = 0.0f;
         v_fftSpatialR[i * 2] = p_R[i];

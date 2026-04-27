@@ -18,27 +18,27 @@ private:
     static constexpr uint16_t MEL_PADDED  = (SmeaConfig::MEL_BANDS + 3) & ~3;
     static constexpr uint16_t MFCC_PADDED = (SmeaConfig::MFCC_COEFFS + 3) & ~3;
 
-    alignas(16) float v_mfccHistory[5][SmeaConfig::MFCC_COEFFS];
-    alignas(16) float v_rmsHistory[5]; // Delta RMS 연산용 히스토리 링버퍼 추가
-    uint8_t v_historyCount;
+    alignas(16) float         v_mfccHistory[5][SmeaConfig::MFCC_COEFFS];
+    alignas(16) float         v_rmsHistory[5];                           // Delta RMS 연산용 히스토리 링버퍼 
+    uint8_t                   v_historyCount;
 
     // PSRAM 동적 할당 버퍼 (스택 오버플로우 방어)
-    float* v_melBankFlat;
-    float* v_dctMatrixFlat;
-    float* v_fftSpatialL;
-    float* v_fftSpatialR;
+    float*                    v_melBankFlat;
+    float*                    v_dctMatrixFlat;
+    float*                    v_fftSpatialL;
+    float*                    v_fftSpatialR;
     
-    alignas(16) float v_deltaHistory[5][SmeaConfig::MFCC_COEFFS]; // N=2 연산용
+    alignas(16) float         v_deltaHistory[5][SmeaConfig::MFCC_COEFFS]; // N=2 연산용
 
     
     // Internal SRAM 할당 (고속 접근용)
-    alignas(16) float v_fftWorkBuf[SmeaConfig::FFT_SIZE * 2];
-    alignas(16) float v_powerSpectrum[BINS_PADDED];
-    alignas(16) float v_window[SmeaConfig::FFT_SIZE];
+    alignas(16) float         v_fftWorkBuf[SmeaConfig::FFT_SIZE * 2];
+    alignas(16) float         v_powerSpectrum[BINS_PADDED];
+    alignas(16) float         v_window[SmeaConfig::FFT_SIZE];
     
-    alignas(16) float v_noiseProfile[BINS_PADDED]; 
-    uint16_t v_noiseLearnedFrames = 0;
-    bool v_isNoiseLearning = false;
+    alignas(16) float         v_noiseProfile[BINS_PADDED]; 
+    uint16_t                  v_noiseLearnedFrames = 0;
+    bool                      v_isNoiseLearning = false;
 
 public:
     T440_FeatureExtractor();

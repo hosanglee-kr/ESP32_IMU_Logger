@@ -47,7 +47,7 @@ bool T460_StorageManager::init() {
         return false;
     }
 
-    // 1. 기존 인덱스 로드 (누락 기능 복원)
+    // 1. 기존 인덱스 로드 
     loadIndexJson();
     
     // 2. 파일 시퀀스 관리 (NVS)
@@ -57,7 +57,7 @@ bool T460_StorageManager::init() {
     prefs.putUInt("file_seq", v_bootFileSeq + 1);
     prefs.end();
     
-    // 바운스 버퍼를 안전하게 1회만 정적 할당하도록 init()으로 이동
+    // 바운스 버퍼를 안전하게 1회만 정적 할당하도록 
     if (!v_bounceBuf) {
         v_bounceBuf = (float*)heap_caps_malloc(SmeaConfig::FFT_SIZE * 2 * sizeof(float), MALLOC_CAP_INTERNAL);
         if (!v_bounceBuf) {
@@ -66,7 +66,7 @@ bool T460_StorageManager::init() {
         }
     }
 
-    // 3. SDMMC 마운트 (T410 설정 참조)
+    // 3. SDMMC 마운트 
     if (SD_MMC.begin("/sdcard", true)) { 
         if (!SD_MMC.exists(SmeaConfig::Storage::DIR_DATA)) SD_MMC.mkdir(SmeaConfig::Storage::DIR_DATA);
         if (!SD_MMC.exists(SmeaConfig::Storage::DIR_RAW))  SD_MMC.mkdir(SmeaConfig::Storage::DIR_RAW);
@@ -303,7 +303,7 @@ void T460_StorageManager::appendIndexItem() {
         strlcpy(v_indexItems[v_indexCount].raw_path, v_activeRawPath, 128); 
         v_indexItems[v_indexCount].record_count = v_recordCount;
 
-        // 파일 핸들을 변수로 받아 명시적으로 닫아주는 안전한 로직으로 교체
+        // 파일 핸들을 변수로 받아 명시적으로 닫아주는 안전한 로직
         uint32_t v_fSize = 0;
         if (!v_ioError) {
             File v_tempFile = SD_MMC.open(v_activePath, "r");

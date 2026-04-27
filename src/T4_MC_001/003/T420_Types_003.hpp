@@ -39,41 +39,41 @@ namespace SmeaType {
     
         alignas(16) float mfcc[SmeaConfig::MFCC_TOTAL_DIM];		// [MFCC 39D 텐서 배열]
 		
-		float band_rms[SmeaConfig::Feature::BAND_RMS_COUNT]; 	// 주파수 대역별 에너지를 보는 Band RMS 추가
+		float             band_rms[SmeaConfig::Feature::BAND_RMS_COUNT]; 	// 주파수 대역별 에너지를 보는 Band RMS
         
         // [Cepstrum 타겟 특징]
-        float cpsr_max[4];   // N1 ~ N4
-        float cpsr_mxrms[4]; // N1 ~ N4
+        float             cpsr_max[4];          // N1 ~ N4
+        float             cpsr_mxrms[4];        // N1 ~ N4
 
         // [시간 및 주파수 도메인 기본 특징]
-        float rms;
-        float energy;
-        float kurtosis;
-        float crest_factor;
-        float pooling_stddev_min;
-        float spectral_centroid;
-        float sta_lta_ratio; // [적발 2 보완] 임펄스 충격음 진단용 추가
+        float             rms;
+        float             energy;
+        float             kurtosis;
+        float             crest_factor;
+        float             pooling_stddev_min;
+        float             spectral_centroid;
+        float             sta_lta_ratio; 		// 임펄스 충격음 진단용
 
         
         // [공간(위상) 및 동적 특징]
-        float phase_coherence;
-        float mean_ipd;      // Inter-channel Phase Difference (마이크 간 위상차)
-        float delta_rms;
-        float delta_delta_rms;
+        float             phase_coherence;
+        float             mean_ipd;      		// Inter-channel Phase Difference (마이크 간 위상차)
+        float             delta_rms;
+        float             delta_delta_rms;
 
         // [N-top Peaks]
-        SpectralPeak top_peaks[5];
+        SpectralPeak      top_peaks[5];
 
         // [메타 데이터]
-        uint64_t timestamp;
-        uint8_t  trial_no;
+        uint64_t          timestamp;
+        uint8_t           trial_no;
     };
 
     // I2S 데이터 수집용 버퍼 기술자 (필요 시 콜백 등에서 포인터 전달용)
     struct RawDataBlock {
-        float* p_buffer_L;
-        float* p_buffer_R;
-        uint32_t length;
+        float*           p_buffer_L;
+        float*           p_buffer_R;
+        uint32_t         length;
     };
 }
 
