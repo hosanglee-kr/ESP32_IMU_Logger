@@ -31,6 +31,7 @@ private:
     alignas(16) float v_notchCoeffs[5];
     alignas(16) float v_firLpfCoeffs[SmeaConfig::Dsp::FIR_TAPS + 3]; 
     
+    
     alignas(16) float v_wNotchL[2]; 
     alignas(16) float v_wNotchR[2];
     alignas(16) float v_firStateLpfL[SmeaConfig::Dsp::FIR_TAPS + 3];
@@ -83,3 +84,4 @@ private:
 	void generateFirHpfWindowedSinc(float* p_coeffs, uint16_t p_taps, float p_cutoffHz);
 	
 };
+

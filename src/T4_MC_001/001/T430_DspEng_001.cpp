@@ -5,6 +5,8 @@
  * ========================================================================== */
 #include "T430_DspEng_001.hpp"
 #include "esp_log.h"
+#include "dsps_math.h"
+#include "dsps_wind.h" 
 #include <cmath>
 #include <cstring>
 
@@ -22,8 +24,16 @@ T430_DspEngine::~T430_DspEngine() {
 bool T430_DspEngine::init() {
     // 1. FIR 필터 초기화
     generateFirLpfWindowedSinc(v_firLpfCoeffs, SmeaConfig::Dsp::FIR_TAPS, SmeaConfig::Dsp::FIR_LPF_CUTOFF);
+
+    dsps_fir_init_f32(&v_firInstLpfL, v_firLpfCoeffs, v_firStateLpfL, SmeaConfig::Dsp::FIR_TAPS);
+    dsps_fir_init_f32(&v_firInstLpfR, v_firLpfCoeffs, v_firStateLpfR, SmeaConfig::Dsp::FIR_TAPS);
+
+    /*
+    // 1. FIR 필터 초기화
+    generateFirLpfWindowedSinc(v_firLpfCoeffs, SmeaConfig::Dsp::FIR_TAPS, SmeaConfig::Dsp::FIR_LPF_CUTOFF);
     dsps_fir_init_f32(&v_firInstL, v_firLpfCoeffs, v_firStateLpfL, SmeaConfig::Dsp::FIR_TAPS);
     dsps_fir_init_f32(&v_firInstR, v_firLpfCoeffs, v_firStateLpfR, SmeaConfig::Dsp::FIR_TAPS);
+    */
     
     // 2. Notch 필터 계수 계산
     float v_omega = 2.0f * (float)M_PI * SmeaConfig::Dsp::NOTCH_FREQ_HZ / SmeaConfig::SAMPLING_RATE;
@@ -185,3 +195,31 @@ void T430_DspEngine::generateFirHpfWindowedSinc(float* p_coeffs, uint16_t p_taps
     p_coeffs[v_center] += 1.0f;
 }
 
+
+
+
+
+
+// [T430_DspEng_001.cpp 상단 수정 부분]
+#include "T430_DspEng_001.hpp"
+#include "esp_log.h"
+// [수정] 누락된 ESP-DSP 수학 및 윈도우 연산 헤더 추가
+#include "dsps_math.h"
+#include "dsps_wind.h" 
+#include <cmath>
+#include <cstring>
+
+static const char* TAG = "T430_DSP";
+
+// ... (중략) ...
+
+bool T430_DspEngine::init() {
+    // 1. FIR 필터 초기화
+    generateFirLpfWindowedSinc(v_firLpfCoeffs, SmeaConfig::Dsp::FIR_TAPS, SmeaConfig::Dsp::FIR_LPF_CUTOFF);
+    
+    // [수정] v_firInstL -> v_firInstLpfL 로 이름 정확하게 매핑
+    dsps_fir_init_f32(&v_firInstLpfL, v_firLpfCoeffs, v_firStateLpfL, SmeaConfig::Dsp::FIR_TAPS);
+    dsps_fir_init_f32(&v_firInstLpfR, v_firLpfCoeffs, v_firStateLpfR, SmeaConfig::Dsp::FIR_TAPS);
+
+    // 2. Notch 필터 계수 계산
+    // ... (이하 동일) ...
