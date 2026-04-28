@@ -25,8 +25,8 @@
  * ========================================================================== */
 #pragma once
 
-#include "T410_Config_004.hpp"
-#include "T420_Types_004.hpp"
+#include "T410_Config_006.hpp"
+#include "T420_Types_006.hpp"
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>

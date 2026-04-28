@@ -4,7 +4,7 @@
  * Description: HTTP 요청을 받아 FSM으로 비동기 명령을 하달하고 방어 로직을 적용한 통신부.
  * ========================================================================== */
 #include "T470_Commu_006.hpp"
-#include "T450_FsmMgr_005.hpp" // FSM 상태 확인 및 명령 하달용
+#include "T450_FsmMgr_006.hpp" // FSM 상태 확인 및 명령 하달용
 #include "T415_ConfigMgr_006.hpp" // 동적 설정 매니저 추가
 #include <LittleFS.h>
 #include <SD_MMC.h>

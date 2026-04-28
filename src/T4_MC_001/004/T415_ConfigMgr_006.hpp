@@ -16,7 +16,7 @@
  * ========================================================================== */
 #pragma once
 
-#include "T410_Config_004.hpp"
+#include "T410_Config_006.hpp"
 #include <LittleFS.h>
 #include <ArduinoJson.h> // V7.4.x 사용
 #include <freertos/FreeRTOS.h>
