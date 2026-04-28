@@ -31,7 +31,7 @@
 
 #include "T410_Config_004.hpp"
 #include "T420_Types_004.hpp"
-#include "T415_ConfigMgr_005.hpp" // 동적 설정 매니저 추가
+#include "T415_ConfigMgr_006.hpp" // 동적 설정 매니저 추가
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD_MMC.h>
