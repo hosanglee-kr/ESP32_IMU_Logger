@@ -4,6 +4,9 @@
  * * [AI 메모: 마이그레이션 적용 사항]
  * 1. Web API의 Partial Update 로직 처리를 위한 _applyJson 모듈화 완료.
  * 2. 원자적 저장을 우회하지 않도록 updateFromJson 인터페이스 구현 완료.
+ * 3. [Const-Correctness 방어]: ArduinoJson V7 환경에서 const JsonDocument를 
+ * 다룰 때 발생하는 InvalidConversion 에러를 막기 위해 추출되는 모든 객체는 
+ * 반드시 JsonObjectConst 및 JsonArrayConst로 취급한다.
  * ========================================================================== */
 #include "T415_ConfigMgr_009.hpp"
 #include "esp_log.h"
@@ -106,11 +109,9 @@ void T415_ConfigManager::_loadDefaults() {
     }
 }
 
-// [신규 분리] JSON 파싱 매핑 로직 중앙화
+// [수정] Const-Correctness 준수 (JsonObject -> JsonObjectConst 등)
 void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
-    // 값이 없을 경우 기존 메모리 값(파이프(|) 우측)을 그대로 유지하여 Partial Update 지원
-    
-    JsonObject v_dsp = p_doc["dsp"];
+    JsonObjectConst v_dsp = p_doc["dsp"];
     if (!v_dsp.isNull()) {
         _config.dsp.window_ms = v_dsp["window_ms"] | _config.dsp.window_ms;
         _config.dsp.hop_ms = v_dsp["hop_ms"] | _config.dsp.hop_ms;
@@ -127,20 +128,20 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         _config.dsp.spectral_sub_gain = v_dsp["spectral_sub_gain"] | _config.dsp.spectral_sub_gain;
     }
 
-    JsonObject v_feature = p_doc["feature"];
+    JsonObjectConst v_feature = p_doc["feature"];
     if (!v_feature.isNull()) {
         _config.feature.band_rms_count = v_feature["band_rms_count"] | _config.feature.band_rms_count;
-        JsonArray v_ranges = v_feature["band_ranges"];
+        JsonArrayConst v_ranges = v_feature["band_ranges"];
         if (!v_ranges.isNull()) {
             int i = 0;
-            for (JsonArray v_band : v_ranges) {
+            for (JsonArrayConst v_band : v_ranges) {
                 if (i >= SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST) break;
                 _config.feature.band_ranges[i][0] = v_band[0] | _config.feature.band_ranges[i][0];
                 _config.feature.band_ranges[i][1] = v_band[1] | _config.feature.band_ranges[i][1];
                 i++;
             }
         }
-        JsonArray v_ceps = v_feature["ceps_targets"];
+        JsonArrayConst v_ceps = v_feature["ceps_targets"];
         if (!v_ceps.isNull()) {
             int i = 0;
             for (float v_val : v_ceps) {
@@ -153,7 +154,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         _config.feature.spatial_freq_max_hz = v_feature["spatial_freq_max_hz"] | _config.feature.spatial_freq_max_hz;
     }
 
-    JsonObject v_decision = p_doc["decision"];
+    JsonObjectConst v_decision = p_doc["decision"];
     if (!v_decision.isNull()) {
         _config.decision.rule_enrg_threshold = v_decision["rule_enrg_threshold"] | _config.decision.rule_enrg_threshold;
         _config.decision.rule_stddev_threshold = v_decision["rule_stddev_threshold"] | _config.decision.rule_stddev_threshold;
@@ -165,7 +166,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         _config.decision.sta_lta_threshold = v_decision["sta_lta_threshold"] | _config.decision.sta_lta_threshold;
     }
 
-    JsonObject v_storage = p_doc["storage"];
+    JsonObjectConst v_storage = p_doc["storage"];
     if (!v_storage.isNull()) {
         _config.storage.pre_trigger_sec = v_storage["pre_trigger_sec"] | _config.storage.pre_trigger_sec;
         _config.storage.rotate_mb = v_storage["rotate_mb"] | _config.storage.rotate_mb;
@@ -173,24 +174,24 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         _config.storage.idle_flush_ms = v_storage["idle_flush_ms"] | _config.storage.idle_flush_ms;
     }
 
-    JsonObject v_mqtt = p_doc["mqtt"];
+    JsonObjectConst v_mqtt = p_doc["mqtt"];
     if (!v_mqtt.isNull()) {
         strlcpy(_config.mqtt.mqtt_broker, v_mqtt["mqtt_broker"] | _config.mqtt.mqtt_broker, sizeof(_config.mqtt.mqtt_broker));
         _config.mqtt.retry_interval_ms = v_mqtt["retry_interval_ms"] | _config.mqtt.retry_interval_ms;
         _config.mqtt.default_port = v_mqtt["default_port"] | _config.mqtt.default_port;
     }
 
-    JsonObject v_wifi = p_doc["wifi"];
+    JsonObjectConst v_wifi = p_doc["wifi"];
     if (!v_wifi.isNull()) {
         _config.wifi.mode = v_wifi["mode"] | _config.wifi.mode;
         strlcpy(_config.wifi.ap_ssid, v_wifi["ap_ssid"] | _config.wifi.ap_ssid, SmeaConfig::NetworkLimit::MAX_SSID_LEN_CONST);
         strlcpy(_config.wifi.ap_password, v_wifi["ap_password"] | _config.wifi.ap_password, SmeaConfig::NetworkLimit::MAX_PW_LEN_CONST);
         strlcpy(_config.wifi.ap_ip, v_wifi["ap_ip"] | _config.wifi.ap_ip, SmeaConfig::NetworkLimit::MAX_IP_LEN_CONST);
 
-        JsonArray v_multi = v_wifi["multi_ap"];
+        JsonArrayConst v_multi = v_wifi["multi_ap"];
         if (!v_multi.isNull()) {
             int i = 0;
-            for (JsonObject v_ap : v_multi) {
+            for (JsonObjectConst v_ap : v_multi) {
                 if (i >= SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST) break;
                 strlcpy(_config.wifi.multi_ap[i].ssid, v_ap["ssid"] | _config.wifi.multi_ap[i].ssid, SmeaConfig::NetworkLimit::MAX_SSID_LEN_CONST);
                 strlcpy(_config.wifi.multi_ap[i].password, v_ap["password"] | _config.wifi.multi_ap[i].password, SmeaConfig::NetworkLimit::MAX_PW_LEN_CONST);
@@ -231,7 +232,7 @@ bool T415_ConfigManager::load() {
     return true;
 }
 
-// [신규] 문자열 JSON을 수신받아 안전하게 갱신 후 저장
+// 문자열 JSON을 수신받아 안전하게 갱신 후 저장
 bool T415_ConfigManager::updateFromJson(const char* p_jsonString) {
     JsonDocument v_doc;
     DeserializationError v_err = deserializeJson(v_doc, p_jsonString);
@@ -360,4 +361,3 @@ bool T415_ConfigManager::updateConfig(const DynamicConfig& p_newConfig) {
     xSemaphoreGive(_lock);
     return save();
 }
-
