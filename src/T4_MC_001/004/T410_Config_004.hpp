@@ -133,7 +133,7 @@ namespace SmeaConfig {
     namespace Path {
         inline constexpr char DIR_DATA_DEF[]        = "/t20_data";
         inline constexpr char DIR_RAW_DEF[]         = "/t20_data/raw";
-        inline constexpr char SYS_CFG_JSON_DEF[]    = "/sys/config.json";
+        inline constexpr char SYS_CFG_JSON_DEF[]    = "/sys/config_004_01.json";
         inline constexpr char FILE_INDEX_JSON_DEF[] = "/sys/recorder_index.json";
         inline constexpr char FILE_INDEX_TMP_DEF[]  = "/sys/recorder_index.tmp";
         inline constexpr char WEB_INDEX_DEF[]       = "index.html";

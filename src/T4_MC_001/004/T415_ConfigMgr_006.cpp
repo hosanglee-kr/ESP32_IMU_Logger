@@ -1,0 +1,595 @@
+#########################################################################
+
+/* ============================================================================
+ * File: T415_ConfigMgr_006.cpp
+ * Summary: Dynamic JSON Configuration Manager Implementation
+ * * [AI 메모: 런타임 JSON 매핑 완결]
+ * 1. 명시적 구조체로 전면 개편된 6개 그룹(WiFi 추가) 100% 매핑 완료.
+ * 2. ArduinoJson V7.4.x의 JsonArray를 활용한 다중 AP(multi_ap) 파싱 구현.
+ * 3. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_)
+ * ========================================================================== */
+#include "T415_ConfigMgr_006.hpp"
+#include "esp_log.h"
+
+static const char* TAG = "T415_CFG";
+
+T415_ConfigManager::T415_ConfigManager() {
+    _lock = xSemaphoreCreateMutex();
+    _isLoaded = false;
+    _loadDefaults(); 
+}
+
+T415_ConfigManager::~T415_ConfigManager() {
+    if (_lock) vSemaphoreDelete(_lock);
+}
+
+bool T415_ConfigManager::init() {
+    if (!LittleFS.begin(true)) {
+        ESP_LOGE(TAG, "LittleFS Mount Failed!");
+        return false;
+    }
+
+    if (!LittleFS.exists(SmeaConfig::Path::SYS_CFG_JSON_DEF)) {
+        ESP_LOGW(TAG, "Config not found. Creating default...");
+        _loadDefaults();
+        save();
+    } else {
+        load();
+    }
+    
+    _isLoaded = true;
+    return true;
+}
+
+void T415_ConfigManager::_loadDefaults() {
+    // 1. Dsp
+    _config.dsp.window_ms = SmeaConfig::Dsp::WINDOW_MS_DEF;
+    _config.dsp.hop_ms = SmeaConfig::Dsp::HOP_MS_DEF;
+    _config.dsp.notch_freq_hz = SmeaConfig::Dsp::NOTCH_FREQ_HZ_DEF;
+    _config.dsp.notch_freq_2_hz = SmeaConfig::Dsp::NOTCH_FREQ_2_HZ_DEF;
+    _config.dsp.notch_q_factor = SmeaConfig::Dsp::NOTCH_Q_FACTOR_DEF;
+    _config.dsp.pre_emphasis_alpha = SmeaConfig::Dsp::PRE_EMPHASIS_ALPHA_DEF;
+    _config.dsp.beamforming_gain = SmeaConfig::Dsp::BEAMFORMING_GAIN_DEF;
+    _config.dsp.fir_lpf_cutoff = SmeaConfig::Dsp::FIR_LPF_CUTOFF_DEF;
+    _config.dsp.fir_hpf_cutoff = SmeaConfig::Dsp::FIR_HPF_CUTOFF_DEF;
+    _config.dsp.median_window = SmeaConfig::Dsp::MEDIAN_WINDOW_DEF;
+    _config.dsp.noise_gate_thresh = SmeaConfig::Dsp::NOISE_GATE_THRESH_DEF;
+    _config.dsp.noise_learn_frames = SmeaConfig::Dsp::NOISE_LEARN_FRAMES_DEF;
+    _config.dsp.spectral_sub_gain = SmeaConfig::Dsp::SPECTRAL_SUB_GAIN_DEF;
+
+    // 2. Feature
+    _config.feature.band_rms_count = SmeaConfig::Feature::BAND_RMS_COUNT_DEF;
+    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+        _config.feature.band_ranges[i][0] = SmeaConfig::Feature::BAND_RANGES_DEF[i][0];
+        _config.feature.band_ranges[i][1] = SmeaConfig::Feature::BAND_RANGES_DEF[i][1];
+    }
+
+    // 3. Decision
+    _config.decision.rule_enrg_threshold = SmeaConfig::Decision::RULE_ENRG_THRESHOLD_DEF;
+    _config.decision.rule_stddev_threshold = SmeaConfig::Decision::RULE_STDDEV_THRESHOLD_DEF;
+    _config.decision.test_ng_min_energy = SmeaConfig::Decision::TEST_NG_MIN_ENERGY_DEF;
+    _config.decision.min_trigger_count = SmeaConfig::Decision::MIN_TRIGGER_COUNT_DEF;
+    _config.decision.noise_profile_sec = SmeaConfig::Decision::NOISE_PROFILE_SEC_DEF;
+    _config.decision.valid_start_sec = SmeaConfig::Decision::VALID_START_SEC_DEF;
+    _config.decision.valid_end_sec = SmeaConfig::Decision::VALID_END_SEC_DEF;
+
+    // 4. Storage
+    _config.storage.pre_trigger_sec = SmeaConfig::Storage::PRE_TRIGGER_SEC_DEF;
+    _config.storage.rotate_mb = SmeaConfig::Storage::ROTATE_MB_DEF;
+    _config.storage.rotate_min = SmeaConfig::Storage::ROTATE_MIN_DEF;
+    _config.storage.idle_flush_ms = SmeaConfig::Storage::IDLE_FLUSH_MS_DEF;
+
+    // 5. Mqtt
+    strlcpy(_config.mqtt.mqtt_broker, "", sizeof(_config.mqtt.mqtt_broker));
+    _config.mqtt.retry_interval_ms = SmeaConfig::Mqtt::RETRY_INTERVAL_MS_DEF;
+    _config.mqtt.default_port = SmeaConfig::Mqtt::DEFAULT_PORT_DEF;
+
+    // 6. WiFi (기본: Auto-Fallback 모드)
+    _config.wifi.mode = 3; 
+    strlcpy(_config.wifi.ap_ssid, "SMEA_100_AP", sizeof(_config.wifi.ap_ssid));
+    strlcpy(_config.wifi.ap_password, "12345678", sizeof(_config.wifi.ap_password));
+    strlcpy(_config.wifi.ap_ip, "192.168.4.1", sizeof(_config.wifi.ap_ip));
+    
+    // Multi-AP 비우기
+    for (int i = 0; i < 3; i++) {
+        _config.wifi.multi_ap[i].ssid[0] = '\0';
+        _config.wifi.multi_ap[i].password[0] = '\0';
+        _config.wifi.multi_ap[i].use_static_ip = false;
+        _config.wifi.multi_ap[i].local_ip[0] = '\0';
+        _config.wifi.multi_ap[i].gateway[0] = '\0';
+        _config.wifi.multi_ap[i].subnet[0] = '\0';
+        _config.wifi.multi_ap[i].dns1[0] = '\0';
+        _config.wifi.multi_ap[i].dns2[0] = '\0';
+    }
+}
+
+bool T415_ConfigManager::load() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    
+    File v_file = LittleFS.open(SmeaConfig::Path::SYS_CFG_JSON_DEF, "r");
+    if (!v_file) {
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    JsonDocument v_doc; 
+    DeserializationError v_err = deserializeJson(v_doc, v_file);
+    v_file.close();
+
+    if (v_err) {
+        ESP_LOGE(TAG, "JSON Parse Error: %s", v_err.c_str());
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    // [1] DSP
+    JsonObject v_dsp = v_doc["dsp"];
+    if (!v_dsp.isNull()) {
+        _config.dsp.window_ms = v_dsp["window_ms"] | _config.dsp.window_ms;
+        _config.dsp.hop_ms = v_dsp["hop_ms"] | _config.dsp.hop_ms;
+        _config.dsp.notch_freq_hz = v_dsp["notch_freq_hz"] | _config.dsp.notch_freq_hz;
+        _config.dsp.notch_freq_2_hz = v_dsp["notch_freq_2_hz"] | _config.dsp.notch_freq_2_hz;
+        _config.dsp.notch_q_factor = v_dsp["notch_q_factor"] | _config.dsp.notch_q_factor;
+        _config.dsp.pre_emphasis_alpha = v_dsp["pre_emphasis_alpha"] | _config.dsp.pre_emphasis_alpha;
+        _config.dsp.beamforming_gain = v_dsp["beamforming_gain"] | _config.dsp.beamforming_gain;
+        _config.dsp.fir_lpf_cutoff = v_dsp["fir_lpf_cutoff"] | _config.dsp.fir_lpf_cutoff;
+        _config.dsp.fir_hpf_cutoff = v_dsp["fir_hpf_cutoff"] | _config.dsp.fir_hpf_cutoff;
+        _config.dsp.median_window = v_dsp["median_window"] | _config.dsp.median_window;
+        _config.dsp.noise_gate_thresh = v_dsp["noise_gate_thresh"] | _config.dsp.noise_gate_thresh;
+        _config.dsp.noise_learn_frames = v_dsp["noise_learn_frames"] | _config.dsp.noise_learn_frames;
+        _config.dsp.spectral_sub_gain = v_dsp["spectral_sub_gain"] | _config.dsp.spectral_sub_gain;
+    }
+
+    // [2] Feature
+    JsonObject v_feature = v_doc["feature"];
+    if (!v_feature.isNull()) {
+        _config.feature.band_rms_count = v_feature["band_rms_count"] | _config.feature.band_rms_count;
+        JsonArray v_ranges = v_feature["band_ranges"];
+        if (!v_ranges.isNull()) {
+            int i = 0;
+            for (JsonArray v_band : v_ranges) {
+                if (i >= SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST) break;
+                _config.feature.band_ranges[i][0] = v_band[0] | _config.feature.band_ranges[i][0];
+                _config.feature.band_ranges[i][1] = v_band[1] | _config.feature.band_ranges[i][1];
+                i++;
+            }
+        }
+    }
+
+    // [3] Decision
+    JsonObject v_decision = v_doc["decision"];
+    if (!v_decision.isNull()) {
+        _config.decision.rule_enrg_threshold = v_decision["rule_enrg_threshold"] | _config.decision.rule_enrg_threshold;
+        _config.decision.rule_stddev_threshold = v_decision["rule_stddev_threshold"] | _config.decision.rule_stddev_threshold;
+        _config.decision.test_ng_min_energy = v_decision["test_ng_min_energy"] | _config.decision.test_ng_min_energy;
+        _config.decision.min_trigger_count = v_decision["min_trigger_count"] | _config.decision.min_trigger_count;
+        _config.decision.noise_profile_sec = v_decision["noise_profile_sec"] | _config.decision.noise_profile_sec;
+        _config.decision.valid_start_sec = v_decision["valid_start_sec"] | _config.decision.valid_start_sec;
+        _config.decision.valid_end_sec = v_decision["valid_end_sec"] | _config.decision.valid_end_sec;
+    }
+
+    // [4] Storage
+    JsonObject v_storage = v_doc["storage"];
+    if (!v_storage.isNull()) {
+        _config.storage.pre_trigger_sec = v_storage["pre_trigger_sec"] | _config.storage.pre_trigger_sec;
+        _config.storage.rotate_mb = v_storage["rotate_mb"] | _config.storage.rotate_mb;
+        _config.storage.rotate_min = v_storage["rotate_min"] | _config.storage.rotate_min;
+        _config.storage.idle_flush_ms = v_storage["idle_flush_ms"] | _config.storage.idle_flush_ms;
+    }
+
+    // [5] MQTT
+    JsonObject v_mqtt = v_doc["mqtt"];
+    if (!v_mqtt.isNull()) {
+        strlcpy(_config.mqtt.mqtt_broker, v_mqtt["mqtt_broker"] | _config.mqtt.mqtt_broker, sizeof(_config.mqtt.mqtt_broker));
+        _config.mqtt.retry_interval_ms = v_mqtt["retry_interval_ms"] | _config.mqtt.retry_interval_ms;
+        _config.mqtt.default_port = v_mqtt["default_port"] | _config.mqtt.default_port;
+    }
+
+    // [6] WiFi (신규 다중 AP 및 SoftAP 파싱)
+    JsonObject v_wifi = v_doc["wifi"];
+    if (!v_wifi.isNull()) {
+        _config.wifi.mode = v_wifi["mode"] | _config.wifi.mode;
+        strlcpy(_config.wifi.ap_ssid, v_wifi["ap_ssid"] | _config.wifi.ap_ssid, 32);
+        strlcpy(_config.wifi.ap_password, v_wifi["ap_password"] | _config.wifi.ap_password, 64);
+        strlcpy(_config.wifi.ap_ip, v_wifi["ap_ip"] | _config.wifi.ap_ip, 16);
+
+        JsonArray v_multi = v_wifi["multi_ap"];
+        if (!v_multi.isNull()) {
+            int i = 0;
+            for (JsonObject v_ap : v_multi) {
+                if (i >= 3) break;
+                strlcpy(_config.wifi.multi_ap[i].ssid, v_ap["ssid"] | _config.wifi.multi_ap[i].ssid, 32);
+                strlcpy(_config.wifi.multi_ap[i].password, v_ap["password"] | _config.wifi.multi_ap[i].password, 64);
+                _config.wifi.multi_ap[i].use_static_ip = v_ap["use_static_ip"] | _config.wifi.multi_ap[i].use_static_ip;
+                strlcpy(_config.wifi.multi_ap[i].local_ip, v_ap["local_ip"] | _config.wifi.multi_ap[i].local_ip, 16);
+                strlcpy(_config.wifi.multi_ap[i].gateway, v_ap["gateway"] | _config.wifi.multi_ap[i].gateway, 16);
+                strlcpy(_config.wifi.multi_ap[i].subnet, v_ap["subnet"] | _config.wifi.multi_ap[i].subnet, 16);
+                strlcpy(_config.wifi.multi_ap[i].dns1, v_ap["dns1"] | _config.wifi.multi_ap[i].dns1, 16);
+                strlcpy(_config.wifi.multi_ap[i].dns2, v_ap["dns2"] | _config.wifi.multi_ap[i].dns2, 16);
+                i++;
+            }
+        }
+    }
+
+    xSemaphoreGive(_lock);
+    return true;
+}
+
+bool T415_ConfigManager::save() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+
+    JsonDocument v_doc;
+
+    // 1~5 생략 없이 모두 직렬화 (이전 단계와 동일)
+    JsonObject v_dsp = v_doc["dsp"].to<JsonObject>();
+    v_dsp["window_ms"] = _config.dsp.window_ms;
+    v_dsp["hop_ms"] = _config.dsp.hop_ms;
+    v_dsp["notch_freq_hz"] = _config.dsp.notch_freq_hz;
+    v_dsp["notch_freq_2_hz"] = _config.dsp.notch_freq_2_hz;
+    v_dsp["notch_q_factor"] = _config.dsp.notch_q_factor;
+    v_dsp["pre_emphasis_alpha"] = _config.dsp.pre_emphasis_alpha;
+    v_dsp["beamforming_gain"] = _config.dsp.beamforming_gain;
+    v_dsp["fir_lpf_cutoff"] = _config.dsp.fir_lpf_cutoff;
+    v_dsp["fir_hpf_cutoff"] = _config.dsp.fir_hpf_cutoff;
+    v_dsp["median_window"] = _config.dsp.median_window;
+    v_dsp["noise_gate_thresh"] = _config.dsp.noise_gate_thresh;
+    v_dsp["noise_learn_frames"] = _config.dsp.noise_learn_frames;
+    v_dsp["spectral_sub_gain"] = _config.dsp.spectral_sub_gain;
+
+    JsonObject v_feature = v_doc["feature"].to<JsonObject>();
+    v_feature["band_rms_count"] = _config.feature.band_rms_count;
+    JsonArray v_ranges = v_feature["band_ranges"].to<JsonArray>();
+    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+        JsonArray v_band = v_ranges.add<JsonArray>();
+        v_band.add(_config.feature.band_ranges[i][0]);
+        v_band.add(_config.feature.band_ranges[i][1]);
+    }
+
+    JsonObject v_decision = v_doc["decision"].to<JsonObject>();
+    v_decision["rule_enrg_threshold"] = _config.decision.rule_enrg_threshold;
+    v_decision["rule_stddev_threshold"] = _config.decision.rule_stddev_threshold;
+    v_decision["test_ng_min_energy"] = _config.decision.test_ng_min_energy;
+    v_decision["min_trigger_count"] = _config.decision.min_trigger_count;
+    v_decision["noise_profile_sec"] = _config.decision.noise_profile_sec;
+    v_decision["valid_start_sec"] = _config.decision.valid_start_sec;
+    v_decision["valid_end_sec"] = _config.decision.valid_end_sec;
+
+    JsonObject v_storage = v_doc["storage"].to<JsonObject>();
+    v_storage["pre_trigger_sec"] = _config.storage.pre_trigger_sec;
+    v_storage["rotate_mb"] = _config.storage.rotate_mb;
+    v_storage["rotate_min"] = _config.storage.rotate_min;
+    v_storage["idle_flush_ms"] = _config.storage.idle_flush_ms;
+
+    JsonObject v_mqtt = v_doc["mqtt"].to<JsonObject>();
+    v_mqtt["mqtt_broker"] = _config.mqtt.mqtt_broker;
+    v_mqtt["retry_interval_ms"] = _config.mqtt.retry_interval_ms;
+    v_mqtt["default_port"] = _config.mqtt.default_port;
+
+    // [6] WiFi 직렬화 (신규 추가)
+    JsonObject v_wifi = v_doc["wifi"].to<JsonObject>();
+    v_wifi["mode"] = _config.wifi.mode;
+    v_wifi["ap_ssid"] = _config.wifi.ap_ssid;
+    v_wifi["ap_password"] = _config.wifi.ap_password;
+    v_wifi["ap_ip"] = _config.wifi.ap_ip;
+
+    JsonArray v_multi = v_wifi["multi_ap"].to<JsonArray>();
+    for (int i = 0; i < 3; i++) {
+        JsonObject v_ap = v_multi.add<JsonObject>();
+        v_ap["ssid"] = _config.wifi.multi_ap[i].ssid;
+        v_ap["password"] = _config.wifi.multi_ap[i].password;
+        v_ap["use_static_ip"] = _config.wifi.multi_ap[i].use_static_ip;
+        v_ap["local_ip"] = _config.wifi.multi_ap[i].local_ip;
+        v_ap["gateway"] = _config.wifi.multi_ap[i].gateway;
+        v_ap["subnet"] = _config.wifi.multi_ap[i].subnet;
+        v_ap["dns1"] = _config.wifi.multi_ap[i].dns1;
+        v_ap["dns2"] = _config.wifi.multi_ap[i].dns2;
+    }
+
+    // [방어] 정전 벽돌화 방지용 Atomic Write 적용
+    File v_file = LittleFS.open("/sys/config.tmp", "w");
+    if (!v_file) {
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    serializeJson(v_doc, v_file);
+    v_file.close();
+
+    LittleFS.remove(SmeaConfig::Path::SYS_CFG_JSON_DEF);
+    LittleFS.rename("/sys/config.tmp", SmeaConfig::Path::SYS_CFG_JSON_DEF);
+
+    xSemaphoreGive(_lock);
+    return true;
+}
+
+void T415_ConfigManager::resetToDefault() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    _loadDefaults();
+    xSemaphoreGive(_lock);
+    save();
+}
+
+DynamicConfig T415_ConfigManager::getConfig() {
+    DynamicConfig v_copy;
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    v_copy = _config; 
+    xSemaphoreGive(_lock);
+    return v_copy;
+}
+
+bool T415_ConfigManager::updateConfig(const DynamicConfig& p_newConfig) {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    _config = p_newConfig;
+    xSemaphoreGive(_lock);
+    return save();
+}
+
+##########################################################################
+
+
+/* ============================================================================
+ * File: T415_ConfigMgr_005.cpp
+ * Summary: Dynamic JSON Configuration Manager Implementation
+ * * [AI 메모: 전체 필드 매핑 완료]
+ * 1. dsp, feature, decision, storage, mqtt 5개 그룹의 총 29개 필드 100% 매핑.
+ * 2. ArduinoJson V7.4.x의 JsonArray를 활용한 2차원 배열(band_ranges) 입출력.
+ * 3. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_)
+ * ========================================================================== */
+#include "T415_ConfigMgr_005.hpp"
+#include "esp_log.h"
+
+static const char* TAG = "T415_CFG";
+
+T415_ConfigManager::T415_ConfigManager() {
+    _lock = xSemaphoreCreateMutex();
+    _isLoaded = false;
+    _loadDefaults(); // 생성 시 메모리를 기본값으로 채워둠
+}
+
+T415_ConfigManager::~T415_ConfigManager() {
+    if (_lock) vSemaphoreDelete(_lock);
+}
+
+bool T415_ConfigManager::init() {
+    if (!LittleFS.begin(true)) {
+        ESP_LOGE(TAG, "LittleFS Mount Failed!");
+        return false;
+    }
+
+    // 설정 파일이 없으면 기본값으로 새 파일 생성
+    if (!LittleFS.exists(SmeaConfig::Path::SYS_CFG_JSON_DEF)) {
+        ESP_LOGW(TAG, "Config not found. Creating default...");
+        _loadDefaults();
+        save();
+    } else {
+        load();
+    }
+    
+    _isLoaded = true;
+    return true;
+}
+
+void T415_ConfigManager::_loadDefaults() {
+    // 1. Dsp (13개 필드)
+    _config.dsp.window_ms = SmeaConfig::Dsp::WINDOW_MS_DEF;
+    _config.dsp.hop_ms = SmeaConfig::Dsp::HOP_MS_DEF;
+    _config.dsp.notch_freq_hz = SmeaConfig::Dsp::NOTCH_FREQ_HZ_DEF;
+    _config.dsp.notch_freq_2_hz = SmeaConfig::Dsp::NOTCH_FREQ_2_HZ_DEF;
+    _config.dsp.notch_q_factor = SmeaConfig::Dsp::NOTCH_Q_FACTOR_DEF;
+    _config.dsp.pre_emphasis_alpha = SmeaConfig::Dsp::PRE_EMPHASIS_ALPHA_DEF;
+    _config.dsp.beamforming_gain = SmeaConfig::Dsp::BEAMFORMING_GAIN_DEF;
+    _config.dsp.fir_lpf_cutoff = SmeaConfig::Dsp::FIR_LPF_CUTOFF_DEF;
+    _config.dsp.fir_hpf_cutoff = SmeaConfig::Dsp::FIR_HPF_CUTOFF_DEF;
+    _config.dsp.median_window = SmeaConfig::Dsp::MEDIAN_WINDOW_DEF;
+    _config.dsp.noise_gate_thresh = SmeaConfig::Dsp::NOISE_GATE_THRESH_DEF;
+    _config.dsp.noise_learn_frames = SmeaConfig::Dsp::NOISE_LEARN_FRAMES_DEF;
+    _config.dsp.spectral_sub_gain = SmeaConfig::Dsp::SPECTRAL_SUB_GAIN_DEF;
+
+    // 2. Feature (2개 필드)
+    _config.feature.band_rms_count = SmeaConfig::Feature::BAND_RMS_COUNT_DEF;
+    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+        _config.feature.band_ranges[i][0] = SmeaConfig::Feature::BAND_RANGES_DEF[i][0];
+        _config.feature.band_ranges[i][1] = SmeaConfig::Feature::BAND_RANGES_DEF[i][1];
+    }
+
+    // 3. Decision (7개 필드)
+    _config.decision.rule_enrg_threshold = SmeaConfig::Decision::RULE_ENRG_THRESHOLD_DEF;
+    _config.decision.rule_stddev_threshold = SmeaConfig::Decision::RULE_STDDEV_THRESHOLD_DEF;
+    _config.decision.test_ng_min_energy = SmeaConfig::Decision::TEST_NG_MIN_ENERGY_DEF;
+    _config.decision.min_trigger_count = SmeaConfig::Decision::MIN_TRIGGER_COUNT_DEF;
+    _config.decision.noise_profile_sec = SmeaConfig::Decision::NOISE_PROFILE_SEC_DEF;
+    _config.decision.valid_start_sec = SmeaConfig::Decision::VALID_START_SEC_DEF;
+    _config.decision.valid_end_sec = SmeaConfig::Decision::VALID_END_SEC_DEF;
+
+    // 4. Storage (4개 필드)
+    _config.storage.pre_trigger_sec = SmeaConfig::Storage::PRE_TRIGGER_SEC_DEF;
+    _config.storage.rotate_mb = SmeaConfig::Storage::ROTATE_MB_DEF;
+    _config.storage.rotate_min = SmeaConfig::Storage::ROTATE_MIN_DEF;
+    _config.storage.idle_flush_ms = SmeaConfig::Storage::IDLE_FLUSH_MS_DEF;
+
+    // 5. Mqtt (3개 필드)
+    strlcpy(_config.mqtt.mqtt_broker, "", sizeof(_config.mqtt.mqtt_broker));
+    _config.mqtt.retry_interval_ms = SmeaConfig::Mqtt::RETRY_INTERVAL_MS_DEF;
+    _config.mqtt.default_port = SmeaConfig::Mqtt::DEFAULT_PORT_DEF;
+}
+
+bool T415_ConfigManager::load() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    
+    File v_file = LittleFS.open(SmeaConfig::Path::SYS_CFG_JSON_DEF, "r");
+    if (!v_file) {
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    JsonDocument v_doc; 
+    DeserializationError v_err = deserializeJson(v_doc, v_file);
+    v_file.close();
+
+    if (v_err) {
+        ESP_LOGE(TAG, "JSON Parse Error: %s", v_err.c_str());
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    // 1. Dsp 파싱 (키가 없을 경우 기존 구조체 값을 파괴하지 않고 파이프(|)로 방어)
+    JsonObject v_dsp = v_doc["dsp"];
+    if (!v_dsp.isNull()) {
+        _config.dsp.window_ms = v_dsp["window_ms"] | _config.dsp.window_ms;
+        _config.dsp.hop_ms = v_dsp["hop_ms"] | _config.dsp.hop_ms;
+        _config.dsp.notch_freq_hz = v_dsp["notch_freq_hz"] | _config.dsp.notch_freq_hz;
+        _config.dsp.notch_freq_2_hz = v_dsp["notch_freq_2_hz"] | _config.dsp.notch_freq_2_hz;
+        _config.dsp.notch_q_factor = v_dsp["notch_q_factor"] | _config.dsp.notch_q_factor;
+        _config.dsp.pre_emphasis_alpha = v_dsp["pre_emphasis_alpha"] | _config.dsp.pre_emphasis_alpha;
+        _config.dsp.beamforming_gain = v_dsp["beamforming_gain"] | _config.dsp.beamforming_gain;
+        _config.dsp.fir_lpf_cutoff = v_dsp["fir_lpf_cutoff"] | _config.dsp.fir_lpf_cutoff;
+        _config.dsp.fir_hpf_cutoff = v_dsp["fir_hpf_cutoff"] | _config.dsp.fir_hpf_cutoff;
+        _config.dsp.median_window = v_dsp["median_window"] | _config.dsp.median_window;
+        _config.dsp.noise_gate_thresh = v_dsp["noise_gate_thresh"] | _config.dsp.noise_gate_thresh;
+        _config.dsp.noise_learn_frames = v_dsp["noise_learn_frames"] | _config.dsp.noise_learn_frames;
+        _config.dsp.spectral_sub_gain = v_dsp["spectral_sub_gain"] | _config.dsp.spectral_sub_gain;
+    }
+
+    // 2. Feature 파싱 (2차원 배열 언패킹 포함)
+    JsonObject v_feature = v_doc["feature"];
+    if (!v_feature.isNull()) {
+        _config.feature.band_rms_count = v_feature["band_rms_count"] | _config.feature.band_rms_count;
+        
+        JsonArray v_ranges = v_feature["band_ranges"];
+        if (!v_ranges.isNull()) {
+            int i = 0;
+            for (JsonArray v_band : v_ranges) {
+                if (i >= SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST) break;
+                _config.feature.band_ranges[i][0] = v_band[0] | _config.feature.band_ranges[i][0];
+                _config.feature.band_ranges[i][1] = v_band[1] | _config.feature.band_ranges[i][1];
+                i++;
+            }
+        }
+    }
+
+    // 3. Decision 파싱
+    JsonObject v_decision = v_doc["decision"];
+    if (!v_decision.isNull()) {
+        _config.decision.rule_enrg_threshold = v_decision["rule_enrg_threshold"] | _config.decision.rule_enrg_threshold;
+        _config.decision.rule_stddev_threshold = v_decision["rule_stddev_threshold"] | _config.decision.rule_stddev_threshold;
+        _config.decision.test_ng_min_energy = v_decision["test_ng_min_energy"] | _config.decision.test_ng_min_energy;
+        _config.decision.min_trigger_count = v_decision["min_trigger_count"] | _config.decision.min_trigger_count;
+        _config.decision.noise_profile_sec = v_decision["noise_profile_sec"] | _config.decision.noise_profile_sec;
+        _config.decision.valid_start_sec = v_decision["valid_start_sec"] | _config.decision.valid_start_sec;
+        _config.decision.valid_end_sec = v_decision["valid_end_sec"] | _config.decision.valid_end_sec;
+    }
+
+    // 4. Storage 파싱
+    JsonObject v_storage = v_doc["storage"];
+    if (!v_storage.isNull()) {
+        _config.storage.pre_trigger_sec = v_storage["pre_trigger_sec"] | _config.storage.pre_trigger_sec;
+        _config.storage.rotate_mb = v_storage["rotate_mb"] | _config.storage.rotate_mb;
+        _config.storage.rotate_min = v_storage["rotate_min"] | _config.storage.rotate_min;
+        _config.storage.idle_flush_ms = v_storage["idle_flush_ms"] | _config.storage.idle_flush_ms;
+    }
+
+    // 5. Mqtt 파싱
+    JsonObject v_mqtt = v_doc["mqtt"];
+    if (!v_mqtt.isNull()) {
+        strlcpy(_config.mqtt.mqtt_broker, v_mqtt["mqtt_broker"] | _config.mqtt.mqtt_broker, sizeof(_config.mqtt.mqtt_broker));
+        _config.mqtt.retry_interval_ms = v_mqtt["retry_interval_ms"] | _config.mqtt.retry_interval_ms;
+        _config.mqtt.default_port = v_mqtt["default_port"] | _config.mqtt.default_port;
+    }
+
+    xSemaphoreGive(_lock);
+    return true;
+}
+
+bool T415_ConfigManager::save() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+
+    JsonDocument v_doc;
+
+    // 1. Dsp 직렬화
+    JsonObject v_dsp = v_doc["dsp"].to<JsonObject>();
+    v_dsp["window_ms"] = _config.dsp.window_ms;
+    v_dsp["hop_ms"] = _config.dsp.hop_ms;
+    v_dsp["notch_freq_hz"] = _config.dsp.notch_freq_hz;
+    v_dsp["notch_freq_2_hz"] = _config.dsp.notch_freq_2_hz;
+    v_dsp["notch_q_factor"] = _config.dsp.notch_q_factor;
+    v_dsp["pre_emphasis_alpha"] = _config.dsp.pre_emphasis_alpha;
+    v_dsp["beamforming_gain"] = _config.dsp.beamforming_gain;
+    v_dsp["fir_lpf_cutoff"] = _config.dsp.fir_lpf_cutoff;
+    v_dsp["fir_hpf_cutoff"] = _config.dsp.fir_hpf_cutoff;
+    v_dsp["median_window"] = _config.dsp.median_window;
+    v_dsp["noise_gate_thresh"] = _config.dsp.noise_gate_thresh;
+    v_dsp["noise_learn_frames"] = _config.dsp.noise_learn_frames;
+    v_dsp["spectral_sub_gain"] = _config.dsp.spectral_sub_gain;
+
+    // 2. Feature 직렬화 (2차원 배열 패킹)
+    JsonObject v_feature = v_doc["feature"].to<JsonObject>();
+    v_feature["band_rms_count"] = _config.feature.band_rms_count;
+    
+    JsonArray v_ranges = v_feature["band_ranges"].to<JsonArray>();
+    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+        JsonArray v_band = v_ranges.add<JsonArray>();
+        v_band.add(_config.feature.band_ranges[i][0]);
+        v_band.add(_config.feature.band_ranges[i][1]);
+    }
+
+    // 3. Decision 직렬화
+    JsonObject v_decision = v_doc["decision"].to<JsonObject>();
+    v_decision["rule_enrg_threshold"] = _config.decision.rule_enrg_threshold;
+    v_decision["rule_stddev_threshold"] = _config.decision.rule_stddev_threshold;
+    v_decision["test_ng_min_energy"] = _config.decision.test_ng_min_energy;
+    v_decision["min_trigger_count"] = _config.decision.min_trigger_count;
+    v_decision["noise_profile_sec"] = _config.decision.noise_profile_sec;
+    v_decision["valid_start_sec"] = _config.decision.valid_start_sec;
+    v_decision["valid_end_sec"] = _config.decision.valid_end_sec;
+
+    // 4. Storage 직렬화
+    JsonObject v_storage = v_doc["storage"].to<JsonObject>();
+    v_storage["pre_trigger_sec"] = _config.storage.pre_trigger_sec;
+    v_storage["rotate_mb"] = _config.storage.rotate_mb;
+    v_storage["rotate_min"] = _config.storage.rotate_min;
+    v_storage["idle_flush_ms"] = _config.storage.idle_flush_ms;
+
+    // 5. Mqtt 직렬화
+    JsonObject v_mqtt = v_doc["mqtt"].to<JsonObject>();
+    v_mqtt["mqtt_broker"] = _config.mqtt.mqtt_broker;
+    v_mqtt["retry_interval_ms"] = _config.mqtt.retry_interval_ms;
+    v_mqtt["default_port"] = _config.mqtt.default_port;
+
+    // [방어] 정전 벽돌화 방지용 Atomic Write 적용
+    File v_file = LittleFS.open("/sys/config.tmp", "w");
+    if (!v_file) {
+        xSemaphoreGive(_lock);
+        return false;
+    }
+
+    serializeJson(v_doc, v_file);
+    v_file.close();
+
+    LittleFS.remove(SmeaConfig::Path::SYS_CFG_JSON_DEF);
+    LittleFS.rename("/sys/config.tmp", SmeaConfig::Path::SYS_CFG_JSON_DEF);
+
+    xSemaphoreGive(_lock);
+    return true;
+}
+
+void T415_ConfigManager::resetToDefault() {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    _loadDefaults();
+    xSemaphoreGive(_lock);
+    save();
+}
+
+DynamicConfig T415_ConfigManager::getConfig() {
+    DynamicConfig v_copy;
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    v_copy = _config; // 락 안에서 값 복사 (Race Condition 차단)
+    xSemaphoreGive(_lock);
+    return v_copy;
+}
+
+bool T415_ConfigManager::updateConfig(const DynamicConfig& p_newConfig) {
+    xSemaphoreTake(_lock, portMAX_DELAY);
+    _config = p_newConfig;
+    xSemaphoreGive(_lock);
+    return save();
+}
