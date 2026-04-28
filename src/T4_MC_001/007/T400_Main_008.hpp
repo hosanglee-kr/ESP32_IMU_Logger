@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 #include "T410_Config_007.hpp"
-#include "T415_ConfigMgr_008.hpp" // 동적 설정 매니저 추가
+#include "T415_ConfigMgr_009.hpp" // 동적 설정 매니저 추가
 #include "T450_FsmMgr_007.hpp"
 
 // [적발 2 보완] static 선언으로 ODR(One Definition Rule) 위반 링커 에러 방어

@@ -16,13 +16,13 @@
 #include "freertos/queue.h"
 
 #include "T410_Config_007.hpp"
-#include "T415_ConfigMgr_008.hpp" // 동적 설정 매니저 추가
+#include "T415_ConfigMgr_009.hpp" // 동적 설정 매니저 추가
 #include "T430_DspEng_007.hpp"
 #include "T440_FeatExtra_007.hpp"
 #include "T480_MicEng_007.hpp"
 #include "T460_Storage_007.hpp"
 #include "T445_SeqBd_007.hpp"
-#include "T470_Commu_007.hpp"
+#include "T470_Commu_008.hpp"
 
 class T450_FsmManager {
 private:
