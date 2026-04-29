@@ -109,23 +109,23 @@ void T415_ConfigManager::_loadDefaults() {
     }
 }
 
-// [수정] Const-Correctness 준수 (JsonObject -> JsonObjectConst 등)
+// Const-Correctness 준수 (JsonObject -> JsonObjectConst 등)
 void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
     JsonObjectConst v_dsp = p_doc["dsp"];
     if (!v_dsp.isNull()) {
-        _config.dsp.window_ms = v_dsp["window_ms"] | _config.dsp.window_ms;
-        _config.dsp.hop_ms = v_dsp["hop_ms"] | _config.dsp.hop_ms;
-        _config.dsp.notch_freq_hz = v_dsp["notch_freq_hz"] | _config.dsp.notch_freq_hz;
-        _config.dsp.notch_freq_2_hz = v_dsp["notch_freq_2_hz"] | _config.dsp.notch_freq_2_hz;
-        _config.dsp.notch_q_factor = v_dsp["notch_q_factor"] | _config.dsp.notch_q_factor;
-        _config.dsp.pre_emphasis_alpha = v_dsp["pre_emphasis_alpha"] | _config.dsp.pre_emphasis_alpha;
-        _config.dsp.beamforming_gain = v_dsp["beamforming_gain"] | _config.dsp.beamforming_gain;
-        _config.dsp.fir_lpf_cutoff = v_dsp["fir_lpf_cutoff"] | _config.dsp.fir_lpf_cutoff;
-        _config.dsp.fir_hpf_cutoff = v_dsp["fir_hpf_cutoff"] | _config.dsp.fir_hpf_cutoff;
-        _config.dsp.median_window = v_dsp["median_window"] | _config.dsp.median_window;
-        _config.dsp.noise_gate_thresh = v_dsp["noise_gate_thresh"] | _config.dsp.noise_gate_thresh;
-        _config.dsp.noise_learn_frames = v_dsp["noise_learn_frames"] | _config.dsp.noise_learn_frames;
-        _config.dsp.spectral_sub_gain = v_dsp["spectral_sub_gain"] | _config.dsp.spectral_sub_gain;
+        _config.dsp.window_ms 			= v_dsp["window_ms"] 			| _config.dsp.window_ms;
+        _config.dsp.hop_ms 				= v_dsp["hop_ms"] 				| _config.dsp.hop_ms;
+        _config.dsp.notch_freq_hz 		= v_dsp["notch_freq_hz"] 		| _config.dsp.notch_freq_hz;
+        _config.dsp.notch_freq_2_hz 	= v_dsp["notch_freq_2_hz"] 		| _config.dsp.notch_freq_2_hz;
+        _config.dsp.notch_q_factor 		= v_dsp["notch_q_factor"] 		| _config.dsp.notch_q_factor;
+        _config.dsp.pre_emphasis_alpha 	= v_dsp["pre_emphasis_alpha"] 	| _config.dsp.pre_emphasis_alpha;
+        _config.dsp.beamforming_gain 	= v_dsp["beamforming_gain"] | _config.dsp.beamforming_gain;
+        _config.dsp.fir_lpf_cutoff 		= v_dsp["fir_lpf_cutoff"] | _config.dsp.fir_lpf_cutoff;
+        _config.dsp.fir_hpf_cutoff 		= v_dsp["fir_hpf_cutoff"] | _config.dsp.fir_hpf_cutoff;
+        _config.dsp.median_window 		= v_dsp["median_window"] | _config.dsp.median_window;
+        _config.dsp.noise_gate_thresh 	= v_dsp["noise_gate_thresh"] | _config.dsp.noise_gate_thresh;
+        _config.dsp.noise_learn_frames 	= v_dsp["noise_learn_frames"] | _config.dsp.noise_learn_frames;
+        _config.dsp.spectral_sub_gain 	= v_dsp["spectral_sub_gain"] | _config.dsp.spectral_sub_gain;
     }
 
     JsonObjectConst v_feature = p_doc["feature"];

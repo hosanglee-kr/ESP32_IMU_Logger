@@ -128,7 +128,7 @@ public:
     // 전체 구조체를 덮어쓰는 갱신
     bool updateConfig(const DynamicConfig& p_newConfig);
     
-    // [신규 추가] 부분 JSON 문자열을 수신받아 병합(Merge) 후 원자적 저장 수행
+    // 부분 JSON 문자열을 수신받아 병합(Merge) 후 원자적 저장 수행
     bool updateFromJson(const char* p_jsonString);
 
 private:
@@ -137,7 +137,7 @@ private:
     
     void _loadDefaults();
     
-    // [신규 분리] JSON 문서 객체를 구조체에 매핑하는 공통 루틴
+    // JSON 문서 객체를 구조체에 매핑하는 공통 루틴
     void _applyJson(const JsonDocument& p_doc);
 };
 
