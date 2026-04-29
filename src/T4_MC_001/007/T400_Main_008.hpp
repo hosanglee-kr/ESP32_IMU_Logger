@@ -16,7 +16,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "T410_Config_007.hpp"
+#include "T410_Def_009.hpp"
 #include "T415_ConfigMgr_009.hpp" // 동적 설정 매니저 추가
 #include "T450_FsmMgr_007.hpp"
 

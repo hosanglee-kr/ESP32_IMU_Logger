@@ -17,7 +17,7 @@
  * ========================================================================== */
 #pragma once
 
-#include "T410_Config_007.hpp" // 최신 007 설정 인클루드
+#include "T410_Def_009.hpp" // 최신 007 설정 인클루드
 #include <LittleFS.h>
 #include <ArduinoJson.h> 
 #include <freertos/FreeRTOS.h>
