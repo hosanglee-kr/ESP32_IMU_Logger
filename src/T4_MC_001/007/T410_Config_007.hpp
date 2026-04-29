@@ -205,7 +205,7 @@ namespace SmeaConfig {
         inline constexpr char SYS_CFG_JSON_DEF[]    = "/sys/config_004_01.json";
         inline constexpr char FILE_INDEX_JSON_DEF[] = "/sys/recorder_index.json";
         inline constexpr char FILE_INDEX_TMP_DEF[]  = "/sys/recorder_index.tmp";
-        inline constexpr char WEB_INDEX_DEF[]       = "index.html";
+        inline constexpr char WEB_INDEX_DEF[]       = "T4_009_002.html";
         inline constexpr char WWW_ROOT_DEF[]        = "/www";
     }
 
