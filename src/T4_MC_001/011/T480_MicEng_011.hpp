@@ -3,9 +3,11 @@
  * 1. 매직넘버 철폐: 모든 하드웨어 및 버퍼 크기는 SmeaConfig 의존.
  * 2. 16-Byte 정렬(SIMD 최적화): esp-dsp 가속기의 128-bit 처리 특성을 극대화하기 위해
  * 모든 연산 버퍼 및 필터 계수는 반드시 alignas(16)으로 메모리를 정렬한다.
- * 3. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_)
+ * 3. [방어] DMA 버퍼 크기 보장: 수집 버퍼 크기 초과로 인한 메모리 오염(Overrun)을 
+ * 막기 위해 읽기 요청 길이를 FFT_SIZE_CONST로 엄격히 제한(Clamp)한다.
+ * 4. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_) / <cstdint> 사용
  * ============================================================================
- * * File: T480_MicEng_011.hpp
+ * File: T480_MicEng_011.hpp
  * Summary: I2S DMA Microphone Acquisition Engine (ICS43434)
  * * [AI 메모: 제공 기능 요약]
  * 1. ESP32-S3 I2S 하드웨어를 제어하여 2채널 42kHz 32bit 데이터를 DMA로 수집.
@@ -23,6 +25,7 @@
 #include "T410_Def_011.hpp"
 #include <driver/i2s.h>
 #include <cstring>
+#include <cstdint>
 
 class T480_MicEngine {
 private:
@@ -30,14 +33,15 @@ private:
     bool _isPaused = false;
     char _statusText[32];
 
-    // DMA에서 읽어올 임시 교차(Interleaved) 버퍼 (SIMD 가속용 16바이트 정렬)
+    // [방어/최적화] DMA에서 읽어올 임시 교차(Interleaved) 버퍼 (SIMD 가속용 16바이트 정렬)
+    // DMA 컨트롤러는 내부 SRAM 할당이 필요하므로 클래스 멤버로 선언
     alignas(16) int32_t _dmaBuffer[SmeaConfig::System::FFT_SIZE_CONST * 2];
 
 public:
     T480_MicEngine();
     ~T480_MicEngine() = default;
 
-    // I2S 하드웨어 및 DMA 초기화
+    // I2S 하드웨어 및 DMA 초기화 (다중 호출 시 안전하게 Bypass)
     bool init();
 
     // FSM 대기 상태 진입 시 호출: I2S DMA 정지 및 마이크 절전
@@ -46,14 +50,14 @@ public:
     // FSM 가동 상태 진입 시 호출: I2S DMA 재가동 및 클럭 복귀
     void resume();
 
-    // I2S DMA 버퍼에 쌓인 쓰레기값을 강제로 비움
+    // I2S DMA 버퍼에 쌓인 과거의 쓰레기값을 강제로 비움
     void clearBuffer();
 
     /**
      * @brief DMA로부터 데이터를 읽어 L/R 채널을 분리 후 반환
      * @param p_outL 마이크 L 출력 버퍼
      * @param p_outR 마이크 R 출력 버퍼
-     * @param p_reqSamples 요청 샘플 수
+     * @param p_reqSamples 요청 샘플 수 (내부에서 FFT_SIZE_CONST로 클램프됨)
      * @return 실제 읽어들인 샘플 수
      */
     uint32_t readData(float* p_outL, float* p_outR, uint32_t p_reqSamples);
@@ -61,4 +65,3 @@ public:
     // 현재 마이크 수집 엔진의 상태 텍스트 반환
     const char* getStatusText() const { return _statusText; }
 };
-

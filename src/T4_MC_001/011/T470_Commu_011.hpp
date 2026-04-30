@@ -1,4 +1,12 @@
 /* ============================================================================
+ * [SMEA-100 핵심 구현 원칙 및 AI 셀프 회고 바이블]
+ * 1. [방어] Generic int 남용 금지: 임베디드 환경의 부호 확장 오버헤드와 
+ * 메모리 파편화를 막기 위해 모든 크기/인덱스는 <cstdint> 고정 길이 정수형을 사용한다.
+ * 2. [비동기 보호]: AsyncWebServer 및 AsyncWebSocket의 콜백(Callback) 내부에서 
+ * 하드웨어 제어 블로킹 함수를 직접 호출하지 않고, 반드시 T450_FsmManager의 
+ * dispatchCommand() 큐로 위임하여 Watchdog 패닉을 방어한다.
+ * 3. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_)
+ * ============================================================================
  * File: T470_Commu_011.hpp
  * Summary: Network, Web, MQTT & OTA Communication Engine (FSM Synchronized)
  * * [AI 메모: 제공 기능 요약]
@@ -17,6 +25,7 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <PubSubClient.h>
+#include <cstdint>
 
 class T470_Communicator {
 private:
@@ -52,4 +61,3 @@ private:
     void _sendJsonResponse(AsyncWebServerRequest* p_request, const JsonDocument& p_doc);
     void _reconnectMqtt();
 };
-

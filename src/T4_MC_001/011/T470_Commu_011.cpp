@@ -1,16 +1,17 @@
 /* ============================================================================
  * File: T470_Commu_011.cpp
  * Summary: Network, MQTT & OTA Implementation (FSM Command Queue Integration)
+ * ============================================================================
  * * [AI 메모: 마이그레이션 적용 사항]
- * 1. POST /api/runtime_config:
- * - 직접 파일 쓰기 로직 제거.
- * - T415_ConfigManager::updateFromJson()을 호출하여 Partial JSON 병합 후
+ * 1. POST /api/runtime_config: 직접 파일 쓰기 로직 제거.
+ * - T415_ConfigManager::updateFromJson()을 호출하여 Partial JSON 병합 후 
  * 원자적 저장(Atomic Save)으로 완벽하게 연동되도록 수정.
  * 2. POST /api/factory_reset 신규 API 추가.
+ * 3. [최적화] AP 순회 루프 등 모든 int 변수를 uint8_t 등 명시적 타입으로 승격.
  * ========================================================================== */
 #include "T470_Commu_011.hpp"
 #include "T450_FsmMgr_011.hpp"
-#include "T415_ConfigMgr_011.hpp" // 최신 008 설정 매니저 연동
+#include "T415_ConfigMgr_011.hpp" 
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <time.h>
@@ -41,6 +42,7 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
     WiFi.mode(WIFI_OFF);
     delay(SmeaConfig::NetworkLimit::WIFI_MODE_SWITCH_DELAY_MS_CONST);
 
+    // WiFi 모드 (0: OFF, 1: STA, 2: AP+STA, 3: Auto-Fallback 등)
     if (v_cfg.wifi.mode == 0 || v_cfg.wifi.mode == 2 || v_cfg.wifi.mode == 3) {
         if (strlen(v_cfg.wifi.ap_ip) > 0) {
             IPAddress v_apIp;
@@ -55,7 +57,8 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
     if (v_cfg.wifi.mode != 0) {
         WiFi.mode(v_cfg.wifi.mode == 2 ? WIFI_AP_STA : WIFI_STA);
 
-        for (int i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
+        // [방어/교정] Generic int 대신 uint8_t 적용
+        for (uint8_t i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
             const char* v_targetSsid = (i == 0 && strlen(v_cfg.wifi.multi_ap[0].ssid) == 0 && strlen(p_ssid) > 0) ? p_ssid : v_cfg.wifi.multi_ap[i].ssid;
             const char* v_targetPw = (i == 0 && strlen(v_cfg.wifi.multi_ap[0].password) == 0 && strlen(p_pw) > 0) ? p_pw : v_cfg.wifi.multi_ap[i].password;
 
@@ -92,7 +95,7 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
                     while (!getLocalTime(&v_timeinfo, 100) && (millis() - v_syncStart < SmeaConfig::Network::NTP_TIMEOUT_MS_DEF)) {
                         delay(100);
                     }
-                    break;
+                    break; // 연결 성공 시 루프 탈출
                 }
             }
         }
@@ -150,7 +153,6 @@ void T470_Communicator::_initWebHandlers() {
         T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT);
     });
 
-    // [신규] 공장 초기화 및 재부팅 API
     _server.on("/api/factory_reset", HTTP_POST, [](AsyncWebServerRequest* p_request) {
         T415_ConfigManager::getInstance().resetToDefault();
         p_request->send(200, "application/json", "{\"ok\":true,\"msg\":\"factory_reset_and_rebooting\"}");
@@ -176,7 +178,6 @@ void T470_Communicator::_initWebHandlers() {
         }
     });
 
-    // [3] 시스템 설정 JSON API (다운로드 & 업로드)
     _server.on("/api/runtime_config", HTTP_GET, [this](AsyncWebServerRequest* p_request) {
         if (LittleFS.exists(SmeaConfig::Path::SYS_CFG_JSON_DEF)) {
             AsyncWebServerResponse* v_response = p_request->beginResponse(LittleFS, SmeaConfig::Path::SYS_CFG_JSON_DEF, "application/json");
@@ -222,7 +223,7 @@ void T470_Communicator::_initWebHandlers() {
             if (p_index + p_len == p_total) {
                 v_buffer[p_total] = '\0';
 
-                // [수정] 직접 파일 쓰기 제거 및 T415의 부분 병합(updateFromJson) 호출로 완전 교체
+                // T415의 부분 병합(updateFromJson) 호출을 통한 원자적(Atomic) 동기화
                 if (T415_ConfigManager::getInstance().updateFromJson((const char*)v_buffer)) {
                     p_request->send(200, "application/json", "{\"ok\":true,\"msg\":\"updated_and_rebooting\"}");
                     T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT);
@@ -336,4 +337,3 @@ void T470_Communicator::_sendJsonResponse(AsyncWebServerRequest* p_request, cons
     serializeJson(p_doc, *v_stream);
     p_request->send(v_stream);
 }
-

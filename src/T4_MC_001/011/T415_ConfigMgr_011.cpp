@@ -81,7 +81,7 @@ void T415_ConfigManager::_loadDefaults() {
     _config.decision.noise_profile_sec = SmeaConfig::Decision::NOISE_PROFILE_SEC_DEF;
     _config.decision.valid_start_sec = SmeaConfig::Decision::VALID_START_SEC_DEF;
     _config.decision.valid_end_sec = SmeaConfig::Decision::VALID_END_SEC_DEF;
-    _config.decision.sta_lta_threshold = 3.0f;
+    _config.decision.sta_lta_threshold = SmeaConfig::Decision::STA_LTA_THRESHOLD_DEF;
 
     // 4. Storage
     _config.storage.pre_trigger_sec = SmeaConfig::Storage::PRE_TRIGGER_SEC_DEF;
@@ -372,11 +372,6 @@ bool T415_ConfigManager::updateConfig(const DynamicConfig& p_newConfig) {
     xSemaphoreGive(_lock);
     return save();
 }
-
-
-
-
-
 
 
 

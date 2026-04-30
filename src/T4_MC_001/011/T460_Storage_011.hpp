@@ -11,6 +11,7 @@
  * 3. [네이밍 컨벤션 엄수]: private(_), 매개변수(p_), 로컬변수(v_)
  * 4. [동적/정적 상수 승격]: 경로 길이, 단위 변환 상수 등 모든 매직넘버를
  * 제거하고 T410/T415 중앙 설정으로 위임한다.
+ * 5. [자료형 엄수]: 일반 int 대신 <cstdint> 기반의 고정 크기 정수형(uint32_t 등) 사용.
  *
  * [2. AI 가 자주 반복하는 실수 및 방어 원칙 (Self-Reflection)]
  * 1. (실수) 다중 스레드(FSM / Web) 동시 접근 시 상태 파괴 (Race Condition).
@@ -33,12 +34,13 @@
 
 #include "T410_Def_011.hpp"
 #include "T420_Types_011.hpp"
-#include "T415_ConfigMgr_011.hpp" // 동적 설정 매니저 추가
+#include "T415_ConfigMgr_011.hpp" 
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <cstdint>
 
 class T460_StorageManager {
 public:
@@ -112,7 +114,7 @@ private:
     uint32_t _sessionStartMs;
     uint32_t _writtenBytes;
 
-    // --- DMA 버퍼링 (SIMD 정렬) ---
+    // --- DMA 버퍼링 (SIMD/DMA 정렬 엄수) ---
     alignas(16) uint8_t _dmaSlots[SmeaConfig::StorageLimit::DMA_SLOT_COUNT_CONST][SmeaConfig::StorageLimit::DMA_SLOT_BYTES_CONST];
     uint16_t _dmaSlotUsed[SmeaConfig::StorageLimit::DMA_SLOT_COUNT_CONST];
     uint8_t  _dmaActiveSlot;
@@ -146,4 +148,3 @@ private:
     uint32_t _bootFileSeq = 0;
     uint16_t _rotationSubSeq = 0;
 };
-
