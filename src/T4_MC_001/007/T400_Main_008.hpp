@@ -5,9 +5,9 @@
  * 1. 하드웨어 리소스(I2S, GPIO, SDMMC) 초기화 및 FSM 실행.
  * 2. 외부 DC 트리거 신호를 위한 고속 ISR(Interrupt Service Routine) 관리.
  * * [AI 메모: 보완 및 방어 사항 적용]
- * 1. [링커 방어] 헤더 파일 내 구현체로 인한 다중 정의(Multiple Definition) 
+ * 1. [링커 방어] 헤더 파일 내 구현체로 인한 다중 정의(Multiple Definition)
  * 에러를 막기 위해 static 및 inline 키워드 적용.
- * 2. [블라인드 스팟 차단] 부팅 시 이미 트리거가 HIGH인 상태를 감지하지 
+ * 2. [블라인드 스팟 차단] 부팅 시 이미 트리거가 HIGH인 상태를 감지하지
  * 못하는 버그를 막기 위해 초기 상태(Initial State) 강제 동기화 추가.
  * 3. [초기화 순서 보장] 동적 설정(T415)을 가장 먼저 마운트하여 후속 모듈 파닉 방어.
  * 4. [네이밍 컨벤션 엄수]: 로컬변수(v_)
@@ -18,7 +18,7 @@
 #include <Arduino.h>
 #include "T410_Def_009.hpp"
 #include "T415_ConfigMgr_009.hpp" // 동적 설정 매니저 추가
-#include "T450_FsmMgr_007.hpp"
+#include "T450_FsmMgr_008.hpp"
 
 // [적발 2 보완] static 선언으로 ODR(One Definition Rule) 위반 링커 에러 방어
 static T450_FsmManager& v_fsm = T450_FsmManager::getInstance();
@@ -69,7 +69,7 @@ inline void T4_run() {
     // 2. 강력한 방어 로직(네트워크 재연결, 좀비 소켓 회수, OOM 플러시 등) 실행
     // 이 함수 내부에서 통신과 스토리지의 백그라운드 작업이 처리됩니다.
     v_fsm.runMaintenanceTask();
-    
+
     // CPU 양보 (메인 루프는 가벼운 백그라운드 작업만 수행하므로 _CONST로 지정된 지연을 적용)
     vTaskDelay(pdMS_TO_TICKS(SmeaConfig::Task::MAIN_LOOP_DELAY_MS_CONST));
 }

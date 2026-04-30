@@ -2,23 +2,23 @@
  * File: T470_Commu_008.cpp
  * Summary: Network, MQTT & OTA Implementation (FSM Command Queue Integration)
  * * [AI 메모: 마이그레이션 적용 사항]
- * 1. POST /api/runtime_config: 
- * - 직접 파일 쓰기 로직 제거. 
- * - T415_ConfigManager::updateFromJson()을 호출하여 Partial JSON 병합 후 
+ * 1. POST /api/runtime_config:
+ * - 직접 파일 쓰기 로직 제거.
+ * - T415_ConfigManager::updateFromJson()을 호출하여 Partial JSON 병합 후
  * 원자적 저장(Atomic Save)으로 완벽하게 연동되도록 수정.
  * 2. POST /api/factory_reset 신규 API 추가.
  * ========================================================================== */
 #include "T470_Commu_008.hpp"
-#include "T450_FsmMgr_007.hpp" 
+#include "T450_FsmMgr_008.hpp"
 #include "T415_ConfigMgr_009.hpp" // 최신 008 설정 매니저 연동
 #include <LittleFS.h>
 #include <SD_MMC.h>
-#include <time.h> 
-#include <Update.h> 
+#include <time.h>
+#include <Update.h>
 
-T470_Communicator::T470_Communicator() 
-    : _server(SmeaConfig::Network::HTTP_PORT_DEF), 
-      _ws(SmeaConfig::Network::WS_URI_DEF), 
+T470_Communicator::T470_Communicator()
+    : _server(SmeaConfig::Network::HTTP_PORT_DEF),
+      _ws(SmeaConfig::Network::WS_URI_DEF),
       _mqttClient(_wifiClient) {
 }
 
@@ -60,7 +60,7 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
             const char* v_targetPw = (i == 0 && strlen(v_cfg.wifi.multi_ap[0].password) == 0 && strlen(p_pw) > 0) ? p_pw : v_cfg.wifi.multi_ap[i].password;
 
             if (strlen(v_targetSsid) > 0) {
-                WiFi.disconnect(); 
+                WiFi.disconnect();
                 delay(SmeaConfig::NetworkLimit::WIFI_DISCONNECT_DELAY_MS_CONST);
 
                 if (v_cfg.wifi.multi_ap[i].use_static_ip) {
@@ -92,7 +92,7 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
                     while (!getLocalTime(&v_timeinfo, 100) && (millis() - v_syncStart < SmeaConfig::Network::NTP_TIMEOUT_MS_DEF)) {
                         delay(100);
                     }
-                    break; 
+                    break;
                 }
             }
         }
@@ -113,15 +113,15 @@ bool T470_Communicator::init(const char* p_ssid, const char* p_pw, const char* p
     });
 
     _initWebHandlers();
-    
+
     _server.addHandler(&_ws);
     _server.begin();
-    
+
     return true;
 }
 
 void T470_Communicator::_initWebHandlers() {
-    
+
     _server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* p_request) {
         JsonDocument v_doc;
         v_doc["sys_state"] = (uint8_t)T450_FsmManager::getInstance().getCurrentState();
@@ -129,7 +129,7 @@ void T470_Communicator::_initWebHandlers() {
         v_doc["psram_free"] = ESP.getFreePsram();
         _sendJsonResponse(p_request, v_doc);
     });
-    
+
     _server.on("/api/recorder_begin", HTTP_POST, [](AsyncWebServerRequest* p_request) {
         T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_MANUAL_RECORD_START);
         p_request->send(200, "application/json", "{\"ok\":true}");
@@ -144,7 +144,7 @@ void T470_Communicator::_initWebHandlers() {
         T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_LEARN_NOISE);
         p_request->send(200, "application/json", "{\"ok\":true}");
     });
-    
+
     _server.on("/api/reboot", HTTP_POST, [](AsyncWebServerRequest* p_request) {
         p_request->send(200, "application/json", "{\"ok\":true}");
         T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT);
@@ -186,7 +186,7 @@ void T470_Communicator::_initWebHandlers() {
             p_request->send(404, "application/json", "{}");
         }
     });
-    
+
     _server.on("/api/runtime_config", HTTP_POST,
         [](AsyncWebServerRequest *p_request) {
             p_request->send(400, "application/json", "{\"ok\":false,\"msg\":\"no_body\"}");
@@ -198,7 +198,7 @@ void T470_Communicator::_initWebHandlers() {
                     p_request->send(413, "application/json", "{\"ok\":false,\"msg\":\"payload_too_large\"}");
                     return;
                 }
-                
+
                 p_request->_tempObject = malloc(p_total + 1);
                 p_request->onDisconnect([p_request]() {
                     if (p_request->_tempObject) {
@@ -207,11 +207,11 @@ void T470_Communicator::_initWebHandlers() {
                     }
                 });
             }
-            
+
             uint8_t* v_buffer = (uint8_t*)p_request->_tempObject;
-            
+
             if (!v_buffer) {
-                if (p_index + p_len == p_total && !p_request->client()->disconnected()) { 
+                if (p_index + p_len == p_total && !p_request->client()->disconnected()) {
                     p_request->send(500, "application/json", "{\"ok\":false,\"msg\":\"oom_or_rejected\"}");
                 }
                 return;
@@ -225,7 +225,7 @@ void T470_Communicator::_initWebHandlers() {
                 // [수정] 직접 파일 쓰기 제거 및 T415의 부분 병합(updateFromJson) 호출로 완전 교체
                 if (T415_ConfigManager::getInstance().updateFromJson((const char*)v_buffer)) {
                     p_request->send(200, "application/json", "{\"ok\":true,\"msg\":\"updated_and_rebooting\"}");
-                    T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT); 
+                    T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT);
                 } else {
                     p_request->send(400, "application/json", "{\"ok\":false,\"msg\":\"json_parse_or_save_error\"}");
                 }
@@ -236,7 +236,7 @@ void T470_Communicator::_initWebHandlers() {
         }
     );
 
-    _server.on("/api/ota", HTTP_POST, 
+    _server.on("/api/ota", HTTP_POST,
         [this](AsyncWebServerRequest *p_request) {
             if (!_isOtaRunning) {
                 p_request->send(423, "application/json", "{\"ok\":false,\"msg\":\"locked\"}");
@@ -244,8 +244,8 @@ void T470_Communicator::_initWebHandlers() {
             }
             bool v_success = !Update.hasError();
             p_request->send(v_success ? 200 : 500, "application/json", v_success ? "{\"ok\":true}" : "{\"ok\":false}");
-            _isOtaRunning = false; 
-            
+            _isOtaRunning = false;
+
             if (v_success) {
                 T450_FsmManager::getInstance().dispatchCommand(SystemCommand::CMD_REBOOT);
             }
@@ -266,34 +266,34 @@ void T470_Communicator::_initWebHandlers() {
             }
         }
     );
-    
+
     _server.serveStatic("/", LittleFS, SmeaConfig::Path::WWW_ROOT_DEF).setDefaultFile(SmeaConfig::Path::WEB_INDEX_DEF);
 }
 
 void T470_Communicator::broadcastBinary(const void* p_buffer, size_t p_bytes) {
     if (_ws.count() == 0 || !p_buffer) return;
-    
+
     if (_ws.availableForWriteAll()) {
-        _ws.binaryAll((uint8_t*)p_buffer, p_bytes); 
+        _ws.binaryAll((uint8_t*)p_buffer, p_bytes);
     }
 }
 
 void T470_Communicator::runNetwork() {
-    _ws.cleanupClients(); 
+    _ws.cleanupClients();
 
     if (!isConnected() && WiFi.getMode() != WIFI_AP) {
-        if (millis() - _lastWifiRetryMs > SmeaConfig::Network::WIFI_RETRY_MS_DEF) { 
+        if (millis() - _lastWifiRetryMs > SmeaConfig::Network::WIFI_RETRY_MS_DEF) {
             Serial.println("[Net] WiFi lost. Attempting reconnect...");
             WiFi.disconnect();
             WiFi.reconnect();
             _lastWifiRetryMs = millis();
         }
-        return; 
+        return;
     }
 
     if (_mqttCreds.enable) {
         if (!_mqttClient.connected()) _reconnectMqtt();
-        else _mqttClient.loop(); 
+        else _mqttClient.loop();
     }
 }
 
