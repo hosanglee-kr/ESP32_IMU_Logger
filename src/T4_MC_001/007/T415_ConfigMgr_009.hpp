@@ -50,6 +50,10 @@ struct ST_Config_Feature {
     float   ceps_targets[SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST]; 
     float   spatial_freq_min_hz; 
     float   spatial_freq_max_hz; 
+	
+    // [신규 추가] Top Peaks 검출용 임계치 및 간격
+    float   peak_amplitude_limit_min;
+    float   peak_freq_gap_limit_hz_min;
 };
 
 struct ST_Config_Decision {

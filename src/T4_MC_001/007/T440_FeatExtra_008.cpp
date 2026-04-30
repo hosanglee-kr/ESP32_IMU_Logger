@@ -298,9 +298,9 @@ void T440_FeatureExtractor::_computeSpectralCentroid(SmeaType::FeatureSlot& p_sl
 
 */
 
-// SmeaConfig::FeatureLimit` 네임스페이스에 기본값 추가:
-	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF 	= 0.5f;   // 0.5 이하 노이즈 피크 무시
-	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF 	= 10.0f;  // 10Hz 반경 내 중복 피크 무시
+// SmeaConfig::Feature` 네임스페이스에 기본값 추가:
+//	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF 	= 0.5f;   // 0.5 이하 노이즈 피크 무시
+//	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF 	= 10.0f;  // 10Hz 반경 내 중복 피크 무시
 
 // T440_FeatExtra cpp에 _computeNtopPeaks함수 수정
 void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {

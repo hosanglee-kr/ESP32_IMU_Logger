@@ -108,8 +108,6 @@ namespace SmeaConfig {
         inline constexpr uint8_t    CEPS_TARGET_COUNT_CONST    = 4;                      // 결함 주기(RPM) 검출용 켑스트럼 타겟(Target) 개수
         inline constexpr float      CEPS_TOLERANCE_CONST       = 0.0003f;                // 켑스트럼 주파수 검색 시 허용할 오차 범위 Epsilon
 		
-	    inline constexpr float      PEAK_AMPLITUDE_MIN_DEF 	   = 0.5f;                   // 0.5 이하 노이즈 피크 무시
-	    inline constexpr float      PEAK_FREQ_GAP_HZ_MIN_DEF   = 10.0f;                  // 10Hz 반경 내 중복 피크 무시
     }
     
     namespace DecisionLimit {
@@ -165,6 +163,10 @@ namespace SmeaConfig {
             {0.0f, 0.0f},        // 6: (Reserved)
             {0.0f, 0.0f}         // 7: (Reserved)
         };
+		
+		inline constexpr float      PEAK_AMPLITUDE_MIN_DEF 	   = 0.5f;                   // 0.5 이하 노이즈 피크 무시
+	    inline constexpr float      PEAK_FREQ_GAP_HZ_MIN_DEF   = 10.0f;                  // 10Hz 반경 내 중복 피크 무시
+
     }
 
     namespace Decision {
