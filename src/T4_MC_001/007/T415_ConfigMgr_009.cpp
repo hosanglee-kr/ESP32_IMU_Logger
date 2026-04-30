@@ -4,8 +4,8 @@
  * * [AI 메모: 마이그레이션 적용 사항]
  * 1. Web API의 Partial Update 로직 처리를 위한 _applyJson 모듈화 완료.
  * 2. 원자적 저장을 우회하지 않도록 updateFromJson 인터페이스 구현 완료.
- * 3. [Const-Correctness 방어]: ArduinoJson V7 환경에서 const JsonDocument를 
- * 다룰 때 발생하는 InvalidConversion 에러를 막기 위해 추출되는 모든 객체는 
+ * 3. [Const-Correctness 방어]: ArduinoJson V7 환경에서 const JsonDocument를
+ * 다룰 때 발생하는 InvalidConversion 에러를 막기 위해 추출되는 모든 객체는
  * 반드시 JsonObjectConst 및 JsonArrayConst로 취급한다.
  * ========================================================================== */
 #include "T415_ConfigMgr_009.hpp"
@@ -16,7 +16,7 @@ static const char* TAG = "T415_CFG";
 T415_ConfigManager::T415_ConfigManager() {
     _lock = xSemaphoreCreateMutex();
     _isLoaded = false;
-    _loadDefaults(); 
+    _loadDefaults();
 }
 
 T415_ConfigManager::~T415_ConfigManager() {
@@ -36,7 +36,7 @@ bool T415_ConfigManager::init() {
     } else {
         load();
     }
-    
+
     _isLoaded = true;
     return true;
 }
@@ -59,16 +59,16 @@ void T415_ConfigManager::_loadDefaults() {
 
     // 2. Feature
     _config.feature.band_rms_count = SmeaConfig::Feature::BAND_RMS_COUNT_DEF;
-    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+    for (uint8_t i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
         _config.feature.band_ranges[i][0] = SmeaConfig::Feature::BAND_RANGES_DEF[i][0];
         _config.feature.band_ranges[i][1] = SmeaConfig::Feature::BAND_RANGES_DEF[i][1];
     }
-    for (int i = 0; i < SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST; i++) {
-        _config.feature.ceps_targets[i] = 0.0f; 
+    for (uint8_t i = 0; i < SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST; i++) {
+        _config.feature.ceps_targets[i] = 0.0f;
     }
     _config.feature.spatial_freq_min_hz = 100.0f;
     _config.feature.spatial_freq_max_hz = 4000.0f;
-    
+
     _config.feature.peak_amplitude_limit_min = SmeaConfig::Feature::PEAK_AMPLITUDE_MIN_DEF;
     _config.feature.peak_freq_gap_limit_hz_min = SmeaConfig::Feature::PEAK_FREQ_GAP_HZ_MIN_DEF;
 
@@ -94,14 +94,14 @@ void T415_ConfigManager::_loadDefaults() {
     _config.mqtt.retry_interval_ms = SmeaConfig::Mqtt::RETRY_INTERVAL_MS_DEF;
     _config.mqtt.default_port = SmeaConfig::Mqtt::DEFAULT_PORT_DEF;
 
-    // 6. WiFi 
-    _config.wifi.mode = SmeaConfig::Network::WIFI_MODE_DEF; 
+    // 6. WiFi
+    _config.wifi.mode = SmeaConfig::Network::WIFI_MODE_DEF;
     strlcpy(_config.wifi.ap_ssid, SmeaConfig::Network::AP_SSID_DEF, sizeof(_config.wifi.ap_ssid));
     strlcpy(_config.wifi.ap_password, SmeaConfig::Network::AP_PW_DEF, sizeof(_config.wifi.ap_password));
     strlcpy(_config.wifi.ap_ip, SmeaConfig::Network::AP_IP_DEF, sizeof(_config.wifi.ap_ip));
-    
+
     // Multi-AP 비우기
-    for (int i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
+    for (uint8_t i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
         _config.wifi.multi_ap[i].ssid[0] = '\0';
         _config.wifi.multi_ap[i].password[0] = '\0';
         _config.wifi.multi_ap[i].use_static_ip = false;
@@ -137,7 +137,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         _config.feature.band_rms_count = v_feature["band_rms_count"] | _config.feature.band_rms_count;
         JsonArrayConst v_ranges = v_feature["band_ranges"];
         if (!v_ranges.isNull()) {
-            int i = 0;
+            uint8_t i = 0;
             for (JsonArrayConst v_band : v_ranges) {
                 if (i >= SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST) break;
                 _config.feature.band_ranges[i][0] = v_band[0] | _config.feature.band_ranges[i][0];
@@ -147,7 +147,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         }
         JsonArrayConst v_ceps = v_feature["ceps_targets"];
         if (!v_ceps.isNull()) {
-            int i = 0;
+            uint8_t i = 0;
             for (float v_val : v_ceps) {
                 if (i >= SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST) break;
                 _config.feature.ceps_targets[i] = v_val;
@@ -156,7 +156,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         }
         _config.feature.spatial_freq_min_hz = v_feature["spatial_freq_min_hz"] | _config.feature.spatial_freq_min_hz;
         _config.feature.spatial_freq_max_hz = v_feature["spatial_freq_max_hz"] | _config.feature.spatial_freq_max_hz;
-        
+
         _config.feature.peak_amplitude_limit_min = v_feature["peak_amplitude_limit_min"] | _config.feature.peak_amplitude_limit_min;
         _config.feature.peak_freq_gap_limit_hz_min = v_feature["peak_freq_gap_limit_hz_min"] | _config.feature.peak_freq_gap_limit_hz_min;
 
@@ -198,7 +198,7 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
 
         JsonArrayConst v_multi = v_wifi["multi_ap"];
         if (!v_multi.isNull()) {
-            int i = 0;
+            uint8_t i = 0;
             for (JsonObjectConst v_ap : v_multi) {
                 if (i >= SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST) break;
                 strlcpy(_config.wifi.multi_ap[i].ssid, v_ap["ssid"] | _config.wifi.multi_ap[i].ssid, SmeaConfig::NetworkLimit::MAX_SSID_LEN_CONST);
@@ -217,14 +217,14 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
 
 bool T415_ConfigManager::load() {
     xSemaphoreTake(_lock, portMAX_DELAY);
-    
+
     File v_file = LittleFS.open(SmeaConfig::Path::SYS_CFG_JSON_DEF, "r");
     if (!v_file) {
         xSemaphoreGive(_lock);
         return false;
     }
 
-    JsonDocument v_doc; 
+    JsonDocument v_doc;
     DeserializationError v_err = deserializeJson(v_doc, v_file);
     v_file.close();
 
@@ -244,7 +244,7 @@ bool T415_ConfigManager::load() {
 bool T415_ConfigManager::updateFromJson(const char* p_jsonString) {
     JsonDocument v_doc;
     DeserializationError v_err = deserializeJson(v_doc, p_jsonString);
-    
+
     if (v_err) {
         ESP_LOGE(TAG, "Update JSON Parse Error: %s", v_err.c_str());
         return false;
@@ -280,18 +280,18 @@ bool T415_ConfigManager::save() {
     JsonObject v_feature = v_doc["feature"].to<JsonObject>();
     v_feature["band_rms_count"] = _config.feature.band_rms_count;
     JsonArray v_ranges = v_feature["band_ranges"].to<JsonArray>();
-    for (int i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
+    for (uint8_t i = 0; i < SmeaConfig::FeatureLimit::MAX_BAND_RMS_COUNT_CONST; i++) {
         JsonArray v_band = v_ranges.add<JsonArray>();
         v_band.add(_config.feature.band_ranges[i][0]);
         v_band.add(_config.feature.band_ranges[i][1]);
     }
     JsonArray v_ceps = v_feature["ceps_targets"].to<JsonArray>();
-    for (int i = 0; i < SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST; i++) {
+    for (uint8_t i = 0; i < SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST; i++) {
         v_ceps.add(_config.feature.ceps_targets[i]);
     }
     v_feature["spatial_freq_min_hz"] = _config.feature.spatial_freq_min_hz;
     v_feature["spatial_freq_max_hz"] = _config.feature.spatial_freq_max_hz;
-    
+
     v_feature["peak_amplitude_limit_min"] = _config.feature.peak_amplitude_limit_min;
     v_feature["peak_freq_gap_limit_hz_min"] = _config.feature.peak_freq_gap_limit_hz_min;
 
@@ -323,7 +323,7 @@ bool T415_ConfigManager::save() {
     v_wifi["ap_ip"] = _config.wifi.ap_ip;
 
     JsonArray v_multi = v_wifi["multi_ap"].to<JsonArray>();
-    for (int i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
+    for (uint8_t i = 0; i < SmeaConfig::NetworkLimit::MAX_MULTI_AP_CONST; i++) {
         JsonObject v_ap = v_multi.add<JsonObject>();
         v_ap["ssid"] = _config.wifi.multi_ap[i].ssid;
         v_ap["password"] = _config.wifi.multi_ap[i].password;
@@ -361,7 +361,7 @@ void T415_ConfigManager::resetToDefault() {
 DynamicConfig T415_ConfigManager::getConfig() {
     DynamicConfig v_copy;
     xSemaphoreTake(_lock, portMAX_DELAY);
-    v_copy = _config; 
+    v_copy = _config;
     xSemaphoreGive(_lock);
     return v_copy;
 }
