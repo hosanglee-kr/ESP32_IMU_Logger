@@ -106,7 +106,7 @@ jobs:
 
       - name: Run PlatformIO build
         run: pio run -e ${{ matrix.environments }}
-	    # -j 4 옵션으로 병렬 컴파일 가속
+        # -j 4 옵션으로 병렬 컴파일 가속
         # run: pio run -e ${{ matrix.environments }} -j 4
 
       - name: Build filesystem image
