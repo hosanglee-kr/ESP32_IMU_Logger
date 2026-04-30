@@ -189,7 +189,7 @@ namespace SmeaConfig {
         inline constexpr char SYS_CFG_JSON_DEF[]    = "/sys/config_004_01.json";         // 런타임 설정이 보관되는 내부 플래시 파일 경로
         inline constexpr char FILE_INDEX_JSON_DEF[] = "/sys/recorder_index.json";        // SD카드 녹음 파일의 메타/인덱스 관리 경로
         inline constexpr char FILE_INDEX_TMP_DEF[]  = "/sys/recorder_index.tmp";         // 인덱스 원자적 저장을 위한 임시 경로
-        inline constexpr char WEB_INDEX_DEF[]       = "T4_009_002.html";                 // 웹서버 메인 진입점 HTML 파일명
+        inline constexpr char WEB_INDEX_DEF[]       = "T4_009_003.html";                 // 웹서버 메인 진입점 HTML 파일명
         inline constexpr char WWW_ROOT_DEF[]        = "/www";                            // 웹서버 정적 파일 배포 기본 라우트
     }
 
