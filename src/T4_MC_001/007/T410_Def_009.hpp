@@ -184,20 +184,20 @@ namespace SmeaConfig {
     }
 
     namespace Storage {
-        inline constexpr uint8_t  PRE_TRIGGER_SEC_DEF = 3;                               // 트리거 이전 상황을 블랙박스처럼 남기기 위한 과거 보존 시간 (초)
-        inline constexpr uint32_t ROTATE_MB_DEF       = 100;                             // 파일 크기가 이 값을 넘으면 분할하여 저장 (MB)
-        inline constexpr uint32_t ROTATE_MIN_DEF      = 60;                              // 파일 기록 시간이 이 값을 넘으면 분할하여 저장 (Min)
-        inline constexpr uint32_t IDLE_FLUSH_MS_DEF   = 250;                             // 데이터가 적게 들어올 때 강제로 SD카드에 플러시하는 대기 시간 (ms)
+        inline constexpr uint8_t  PRE_TRIGGER_SEC_DEF   = 3;                               // 트리거 이전 상황을 블랙박스처럼 남기기 위한 과거 보존 시간 (초)
+        inline constexpr uint32_t ROTATE_MB_DEF         = 100;                             // 파일 크기가 이 값을 넘으면 분할하여 저장 (MB)
+        inline constexpr uint32_t ROTATE_MIN_DEF        = 60;                              // 파일 기록 시간이 이 값을 넘으면 분할하여 저장 (Min)
+        inline constexpr uint32_t IDLE_FLUSH_MS_DEF     = 250;                             // 데이터가 적게 들어올 때 강제로 SD카드에 플러시하는 대기 시간 (ms)
     }
 
     namespace Path {
-        inline constexpr char DIR_DATA_DEF[]        = "/t20_data";                       // 특징량(.bin) 파일이 저장될 SD카드 기본 경로
-        inline constexpr char DIR_RAW_DEF[]         = "/t20_data/raw";                   // 원본 파형(.pcm) 파일이 저장될 SD카드 기본 경로
-        inline constexpr char SYS_CFG_JSON_DEF[]    = "/sys/config_004_01.json";         // 런타임 설정이 보관되는 내부 플래시 파일 경로
-        inline constexpr char FILE_INDEX_JSON_DEF[] = "/sys/recorder_index.json";        // SD카드 녹음 파일의 메타/인덱스 관리 경로
-        inline constexpr char FILE_INDEX_TMP_DEF[]  = "/sys/recorder_index.tmp";         // 인덱스 원자적 저장을 위한 임시 경로
-        inline constexpr char WEB_INDEX_DEF[]       = "T4_009_003.html";                 // 웹서버 메인 진입점 HTML 파일명
-        inline constexpr char WWW_ROOT_DEF[]        = "/www";                            // 웹서버 정적 파일 배포 기본 라우트
+        inline constexpr char DIR_DATA_DEF[]            = "/t20_data";                       // 특징량(.bin) 파일이 저장될 SD카드 기본 경로
+        inline constexpr char DIR_RAW_DEF[]             = "/t20_data/raw";                   // 원본 파형(.pcm) 파일이 저장될 SD카드 기본 경로
+        inline constexpr char SYS_CFG_JSON_DEF[]        = "/sys/config_004_01.json";         // 런타임 설정이 보관되는 내부 플래시 파일 경로
+        inline constexpr char FILE_INDEX_JSON_DEF[]     = "/sys/recorder_index.json";        // SD카드 녹음 파일의 메타/인덱스 관리 경로
+        inline constexpr char FILE_INDEX_TMP_DEF[]      = "/sys/recorder_index.tmp";         // 인덱스 원자적 저장을 위한 임시 경로
+        inline constexpr char WEB_INDEX_DEF[]           = "T4_009_003.html";                 // 웹서버 메인 진입점 HTML 파일명
+        inline constexpr char WWW_ROOT_DEF[]            = "/www";                            // 웹서버 정적 파일 배포 기본 라우트
     }
 
     namespace Network {
