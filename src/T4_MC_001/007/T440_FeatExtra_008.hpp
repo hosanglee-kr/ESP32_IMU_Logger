@@ -16,7 +16,7 @@
 
 // [현행화 완료] 최신 버전의 설정 매니저 및 통합 데이터 구조체 인클루드
 #include "T410_Def_009.hpp"     // 시스템 정적 상수 및 동적 기본값
-#include "T420_Types_011.hpp"      // FeatureSlot 및 TelemetryPacket 통신 규격
+#include "T420_Types_010.hpp"      // FeatureSlot 및 TelemetryPacket 통신 규격
 #include "T415_ConfigMgr_009.hpp"  // 런타임 JSON 동적 설정 매니저 (Singleton)
 
 class T440_FeatureExtractor {
