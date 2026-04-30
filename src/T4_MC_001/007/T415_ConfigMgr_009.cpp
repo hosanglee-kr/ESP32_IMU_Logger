@@ -68,6 +68,10 @@ void T415_ConfigManager::_loadDefaults() {
     }
     _config.feature.spatial_freq_min_hz = 100.0f;
     _config.feature.spatial_freq_max_hz = 4000.0f;
+    
+    _config.feature.peak_amplitude_limit_min = SmeaConfig::Feature::PEAK_AMPLITUDE_MIN_DEF;
+    _config.feature.peak_freq_gap_limit_hz_min = SmeaConfig::Feature::PEAK_FREQ_GAP_HZ_MIN_DEF;
+
 
     // 3. Decision
     _config.decision.rule_enrg_threshold = SmeaConfig::Decision::RULE_ENRG_THRESHOLD_DEF;
@@ -152,6 +156,10 @@ void T415_ConfigManager::_applyJson(const JsonDocument& p_doc) {
         }
         _config.feature.spatial_freq_min_hz = v_feature["spatial_freq_min_hz"] | _config.feature.spatial_freq_min_hz;
         _config.feature.spatial_freq_max_hz = v_feature["spatial_freq_max_hz"] | _config.feature.spatial_freq_max_hz;
+        
+        _config.feature.peak_amplitude_limit_min = v_feature["peak_amplitude_limit_min"] | _config.feature.peak_amplitude_limit_min;
+        _config.feature.peak_freq_gap_limit_hz_min = v_feature["peak_freq_gap_limit_hz_min"] | _config.feature.peak_freq_gap_limit_hz_min;
+
     }
 
     JsonObjectConst v_decision = p_doc["decision"];
@@ -283,6 +291,9 @@ bool T415_ConfigManager::save() {
     }
     v_feature["spatial_freq_min_hz"] = _config.feature.spatial_freq_min_hz;
     v_feature["spatial_freq_max_hz"] = _config.feature.spatial_freq_max_hz;
+    
+    v_feature["peak_amplitude_limit_min"] = _config.feature.peak_amplitude_limit_min;
+    v_feature["peak_freq_gap_limit_hz_min"] = _config.feature.peak_freq_gap_limit_hz_min;
 
     JsonObject v_decision = v_doc["decision"].to<JsonObject>();
     v_decision["rule_enrg_threshold"] = _config.decision.rule_enrg_threshold;
@@ -361,3 +372,13 @@ bool T415_ConfigManager::updateConfig(const DynamicConfig& p_newConfig) {
     xSemaphoreGive(_lock);
     return save();
 }
+
+
+
+
+
+
+
+
+
+
