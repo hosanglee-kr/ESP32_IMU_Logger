@@ -260,81 +260,121 @@ void T440_FeatureExtractor::_computeSpectralCentroid(SmeaType::FeatureSlot& p_sl
 }
 
 // ----------------------------------------------------------------------------
-// [기능설명] N개의 핵심 주파수 피크(Top-Peaks) 검출
+// [기능설명] N개의 핵심 주파수 피크(Top-Peaks) 검출 (NMS 스펙트럼 누출 방어 적용)
+//     1안) NMS (Non-Maximum Suppression) :  가장 진폭이 큰 피크부터 선택한 뒤, **지정된 주파수 간격(`min_freq_gap_hz`) 반경 내에 있는 하위 피크들을 강제 탈락(무시)** 시키는 방법. | 연산량이 매우 적고 로직이 직관적임. Side Lobe를 완벽하게 날려버림. | 촘촘하게 붙어있는 진짜 결함 주파수(예: 120Hz, 122Hz)가 하나로 뭉개질 위험이 있음. | **[강력 추천]** 100Hz 실시간 처리에 최적화. |
+//     2안) Prominence (돌출도 검사) : 피크 양옆의 골짜기(Valley)까지의 낙폭(Drop)을 계산하여, 일정 수치 이상 솟아오른 진짜 봉우리만 인정하는 방법 (Scipy의 `find_peaks` 방식). | 주변 노이즈에 강하고, 가장 정확하게 독립된 피크를 찾아냄. | 극대점 양옆의 골짜기를 추적하는 `while` 루프가 필요하여 100Hz 연산 시 최악의 경우 CPU 병목 발생 우려. | **[부적합]** ESP32 실시간 연산으로는 무거움. |
+//     3안) Spectral Smoothing 	:  피크를 찾기 전, 스펙트럼 전체에 이동 평균(Moving Average) 필터를 한 번 먹여서 잔가시를 다 뭉갠 후 극대점을 찾는 방법. | 구현이 매우 쉬움. | 필터링 과정에서 진짜 피크의 주파수 위치가 옆으로 이동하거나 진폭(에너지)이 깎여나가는 데이터 훼손 발생. | **[부적합]** 피크 진폭 정합성 훼손. |
+
+//    결론: 연산량이 적으면서도 확실한 방어막을 제공하는 1안(NMS 방식)과 진폭 하한선(Minimum Amplitude)을 결합하여 구현
+
 // ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
-// [기능설명] N개의 핵심 주파수 피크(Top-Peaks) 검출
-// [보완] Spectral Leakage로 인한 가짜 중복 피크 방어 및 진폭 하한선(Threshold) 필터링 적용
-// ----------------------------------------------------------------------------
+
+/* #####
+	// 이 로직이 작동하려면 웹 설정(JSON)에서 두 가지 파라미터(`peak_amplitude_limit_min`, `peak_freq_gap_limit_hz_min`)를 받아와야 합니다. 
+
+	#### A. 백엔드 구조체 및 기본값 (`T410_Config`, `T415_ConfigMgr`)
+	* **`T410_Config_009.hpp`** 내 `Feature` 네임스페이스에 기본값 추가:
+	  ```cpp
+	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF = 0.5f;   // 0.5 이하 노이즈 피크 무시
+	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF = 50.0f; // 50Hz 반경 내 중복 피크 무시
+	  ```
+	* **`T415_ConfigMgr_009.cpp`** 의 JSON 파싱(`_applyJson`) 및 저장(`save`) 로직에 해당 변수 맵핑 추가.
+
+	#### B. 프론트엔드 웹 UI (`T4_009_005.html`)
+	`tab-dsp` 탭 안의 `Spatial & Cepstrum Features` 카드 부분에 폼을 추가하면 됩니다.
+
+	```html
+	<h4 class="sub-title" data-i18n="sub_peak_config">Top Peaks Configuration</h4>
+	<div class="form-group highlight">
+		<label data-i18n="lbl_peak_amp">Min Amplitude Thresh</label>
+		<input type="number" step="0.01" name="feature.peak_amplitude_limit_min" data-i18n-placeholder="plc_peak_amp" placeholder="ex) 0.5">
+	</div>
+	<div class="form-group">
+		<label data-i18n="lbl_peak_gap">Min Freq Gap (Hz)</label>
+		<input type="number" step="1.0" name="feature.peak_freq_gap_limit_hz_min" data-i18n-placeholder="plc_peak_gap" placeholder="ex) 50.0">
+	</div>
+	```
+
+
+*/
+
+// SmeaConfig::FeatureLimit` 네임스페이스에 기본값 추가:
+	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF 	= 0.5f;   // 0.5 이하 노이즈 피크 무시
+	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF 	= 10.0f;  // 10Hz 반경 내 중복 피크 무시
+
+// T440_FeatExtra cpp에 _computeNtopPeaks함수 수정
 void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {
     uint16_t v_bins = (SmeaConfig::System::FFT_SIZE_CONST / 2) + 1;
-    float v_binRes = (float)SmeaConfig::System::SAMPLING_RATE_CONST / SmeaConfig::System::FFT_SIZE_CONST;
+    float  v_binRes = (float)SmeaConfig::System::SAMPLING_RATE_CONST / SmeaConfig::System::FFT_SIZE_CONST;
 
-    // 동적 설정 가져오기
+    // 동적 설정(Config)에서 피크 추출 조건 가져오기
     DynamicConfig v_cfg = T415_ConfigManager::getInstance().getConfig();
     
-    // [방어/설정] 진폭 하한선 (노이즈 게이트 임계치 재사용 또는 최소치 1e-4f 보장)
-    const float v_minAmplitude = fmaxf(v_cfg.dsp.noise_gate_thresh, 0.0001f);
-    
-    // [방어/설정] 피크 간 최소 이격 거리 (이 거리 내에 있는 피크는 곁가지로 간주하여 무시)
-    // (추후 T410_Config의 FeatureLimit 상수로 승격 가능)
-    const float MIN_FREQ_DISTANCE_HZ = 50.0f; 
+    float v_amplitude_limitMin = v_cfg.feature.peak_amplitude_limit_min; 		    // 설정할 Amplitude 하한선 (예: 0.1 이하의 자잘한 노이즈 피크는 무시)
+    float v_freqGap_limitMin   = v_cfg.feature.peak_freq_gap_limit_hz_min; 		// 설정할 피크 간 최소 주파수 간격 (예: 10.0Hz 이내의 인접 피크는 탈락)
 
-    SmeaType::SpectralPeak v_candidates[SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST];
-    uint16_t v_candCount = 0;
+    SmeaType::SpectralPeak v_freqComp_candis[SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST];
+	
+    uint16_t v_peakCand_Count = 0;
 
-    // 1. [기능설명] 지역 극댓값(Local Maxima) 스캔 및 1차 하한선 필터링
-    for (uint16_t i = 1; i < v_bins - 1 && v_candCount < SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST; i++) {
-        // [방어/보완] 진폭이 하한선(v_minAmplitude) 이하인 무의미한 노이즈 피크는 후보에서 즉시 배제
-        if (_powerSpectrum[i] > v_minAmplitude) {
-            // 양옆의 Bin보다 현재 Bin의 에너지가 더 크면 극댓값(Peak)으로 판정
-            if (_powerSpectrum[i] > _powerSpectrum[i - 1] && _powerSpectrum[i] > _powerSpectrum[i + 1]) {
-                v_candidates[v_candCount].frequency = i * v_binRes;
-                v_candidates[v_candCount].amplitude = _powerSpectrum[i];
-                v_candCount++;
+    // 1. [기능설명] 지역 극댓값(Local Maxima) 및 하한선(Threshold) 스캔
+    for (uint16_t i = 1; i < v_bins - 1 && v_peakCand_Count < SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST; i++) {
+        // [방어/기능] 현재 스펙트럼 빈이 좌우보다 높고(극댓값), 지정된 최소 Amplitude(Threshold)보다 큰 경우만 후보로 등록
+        if (_powerSpectrum[i] > v_amplitude_limitMin &&
+            _powerSpectrum[i] > _powerSpectrum[i - 1] && 
+            _powerSpectrum[i] > _powerSpectrum[i + 1]) {
+            
+            v_freqComp_candis[v_peakCand_Count].frequency = i * v_binRes;
+            v_freqComp_candis[v_peakCand_Count].amplitude = _powerSpectrum[i];
+            v_peakCand_Count++;
+        }
+    }
+
+    // 2. [기능설명] Amplitude 기준 내림차순 정렬 (가장 거대한 피크부터 우선권 부여)
+    // [메모리 최적화] 데이터 크기가 최대 128개 이내이므로 인플레이스 버블 소트로 연산 오버헤드 최소화
+    for (int i = 0; i < v_peakCand_Count - 1; i++) {
+        for (int j = 0; j < v_peakCand_Count - i - 1; j++) {
+            if (v_freqComp_candis[j].amplitude < v_freqComp_candis[j + 1].amplitude) {
+                SmeaType::SpectralPeak temp = v_freqComp_candis[j];
+                v_freqComp_candis[j]        = v_freqComp_candis[j + 1];
+                v_freqComp_candis[j + 1]    = temp;
             }
         }
     }
 
-    // 2. [기능설명] 진폭(Amplitude) 기준 내림차순 정렬
-    // [메모리 최적화] 데이터 수가 작으므로 <algorithm> 오버헤드 대신 인플레이스 버블 소트 사용
-    for (int i = 0; i < v_candCount - 1; i++) {
-        for (int j = 0; j < v_candCount - i - 1; j++) {
-            if (v_candidates[j].amplitude < v_candidates[j + 1].amplitude) {
-                SmeaType::SpectralPeak temp = v_candidates[j];
-                v_candidates[j] = v_candidates[j + 1];
-                v_candidates[j + 1] = temp;
-            }
-        }
-    }
+    // 3. [기능설명] NMS (Non-Maximum Suppression)를 통한 스펙트럼 누출(Side Lobe) 중복 피크 제거
+    SmeaType::SpectralPeak   v_finalPeaks[SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST];
+    uint8_t                  v_peakFinal_Count = 0;
 
-    // 3. [기능설명] 상위 N개 추출 및 스펙트럼 누출(Spectral Leakage) 중복 방어
-    uint8_t v_topCount = 0;
-    
-    for (int i = 0; i < v_candCount && v_topCount < SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST; i++) {
-        bool v_isTooClose = false;
+    // 가장 거대한 피크(가장 앞의 인덱스)부터 순회하며 최종 피크 배열에 채워 넣음
+    for (int i = 0; i < v_peakCand_Count && v_peakFinal_Count < SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST; i++) {
+        bool v_isValid = true;
         
-        // [방어/보완] 현재 검토 중인 피크가 '이미 선택된 더 큰 피크'들과 주파수가 너무 가까운지 검사
-        for (int t = 0; t < v_topCount; t++) {
-            if (fabsf(v_candidates[i].frequency - p_slot.top_peaks[t].frequency) < MIN_FREQ_DISTANCE_HZ) {
-                v_isTooClose = true; // Sidelobe (어깨 피크)로 판정
+        // 현재 검사 중인 후보 피크가, 이미 등록된 강력한 피크들과 주파수 거리가 너무 가깝지 않은지 확인
+        for (int j = 0; j < v_peakFinal_Count; j++) {
+            if (fabsf(v_freqComp_candis[i].frequency - v_finalPeaks[j].frequency) < v_freqGap_limitMin) {
+                // [방어/주의] 강력한 메인 피크 반경(예: 10Hz) 이내에 존재하는 작은 피크는 스펙트럼 누출로 간주하여 강제 탈락
+                v_isValid = false;
                 break;
             }
         }
         
-        // [기능설명] 거리가 충분히 떨어져 있는 독립적인 결함 주파수만 최종 등록
-        if (!v_isTooClose) {
-            p_slot.top_peaks[v_topCount] = v_candidates[i];
-            v_topCount++;
+        // 인접한 강력한 피크가 없다면 진짜 독립된 피크로 인정하여 등록
+        if (v_isValid) {
+            v_finalPeaks[v_peakFinal_Count] = v_freqComp_candis[i];
+            v_peakFinal_Count++;
         }
     }
 
-    // 4. [방어] 남은 빈 슬롯이 있다면 0으로 패딩하여 C++ 쓰레기 메모리값 송출 방어
-    for (int i = v_topCount; i < SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST; i++) {
-        p_slot.top_peaks[i] = {0.0f, 0.0f};
+    // 4. [기능설명] 최종 Output 구조체에 복사 (부족한 자리는 0.0f로 패딩)
+    for (int i = 0; i < SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST; i++) {
+        if (i < v_peakFinal_Count) {
+            p_slot.top_peaks[i] = v_finalPeaks[i];
+        } else {
+            p_slot.top_peaks[i] = {0.0f, 0.0f}; 	// [방어] 쓰레기값이 통신망을 타고 나가지 않도록 0 초기화
+        }
     }
 }
-
 
 /*
 void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {

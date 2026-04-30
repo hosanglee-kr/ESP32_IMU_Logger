@@ -19,7 +19,8 @@
 
 namespace SmeaType {
 
-    // N-top Peak 정보 구조체 (스펙트럼 상의 핵심 주파수 추출용)
+    // N-top Peak 정보 구조체 (스펙트럼 상의 핵심 주파수 추출용)  
+	// TODO : SpectralPeak --> FreqComp (FrequencyComponent)로 전체 명칭 변경 
     struct SpectralPeak {
         float frequency;    
         float amplitude;    
