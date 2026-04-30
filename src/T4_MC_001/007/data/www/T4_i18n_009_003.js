@@ -10,6 +10,9 @@ const dict = {
         sub_filters: "Notch & FIR Filters", lbl_notch1: "Notch 1 (Hz)", lbl_notch2: "Notch 2 (Hz)", lbl_notch_q: "Notch Q-Factor", lbl_fir_lpf: "FIR LPF Cutoff", lbl_fir_hpf: "FIR HPF Cutoff",
         title_noise: "Noise & Beamforming", lbl_pre_emp: "Pre-emphasis Alpha", lbl_beam_gain: "Beamforming Gain", lbl_noise_gate: "Noise Gate Thresh", lbl_learn_frames: "Noise Learn Frames", lbl_spectral_sub: "Spectral Sub Gain",
         sub_spatial: "Spatial & Cepstrum", lbl_spatial_freq: "Spatial Freq (Hz)", lbl_ceps_targets: "Ceps Target (Hz)",
+		
+		sub_peak_config: "Top Peaks Extraction", lbl_peak_amp: "Min Amplitude Thresh", lbl_peak_gap: "Min Freq Gap (Hz)",
+		
         title_multiband: "Multi-Band Energy RMS", lbl_band_count: "Active Band Count",
         opt_band1: "1 Band", opt_band2: "2 Bands", opt_band3: "3 Bands", sub_band1: "Band 1", sub_band2: "Band 2", sub_band3: "Band 3",
         btn_save_dsp: "SAVE DSP & FEATURE",
@@ -40,7 +43,10 @@ const dict = {
         sub_filters: "노치 및 FIR 필터", lbl_notch1: "노치 1 (Hz)", lbl_notch2: "노치 2 (Hz)", lbl_notch_q: "노치 Q-팩터", lbl_fir_lpf: "로우패스 컷오프", lbl_fir_hpf: "하이패스 컷오프",
         title_noise: "노이즈 및 빔포밍", lbl_pre_emp: "프리엠파시스 알파", lbl_beam_gain: "빔포밍 증폭", lbl_noise_gate: "노이즈 게이트 임계", lbl_learn_frames: "소음 학습 프레임", lbl_spectral_sub: "스펙트럼 감산비",
         sub_spatial: "위상 및 켑스트럼", lbl_spatial_freq: "위상 분석 대역 (Hz)", lbl_ceps_targets: "켑스트럼 타겟 (Hz)",
-        title_multiband: "멀티-밴드 에너지 RMS", lbl_band_count: "활성 대역 개수",
+        
+		sub_peak_config: "주파수 피크 추출 조건", lbl_peak_amp: "최소 진폭 (노이즈 컷)", lbl_peak_gap: "최소 주파수 간격 (Hz)",
+		
+		title_multiband: "멀티-밴드 에너지 RMS", lbl_band_count: "활성 대역 개수",
         opt_band1: "1 밴드", opt_band2: "2 밴드", opt_band3: "3 밴드", sub_band1: "대역 1", sub_band2: "대역 2", sub_band3: "대역 3",
         btn_save_dsp: "신호 및 특징량 설정 저장",
         title_decision: "판정 규칙", lbl_sta_lta: "충격음(STA/LTA) 임계", lbl_rule_enrg: "에너지 불량 임계", lbl_rule_stddev: "편차 불량 임계", lbl_test_ng: "센서 불량 임계", lbl_min_trigger: "최소 트리거 횟수", lbl_noise_prof: "학습 프로파일 (초)", lbl_valid_start: "판정 시작 (초)", lbl_valid_end: "판정 종료 (초)",

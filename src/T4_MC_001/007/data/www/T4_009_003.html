@@ -108,9 +108,21 @@
                         <div class="form-group"><label data-i18n="lbl_noise_gate">Noise Gate Thresh</label><input type="number" step="0.001" name="dsp.noise_gate_thresh"></div>
                         <div class="form-group"><label data-i18n="lbl_learn_frames">Noise Learn Frames</label><input type="number" name="dsp.noise_learn_frames"></div>
                         <div class="form-group"><label data-i18n="lbl_spectral_sub">Spectral Sub Gain</label><input type="number" step="0.1" name="dsp.spectral_sub_gain"></div>
+						
                         <h4 class="sub-title" data-i18n="sub_spatial">Spatial & Cepstrum Features</h4>
                         <div class="form-group"><label data-i18n="lbl_spatial_freq">Spatial Freq (Hz)</label><div class="range-inputs"><input type="number" name="feature.spatial_freq_min_hz"> <span>-</span> <input type="number" name="feature.spatial_freq_max_hz"></div></div>
                         <div class="form-group highlight"><label data-i18n="lbl_ceps_targets">Ceps Target (Hz)</label><input type="text" id="ceps_targets_input" data-i18n-placeholder="plc_ceps" placeholder="ex) 60, 120, 240"></div>
+
+						<h4 class="sub-title" data-i18n="sub_peak_config">Top Peaks Extraction</h4>
+                        <div class="form-group highlight">
+                            <label data-i18n="lbl_peak_amp">Min Amplitude Thresh</label>
+                            <input type="number" step="0.01" name="feature.peak_amplitude_limit_min" placeholder="ex) 0.5">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="lbl_peak_gap">Min Freq Gap (Hz)</label>
+                            <input type="number" step="1.0" name="feature.peak_freq_gap_limit_hz_min" placeholder="ex) 10.0">
+                        </div>
+
                     </div>
                     <div class="card" style="grid-column: 1 / -1;">
                         <h3 class="section-title" style="color: #03a9f4;" data-i18n="title_multiband">Multi-Band Energy RMS</h3>
