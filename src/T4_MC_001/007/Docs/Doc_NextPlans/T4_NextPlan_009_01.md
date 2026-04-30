@@ -1,7 +1,7 @@
 
 
 
-# T440_FeatureExtractor::_computeCepstrum 함수
+# T440_FeatureExtractor::_computeCepstrum 함수 아래 내용 검토 
 
 ## 코드 보완 및 치명적 버그 수정 (Code Review)
 작성하신 코드의 흐름(Log -> 미러링 -> FFT)은 수학적으로 켑스트럼을 구하는 올바른 과정입니다. (실제로는 IFFT를 써야 하지만, 대칭 실수 데이터에 대해 FFT를 수행하고 스케일링으로 보정하는 기법은 임베디드에서 훌륭한 트릭입니다.)
