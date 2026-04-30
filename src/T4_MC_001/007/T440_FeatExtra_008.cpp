@@ -266,43 +266,7 @@ void T440_FeatureExtractor::_computeSpectralCentroid(SmeaType::FeatureSlot& p_sl
 //     3안) Spectral Smoothing 	:  피크를 찾기 전, 스펙트럼 전체에 이동 평균(Moving Average) 필터를 한 번 먹여서 잔가시를 다 뭉갠 후 극대점을 찾는 방법. | 구현이 매우 쉬움. | 필터링 과정에서 진짜 피크의 주파수 위치가 옆으로 이동하거나 진폭(에너지)이 깎여나가는 데이터 훼손 발생. | **[부적합]** 피크 진폭 정합성 훼손. |
 
 //    결론: 연산량이 적으면서도 확실한 방어막을 제공하는 1안(NMS 방식)과 진폭 하한선(Minimum Amplitude)을 결합하여 구현
-
 // ----------------------------------------------------------------------------
-
-/* #####
-	// 이 로직이 작동하려면 웹 설정(JSON)에서 두 가지 파라미터(`peak_amplitude_limit_min`, `peak_freq_gap_limit_hz_min`)를 받아와야 합니다. 
-
-	#### A. 백엔드 구조체 및 기본값 (`T410_Config`, `T415_ConfigMgr`)
-	* **`T410_Config_009.hpp`** 내 `Feature` 네임스페이스에 기본값 추가:
-	  ```cpp
-	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF = 0.5f;   // 0.5 이하 노이즈 피크 무시
-	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF = 50.0f; // 50Hz 반경 내 중복 피크 무시
-	  ```
-	* **`T415_ConfigMgr_009.cpp`** 의 JSON 파싱(`_applyJson`) 및 저장(`save`) 로직에 해당 변수 맵핑 추가.
-
-	#### B. 프론트엔드 웹 UI (`T4_009_005.html`)
-	`tab-dsp` 탭 안의 `Spatial & Cepstrum Features` 카드 부분에 폼을 추가하면 됩니다.
-
-	```html
-	<h4 class="sub-title" data-i18n="sub_peak_config">Top Peaks Configuration</h4>
-	<div class="form-group highlight">
-		<label data-i18n="lbl_peak_amp">Min Amplitude Thresh</label>
-		<input type="number" step="0.01" name="feature.peak_amplitude_limit_min" data-i18n-placeholder="plc_peak_amp" placeholder="ex) 0.5">
-	</div>
-	<div class="form-group">
-		<label data-i18n="lbl_peak_gap">Min Freq Gap (Hz)</label>
-		<input type="number" step="1.0" name="feature.peak_freq_gap_limit_hz_min" data-i18n-placeholder="plc_peak_gap" placeholder="ex) 50.0">
-	</div>
-	```
-
-
-*/
-
-// SmeaConfig::Feature` 네임스페이스에 기본값 추가:
-//	  inline constexpr float PEAK_AMPLITUDE_MIN_DEF 	= 0.5f;   // 0.5 이하 노이즈 피크 무시
-//	  inline constexpr float PEAK_FREQ_GAP_HZ_MIN_DEF 	= 10.0f;  // 10Hz 반경 내 중복 피크 무시
-
-// T440_FeatExtra cpp에 _computeNtopPeaks함수 수정
 void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {
     uint16_t v_bins = (SmeaConfig::System::FFT_SIZE_CONST / 2) + 1;
     float  v_binRes = (float)SmeaConfig::System::SAMPLING_RATE_CONST / SmeaConfig::System::FFT_SIZE_CONST;
@@ -376,42 +340,6 @@ void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {
     }
 }
 
-/*
-void T440_FeatureExtractor::_computeNtopPeaks(SmeaType::FeatureSlot& p_slot) {
-    uint16_t v_bins = (SmeaConfig::System::FFT_SIZE_CONST / 2) + 1;
-    float v_binRes = (float)SmeaConfig::System::SAMPLING_RATE_CONST / SmeaConfig::System::FFT_SIZE_CONST;
-
-    SmeaType::SpectralPeak v_candidates[SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST];
-    uint16_t v_candCount = 0;
-
-    // 1. [기능설명] 지역 극댓값(Local Maxima) 스캔
-    for (uint16_t i = 1; i < v_bins - 1 && v_candCount < SmeaConfig::FeatureLimit::MAX_PEAK_CANDIDATES_CONST; i++) {
-        if (_powerSpectrum[i] > _powerSpectrum[i - 1] && _powerSpectrum[i] > _powerSpectrum[i + 1]) {
-            v_candidates[v_candCount].frequency = i * v_binRes;
-            v_candidates[v_candCount].amplitude = _powerSpectrum[i];
-            v_candCount++;
-        }
-    }
-
-    // 2. [기능설명] 진폭(Amplitude) 기준 내림차순 정렬
-    // [메모리 최적화] 데이터 수가 작으므로 <algorithm> 오버헤드 대신 인플레이스 버블 소트 사용
-    for (int i = 0; i < v_candCount - 1; i++) {
-        for (int j = 0; j < v_candCount - i - 1; j++) {
-            if (v_candidates[j].amplitude < v_candidates[j + 1].amplitude) {
-                SmeaType::SpectralPeak temp = v_candidates[j];
-                v_candidates[j] = v_candidates[j + 1];
-                v_candidates[j + 1] = temp;
-            }
-        }
-    }
-
-    // 3. 상위 N개 추출 (없을 경우 0으로 패딩)
-    for (int i = 0; i < SmeaConfig::FeatureLimit::TOP_PEAKS_COUNT_CONST; i++) {
-        if (i < v_candCount) p_slot.top_peaks[i] = v_candidates[i];
-        else p_slot.top_peaks[i] = {0.0f, 0.0f};
-    }
-}
-*/
 
 // ----------------------------------------------------------------------------
 // [기능설명] MFCC (Mel-Frequency Cepstral Coefficients) 추출 (SIMD 행렬 곱 가속)
@@ -492,10 +420,88 @@ void T440_FeatureExtractor::_applyTemporalDerivatives(SmeaType::FeatureSlot& p_s
     }
 }
 
+
 // ----------------------------------------------------------------------------
 // [기능설명] 켑스트럼 (Cepstrum) 도출을 통한 회전체(모터) 결함 주기 식별
 // 파워 스펙트럼의 로그(Log)를 다시 역푸리에 변환(IFFT) 하여 Quefrency 성분 도출
 // ----------------------------------------------------------------------------
+void T440_FeatureExtractor::_computeCepstrum(SmeaType::FeatureSlot& p_slot) {
+    uint16_t v_bins = (SmeaConfig::System::FFT_SIZE_CONST / 2) + 1;
+    DynamicConfig v_cfg = T415_ConfigManager::getInstance().getConfig();
+    
+    // [주의/방어/메모리최적화] 8KB에 달하는 IFFT 버퍼를 새로 생성하면 스택 오버플로우 패닉에 빠짐.
+    // 따라서 이 시점에서 사용하지 않는 _fftSpatialL 포인터 버퍼를 임시 스크래치 공간으로 100% 재사용함.
+    float* v_cepsWorkBuf = _fftSpatialL;
+    
+    // IFFT 연산을 위한 복소수 버퍼 조립 (로그 파워 스펙트럼 삽입 및 좌우 대칭 미러링)
+    for (uint16_t i = 0; i < SmeaConfig::System::FFT_SIZE_CONST; i++) {
+        if (i < v_bins) {
+            // [주의/방어] logf 진입 전 fmaxf로 0이나 음수 방어
+            v_cepsWorkBuf[i * 2] = logf(fmaxf(_powerSpectrum[i], SmeaConfig::System::MATH_EPSILON_12_CONST)); 
+        } else {
+            // 실수 신호의 스펙트럼은 대칭이므로 미러링하여 IFFT 입력 구성
+            v_cepsWorkBuf[i * 2] = v_cepsWorkBuf[(SmeaConfig::System::FFT_SIZE_CONST - i) * 2]; 
+        }
+        v_cepsWorkBuf[i * 2 + 1] = 0.0f; // 허수부는 0
+    }
+
+    // [기능설명] 로그 스펙트럼에 대한 역푸리에 변환(대칭 데이터에 대한 FFT 트릭) 수행으로 Cepstrum 생성
+    dsps_fft2r_fc32(v_cepsWorkBuf, SmeaConfig::System::FFT_SIZE_CONST);
+    dsps_bit_rev2r_fc32(v_cepsWorkBuf, SmeaConfig::System::FFT_SIZE_CONST);
+
+    // 웹에서 설정한 결함 주파수 타겟 배열(예: 60Hz, 120Hz)을 순회하며 Cepstrum 진폭 매칭
+    for (uint8_t n = 0; n < SmeaConfig::FeatureLimit::CEPS_TARGET_COUNT_CONST; n++) {
+        float v_targetHz = v_cfg.feature.ceps_targets[n];
+        
+        // [방어] 설정된 타겟 주파수가 유효하지 않은 경우(0 이하) 연산 생략
+        if (v_targetHz <= 0.0f) {
+            p_slot.cpsr_max[n] = 0.0f;
+            p_slot.cpsr_mxrms[n] = 0.0f;
+            continue;
+        }
+
+        // [기능설명] 주파수(Hz)를 Quefrency(주기, 초)로 변환 후, 샘플링 레이트를 곱해 해당 인덱스(빈) 계산
+        float v_targetQuefrencySec = 1.0f / v_targetHz;
+        uint16_t v_targetIdx = (uint16_t)roundf(v_targetQuefrencySec * SmeaConfig::System::SAMPLING_RATE_CONST);
+
+        // [방어] 오차 허용 범위 설정 (인덱스 기준) - 동적 설정값(CEPS_TOLERANCE_CONST)을 적절한 마진으로 활용하거나 고정값 사용
+        // 여기서는 임시로 상수를 오차 인덱스로 사용 (필요시 단위 변환 로직 보완)
+        // 기존 CEPS_TOLERANCE_CONST가 0.0003f 로 되어 있다면 인덱스 환산 시 의미가 다를 수 있으므로 주의.
+        // 안전을 위해 앞뒤 3개 빈(bin) 정도를 오차 허용 마진으로 설정.
+        uint16_t v_toleranceIdx = 3; 
+        
+        // [주의/방어] 탐색 구간 설정 시 DC 성분(0번 인덱스)을 철저히 배제하기 위해 시작 인덱스는 최소 1 보장
+        uint16_t v_startIdx = (v_targetIdx > v_toleranceIdx) ? (v_targetIdx - v_toleranceIdx) : 1;
+        uint16_t v_endIdx = v_targetIdx + v_toleranceIdx;
+        
+        // [방어] 배열 상한선 초과 방지
+        if (v_endIdx >= SmeaConfig::System::FFT_SIZE_CONST / 2) {
+            v_endIdx = (SmeaConfig::System::FFT_SIZE_CONST / 2) - 1;
+        }
+
+        float v_maxVal = 0.0f;
+        float v_sumSq = 0.0f;
+        uint16_t v_count = 0;
+
+        for (uint16_t i = v_startIdx; i <= v_endIdx; i++) {
+            // [기능설명] 부동소수점 오차를 고려하여 실수부/허수부 모두 합산한 복소수 Magnitude 도출
+            float v_real = v_cepsWorkBuf[i * 2];
+            float v_imag = v_cepsWorkBuf[i * 2 + 1];
+            float v_cepsVal = sqrtf(v_real * v_real + v_imag * v_imag) / (float)SmeaConfig::System::FFT_SIZE_CONST;
+            
+            if (v_cepsVal > v_maxVal) v_maxVal = v_cepsVal;
+            v_sumSq += v_cepsVal * v_cepsVal;
+            v_count++;
+        }
+
+        // 해당 주파수(RPM) 결함 성분의 돌출(Peak) 정도와 RMS 대비 선명도 저장
+        p_slot.cpsr_max[n] = v_maxVal;
+        float v_rms = v_count > 0 ? sqrtf(v_sumSq / v_count) : SmeaConfig::System::MATH_EPSILON_12_CONST;
+        p_slot.cpsr_mxrms[n] = v_maxVal / fmaxf(v_rms, SmeaConfig::System::MATH_EPSILON_12_CONST); 
+    }
+}
+
+/*
 void T440_FeatureExtractor::_computeCepstrum(SmeaType::FeatureSlot& p_slot) {
     uint16_t v_bins = (SmeaConfig::System::FFT_SIZE_CONST / 2) + 1;
     DynamicConfig v_cfg = T415_ConfigManager::getInstance().getConfig();
@@ -545,6 +551,7 @@ void T440_FeatureExtractor::_computeCepstrum(SmeaType::FeatureSlot& p_slot) {
         p_slot.cpsr_mxrms[n] = v_maxVal / fmaxf(v_rms, SmeaConfig::System::MATH_EPSILON_12_CONST); 
     }
 }
+*/
 
 // ----------------------------------------------------------------------------
 // [기능설명] 공간 위상 분석 (IPD & Phase Coherence)
