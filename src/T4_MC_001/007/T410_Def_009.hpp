@@ -174,7 +174,6 @@ namespace SmeaConfig {
         inline constexpr float RULE_STDDEV_THRESHOLD_DEF = 0.12f;                        // 파형 분산(편차) 기반 2차 불량 판정 임계값
         inline constexpr float TEST_NG_MIN_ENERGY_DEF    = 1e-8f;                        // 마이크 하드웨어 고장/단선을 판단하기 위한 최소 에너지 하한선
 
-
         inline constexpr float STA_LTA_THRESHOLD_DEF     = 3.0f;						// 임펄스(충격음) NG 판정을 위한 STA/LTA 비율 임계값 (3.0배 이상 시 NG 판정 기본값NG)
 
         inline constexpr int   MIN_TRIGGER_COUNT_DEF     = 1;                            // NG 판정을 확정 짓기 위해 요구되는 연속 트리거 프레임 수
