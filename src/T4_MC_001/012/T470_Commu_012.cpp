@@ -295,18 +295,22 @@ void T470_Communicator::_initWebHandlers() {
 void T470_Communicator::broadcastBinary(const void* p_buffer, size_t p_bytes) {
     if (_ws.count() == 0 || !p_buffer) return;
 
-    for (AsyncWebSocketClient* v_client : _ws.getClients()) {
-        if (v_client->status() == WS_CONNECTED) {
-            // 브라우저 탭 백그라운드 전환 시 발생하는 TCP 적체 폭발(OOM) 원천 차단 (4KB 임계치)
-            if (v_client->queueLength() > 4096) {
-                v_client->close();
+    // 1. 포인터(*) 대신 객체 참조(auto&)로 순회하도록 변경
+    for (auto& v_client : _ws.getClients()) {
+        // 2. 포인터 접근자(->) 대신 객체 접근자(.) 사용
+        if (v_client.status() == WS_CONNECTED) {
+            // 3. queueLength() 를 queueLen() 으로 수정
+            if (v_client.queueLen() > 4096) {
+                v_client.close();
                 Serial.println("[Net] Zombie WS Client Kicked (OOM Prevented)");
             } else {
-                v_client->binary((uint8_t*)p_buffer, p_bytes);
+                v_client.binary((uint8_t*)p_buffer, p_bytes);
             }
         }
     }
 }
+
+
 
 void T470_Communicator::runNetwork() {
     _ws.cleanupClients();
@@ -372,4 +376,6 @@ void T470_Communicator::_sendJsonResponse(AsyncWebServerRequest* p_request, cons
     serializeJson(p_doc, *v_stream);
     p_request->send(v_stream);
 }
+
+
 
