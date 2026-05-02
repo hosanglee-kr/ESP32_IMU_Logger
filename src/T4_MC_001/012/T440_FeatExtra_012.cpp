@@ -14,6 +14,7 @@
 #include "dsps_fft2r.h"
 #include "dsps_wind.h"
 #include "dspm_mult.h"
+#include "dsps_math.h"
 #include <cmath>
 #include <cstring>
 
