@@ -1,0 +1,200 @@
+/* ============================================================================
+ * File: T450_FsmMgr_001.cpp
+ * Summary: FSM Orchestrator & Multi-task Implementation
+ ========================================================================== */
+#include "T450_FsmMgr_001.hpp"
+#include "esp_log.h"
+
+static const char* TAG = "T450_FSM";
+
+void T450_FsmManager::begin() {
+    // 1. 모든 엔진 초기화
+    if (!v_micEngine.init() || !v_dspEngine.init() || !v_extractor.init() || !v_storage.init()) {
+        ESP_LOGE(TAG, "Engine Init Failed!");
+        return;
+    }
+    
+    v_featurePool = (SmeaType::FeatureSlot*)heap_caps_aligned_alloc(16, sizeof(SmeaType::FeatureSlot) * SmeaConfig::FEATURE_POOL_SIZE, MALLOC_CAP_SPIRAM);
+
+    // T445 SeqBuilder 초기화 (최대 128프레임, 39차원)
+    v_seqBuilder.init(SmeaConfig::Ml::MAX_SEQUENCE_FRAMES, SmeaConfig::MFCC_TOTAL_DIM);
+    v_communicator.begin(); // 통신 포트 오픈
+
+    // 2. 이중 큐 시스템 생성 및 초기화
+    v_qFreeSlotIdx = xQueueCreate(SmeaConfig::Storage::DMA_SLOT_COUNT, sizeof(uint8_t));
+    v_qReadySlotIdx = xQueueCreate(SmeaConfig::Storage::DMA_SLOT_COUNT, sizeof(uint8_t));
+
+    // 초기에 모든 슬롯(0~N)을 빈 슬롯(Free)으로 큐에 채워 넣음
+    for (uint8_t i = 0; i < SmeaConfig::Storage::DMA_SLOT_COUNT; i++) {
+        xQueueSend(v_qFreeSlotIdx, &i, portMAX_DELAY);
+    }
+
+    // 3. 태스크 생성
+    xTaskCreatePinnedToCore(captureTask, "CapTask", SmeaConfig::Task::CAPTURE_STACK_SIZE, this, SmeaConfig::Task::CAPTURE_PRIORITY, &v_hCaptureTask, SmeaConfig::Task::CORE_CAPTURE);
+    xTaskCreatePinnedToCore(processingTask, "PrcTask", SmeaConfig::Task::PROCESS_STACK_SIZE, this, SmeaConfig::Task::PROCESS_PRIORITY, &v_hProcessTask, SmeaConfig::Task::CORE_PROCESS);
+
+    setSystemState(SystemState::READY);
+}
+
+
+void T450_FsmManager::setSystemState(SystemState p_nextState) {
+    if (v_systemState == p_nextState) return;
+
+    v_systemState = p_nextState;
+    
+    // [방어 및 최적화] 상태 전환에 따른 하드웨어/버퍼 제어 연동
+    if (p_nextState == SystemState::READY) {
+        // 대기 상태 진입 시 마이크 전력 절감 및 버퍼 수집 중지
+        v_micEngine.pause();
+    } 
+    else if (p_nextState == SystemState::MONITORING) {
+        // [수정] 이중 큐 시스템 정합성에 맞춘 완벽한 초기화
+        xQueueReset(v_qReadySlotIdx);
+        xQueueReset(v_qFreeSlotIdx);
+        for (uint8_t i = 0; i < SmeaConfig::Storage::DMA_SLOT_COUNT; i++) {
+            xQueueSend(v_qFreeSlotIdx, &i, 0); // 모든 슬롯을 Free 큐로 반환
+        }
+        v_micEngine.resume();            
+        v_dspEngine.resetFilterStates(); 
+    }
+
+}
+
+void T450_FsmManager::handleExternalTrigger(bool p_isActive) {
+    v_isrTriggerActive = p_isActive;
+}
+
+
+void T450_FsmManager::captureTask(void* p_param) {
+    T450_FsmManager* v_this = (T450_FsmManager*)p_param;
+    
+    // [해결 1] 슬라이딩 오버랩 구현을 위한 태스크 내부 고정 버퍼
+    // Hop = 10ms(420 샘플), FFT = 1024 샘플.
+    const uint32_t v_fftSize = SmeaConfig::FFT_SIZE;
+    const uint32_t v_hopSamples = (uint32_t)(SmeaConfig::SAMPLING_RATE * (SmeaConfig::HOP_MS / 1000.0f)); 
+    const uint32_t v_overlapSamples = v_fftSize - v_hopSamples; // 1024 - 420 = 604
+    
+    alignas(16) float v_windowL[v_fftSize] = {0};
+    alignas(16) float v_windowR[v_fftSize] = {0};
+
+    uint8_t v_slotIdx;
+    
+    SystemState v_lastState = SystemState::INIT; // [추가] 과거 상태 추적용
+
+    while(1) {
+
+        // ISR에서 넘겨받은 플래그로 안전하게 상태 전환을 대리 수행
+        bool v_currentTrigger = v_this->v_isrTriggerActive;
+        
+        if (v_currentTrigger && v_this->v_systemState == SystemState::READY) {
+            v_this->setSystemState(SystemState::MONITORING);
+        } else if (!v_currentTrigger && v_this->v_systemState == SystemState::MONITORING) {
+            v_this->setSystemState(SystemState::READY);
+        }
+        
+        if (v_this->v_systemState >= SystemState::MONITORING) {
+            if (v_lastState == SystemState::READY) {
+                // 초기 펌핑
+                v_this->v_micEngine.readData(v_windowL, v_windowR, v_fftSize);
+            } else {
+                memmove(&v_windowL[0], &v_windowL[v_hopSamples], v_overlapSamples * sizeof(float));
+                memmove(&v_windowR[0], &v_windowR[v_hopSamples], v_overlapSamples * sizeof(float));
+                v_this->v_micEngine.readData(&v_windowL[v_overlapSamples], &v_windowR[v_overlapSamples], v_hopSamples);
+            }
+            v_lastState = v_this->v_systemState;
+
+            // [적발 1 보완] 중괄호 스코프 완벽 교정
+            if (xQueueReceive(v_this->v_qFreeSlotIdx, &v_slotIdx, 0) == pdTRUE) {
+                SmeaType::FeatureSlot& v_slot = v_this->v_featurePool[v_slotIdx];
+                
+                memcpy(v_slot.raw_L, v_windowL, sizeof(v_windowL));
+                memcpy(v_slot.raw_R, v_windowR, sizeof(v_windowR));
+                v_slot.timestamp = millis();
+            
+                if (xQueueSend(v_this->v_qReadySlotIdx, &v_slotIdx, 0) != pdTRUE) {
+                    xQueueSend(v_this->v_qFreeSlotIdx, &v_slotIdx, 0); // 롤백
+                }
+            } // 이 중괄호가 빠져 있었습니다!
+        } else {
+            v_lastState = v_this->v_systemState; // READY 등 대기 상태 갱신
+        }
+        vTaskDelay(pdMS_TO_TICKS(1)); 
+    }
+}
+
+void T450_FsmManager::processingTask(void* p_param) {
+    T450_FsmManager* v_this = (T450_FsmManager*)p_param;
+    uint8_t v_slotIdx;
+    alignas(16) float v_beamformedOutput[SmeaConfig::FFT_SIZE];
+    
+    uint32_t v_recordStartMs = 0; 
+
+    while(1) {
+        // Ready 큐에 데이터가 들어올 때까지 대기
+        if (xQueueReceive(v_this->v_qReadySlotIdx, &v_slotIdx, pdMS_TO_TICKS(100))) {
+            SmeaType::FeatureSlot& v_slot = v_this->v_featurePool[v_slotIdx];
+            
+            
+            // 1. DSP 정제 (L, R -> 단일 빔포밍 파형 도출)
+            v_this->v_dspEngine.process(v_slot.raw_L, v_slot.raw_R, v_beamformedOutput, SmeaConfig::FFT_SIZE);
+
+            // 2. 피처 추출 (MFCC 39D 포함)
+            v_this->v_extractor.extract(v_beamformedOutput, v_slot.raw_L, v_slot.raw_R, SmeaConfig::FFT_SIZE, v_slot);
+
+            // 3. [해결 3] ML 텐서 조립기(SeqBuilder)에 MFCC 39D 밀어넣기
+            v_this->v_seqBuilder.pushVector(v_slot.mfcc);
+
+            // 4. 하이브리드 판정
+            DetectionResult v_result = v_this->runHybridDecision(v_slotIdx);
+            
+            // 5. 불량(NG) 감지 시 자동으로 RECORDING 상태 전환 및 SD 기록 시작
+            if (v_result != DetectionResult::PASS && v_this->v_systemState == SystemState::MONITORING) {
+                v_this->setSystemState(SystemState::RECORDING);
+                v_this->v_storage.openSession("trg_ng"); 
+                // 위 openSession 내부에서 pre-trigger 링버퍼가 자동으로 플러시됨.
+                v_recordStartMs = millis(); // 타이머 시작
+            }
+            
+            // 6. 스토리지 로깅 (레코딩 상태일 때만 실제 SD에 기록)
+            if (v_this->v_systemState == SystemState::RECORDING) {
+                // Raw 원신호(2채널) 기록
+                v_this->v_storage.pushRawPcm(v_slot.raw_L, v_slot.raw_R, SmeaConfig::FFT_SIZE);
+                // Feature/MFCC 기록
+                v_this->v_storage.pushFeatureSlot(&v_slot);
+                
+                // 녹음 종료 로직 완벽 복원
+                if (millis() - v_recordStartMs > (SmeaConfig::VALID_END_SEC * 1000)) {
+                    v_this->v_storage.closeSession("trg_end");
+                    v_this->setSystemState(v_this->v_isrTriggerActive ? SystemState::MONITORING : SystemState::READY);
+                }
+                
+            }
+
+            // 7. 웹/MQTT 브로드캐스트 (실시간 모니터링)
+            v_this->v_communicator.broadcastBinary(v_slot.mfcc, sizeof(v_slot.mfcc));
+
+            // 모든 처리가 끝난 슬롯을 다시 Free 큐로 반납
+            xQueueSend(v_this->v_qFreeSlotIdx, &v_slotIdx, 0);
+        }
+    }
+}
+
+            
+
+DetectionResult T450_FsmManager::runHybridDecision(uint8_t p_slotIdx) {
+    SmeaType::FeatureSlot& v_slot = v_featurePool[p_slotIdx];
+    
+    // Priority 1: Rule NG
+    if (v_slot.energy > SmeaConfig::RULE_ENRG_THRESHOLD) return DetectionResult::RULE_NG;
+    if (v_slot.pooling_stddev_min > SmeaConfig::RULE_STDDEV_THRESHOLD) return DetectionResult::RULE_NG;
+    
+    // Priority 2: ML Prediction (추후 연동)
+    return DetectionResult::PASS;
+}
+
+
+void T450_FsmManager::runMaintenanceTask() {
+    v_communicator.runNetwork();
+    v_storage.checkIdleFlush();
+    v_storage.checkRotation();
+}

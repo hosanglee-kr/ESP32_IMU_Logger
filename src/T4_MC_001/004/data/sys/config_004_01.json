@@ -1,0 +1,50 @@
+{
+  "dsp": {
+    "window_ms": 25.0,
+    "hop_ms": 10.0,
+    "notch_freq_hz": 60.0,
+    "notch_freq_2_hz": 120.0,
+    "notch_q_factor": 30.0,
+    "pre_emphasis_alpha": 0.97,
+    "beamforming_gain": 0.5,
+    "fir_lpf_cutoff": 20000.0,
+    "fir_hpf_cutoff": 100.0,
+    "median_window": 5,
+    "noise_gate_thresh": 0.001,
+    "noise_learn_frames": 100,
+    "spectral_sub_gain": 1.2
+  },
+  "feature": {
+    "band_rms_count": 4,
+    "band_ranges": [
+      [10.0, 150.0],
+      [150.0, 1000.0],
+      [1000.0, 5000.0],
+      [5000.0, 20000.0],
+      [0.0, 0.0],
+      [0.0, 0.0],
+      [0.0, 0.0],
+      [0.0, 0.0]
+    ]
+  },
+  "decision": {
+    "rule_enrg_threshold": 0.00003,
+    "rule_stddev_threshold": 0.12,
+    "test_ng_min_energy": 1e-8,
+    "min_trigger_count": 1,
+    "noise_profile_sec": 0.15,
+    "valid_start_sec": 0.30,
+    "valid_end_sec": 0.50
+  },
+  "storage": {
+    "pre_trigger_sec": 3,
+    "rotate_mb": 100,
+    "rotate_min": 60,
+    "idle_flush_ms": 250
+  },
+  "mqtt": {
+    "mqtt_broker": "192.168.0.100",
+    "retry_interval_ms": 5000,
+    "default_port": 1883
+  }
+}

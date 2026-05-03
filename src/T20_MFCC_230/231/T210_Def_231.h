@@ -583,3 +583,4 @@ static inline ST_T20_Config_t T20_makeDefaultConfig() {
 
     return cfg;
 }
+

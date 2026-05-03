@@ -1,0 +1,85 @@
+{
+  "dsp": {
+    "window_ms": 24.38,
+    "hop_ms": 10.0,
+    "notch_freq_hz": 60.0,
+    "notch_freq_2_hz": 120.0,
+    "notch_q_factor": 1.0,
+    "pre_emphasis_alpha": 0.97,
+    "beamforming_gain": 0.5,
+    "fir_lpf_cutoff": 4000.0,
+    "fir_hpf_cutoff": 100.0,
+    "median_window": 3,
+    "noise_gate_thresh": 0.005,
+    "noise_learn_frames": 100,
+    "spectral_sub_gain": 1.2
+  },
+  "feature": {
+    "band_rms_count": 3,
+    "band_ranges": [
+      [100.0, 500.0],
+      [500.0, 2000.0],
+      [2000.0, 4000.0]
+    ],
+    "ceps_targets": [60.0, 120.0, 180.0, 240.0],
+    "spatial_freq_min_hz": 100.0,
+    "spatial_freq_max_hz": 4000.0
+  },
+  "decision": {
+    "rule_enrg_threshold": 0.8,
+    "rule_stddev_threshold": 0.1,
+    "test_ng_min_energy": 0.001,
+    "min_trigger_count": 5,
+    "noise_profile_sec": 1.0,
+    "valid_start_sec": 0.2,
+    "valid_end_sec": 3.0,
+    "sta_lta_threshold": 3.0
+  },
+  "storage": {
+    "pre_trigger_sec": 3,
+    "rotate_mb": 50,
+    "rotate_min": 60,
+    "idle_flush_ms": 5000
+  },
+  "mqtt": {
+    "mqtt_broker": "broker.hivemq.com",
+    "retry_interval_ms": 5000,
+    "default_port": 1883
+  },
+  "wifi": {
+    "mode": 3,
+    "ap_ssid": "SMEA_100_AP",
+    "ap_password": "password123",
+    "ap_ip": "192.168.4.1",
+    "multi_ap": [
+      {
+        "ssid": "Your_Home_WiFi",
+        "password": "your_password",
+        "use_static_ip": false,
+        "local_ip": "",
+        "gateway": "",
+        "subnet": "",
+        "dns1": ""
+      },
+      {
+        "ssid": "Office_WiFi",
+        "password": "office_password",
+        "use_static_ip": true,
+        "local_ip": "192.168.1.100",
+        "gateway": "192.168.1.1",
+        "subnet": "255.255.255.0",
+        "dns1": "8.8.8.8"
+      },
+      {
+        "ssid": "",
+        "password": "",
+        "use_static_ip": false,
+        "local_ip": "",
+        "gateway": "",
+        "subnet": "",
+        "dns1": ""
+      }
+    ]
+  }
+}
+
